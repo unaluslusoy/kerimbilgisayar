@@ -78,5 +78,10 @@ jobs:
                 npm install -g pm2
             fi
             
-            pm2 restart kerimbilgisayar --update-env || pm2 start dist/server.cjs --name "kerimbilgisayar"
+            pm2 restart kerimbilgisayar --update-env || pm2 start dist/server.cjs --name "kerimbilgisayar" --update-env
             pm2 save
+            
+            echo "--- PM2 STATUS ---"
+            pm2 status
+            echo "--- PM2 LOGS ---"
+            pm2 logs kerimbilgisayar --lines 50 --nostream
