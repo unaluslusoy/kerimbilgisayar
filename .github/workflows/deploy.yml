@@ -21,7 +21,7 @@ jobs:
 
       - name: Install Dependencies & Build
         run: |
-          npm ci --legacy-peer-deps
+          npm install --legacy-peer-deps
           npm run build
 
       - name: Create .env file
