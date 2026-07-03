@@ -117,7 +117,7 @@ async function requireApiKey(req: express.Request, res: express.Response, next: 
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
   
@@ -2379,7 +2379,6 @@ Sitemap: https://kerimbilgisayar.com/sitemap.xml`;
     });
   }
 
-  const PORT = process.env.PORT || 3000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
