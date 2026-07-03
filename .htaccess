@@ -1,14 +1,14 @@
 RewriteEngine On
 
-# 1. Eğer gelen istek bir API isteğiyse (/api), arka plandaki Node.js sunucusuna (3000 portuna) gönder
-RewriteCond %{REQUEST_URI} ^/api [NC]
-RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
+# 1. Eğer gelen istek bir API isteğiyse (/api), arka plandaki Node.js sunucusuna gönder
+RewriteRule ^api/(.*)$ http://127.0.0.1:3000/api/$1 [P,L]
 
-# 2. Gelen normal site ziyaretlerini "dist" (derlenmiş dosyalar) klasörüne yönlendir
+# 2. Eğer istek zaten "/dist/" klasörüne yönlenmişse ve böyle bir dosya/klasör yoksa index.html ver (React Router)
+RewriteCond %{REQUEST_URI} ^/dist/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^dist/(.*)$ /dist/index.html [L]
+
+# 3. Gelen normal site ziyaretlerini arkaplanda gizlice "dist" klasörüne yönlendir
 RewriteCond %{REQUEST_URI} !^/dist/
-RewriteRule ^(.*)$ dist/$1 [L]
-
-# 3. Eğer aranan sayfa/dosya fiziksel olarak dist klasöründe yoksa (React sayfaları), index.html'i göster
-RewriteCond %{DOCUMENT_ROOT}/dist/%{REQUEST_URI} !-f
-RewriteCond %{DOCUMENT_ROOT}/dist/%{REQUEST_URI} !-d
-RewriteRule ^(.*)$ dist/index.html [L]
+RewriteRule ^(.*)$ /dist/$1 [L]
