@@ -34,6 +34,7 @@ jobs:
           echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
           echo "APP_URL=${{ secrets.APP_URL }}" >> .env
+          echo "NODE_ENV=production" >> .env
 
       - name: Copy files via SSH
         uses: appleboy/scp-action@v0.1.7
@@ -77,5 +78,5 @@ jobs:
                 npm install -g pm2
             fi
             
-            pm2 restart kerimbilgisayar || pm2 start dist/server.cjs --name "kerimbilgisayar"
+            pm2 restart kerimbilgisayar --update-env || pm2 start dist/server.cjs --name "kerimbilgisayar"
             pm2 save
