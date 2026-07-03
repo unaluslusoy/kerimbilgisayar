@@ -55,27 +55,27 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            # Profil ve NVM ortam değişkenlerini yükle (Non-interactive shell için gerekli)
-            export PATH=$PATH:/usr/local/bin:/usr/bin:/bin
             export NVM_DIR="$HOME/.nvm"
+            if [ ! -d "$NVM_DIR" ]; then
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+            fi
+            
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
+            if ! command -v node &> /dev/null; then
+              nvm install 22
+              nvm alias default 22
+              nvm use 22
+            fi
             
             cd ${{ secrets.SERVER_PATH }}
             
-            # Sadece üretim bağımlılıklarını kur
             npm install --production --legacy-peer-deps
-            
-            # Veritabanı şemasını güncelle (Drizzle kullandığınız için)
             npm run db:push
             
-            # PM2 yoksa küresel olarak kur (Sunucuda yüklü değilse diye önlem)
-            if ! command -v pm2 &> /dev/null
-            then
+            if ! command -v pm2 &> /dev/null; then
                 npm install -g pm2
             fi
             
-            # Projeyi PM2 ile yeniden başlat veya ilk defa başlat
             pm2 restart kerimbilgisayar || pm2 start dist/server.cjs --name "kerimbilgisayar"
-            
-            # PM2 listesini kaydet (Sunucu kapanıp açıldığında otomatik başlasın diye)
             pm2 save
