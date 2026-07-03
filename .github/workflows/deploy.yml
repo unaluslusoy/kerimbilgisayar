@@ -21,7 +21,7 @@ jobs:
 
       - name: Install Dependencies & Build
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npm run build
 
       - name: Create .env file
@@ -58,7 +58,7 @@ jobs:
             cd ${{ secrets.SERVER_PATH }}
             
             # Sadece üretim bağımlılıklarını kur
-            npm install --production
+            npm install --production --legacy-peer-deps
             
             # Veritabanı şemasını güncelle (Drizzle kullandığınız için)
             npm run db:push
