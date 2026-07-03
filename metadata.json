@@ -1,0 +1,6 @@
+{
+  "name": "Kerim Bilgisayar - Servis Platformu",
+  "description": "Modern, tam entegre bilgisayar teknik servis ve satış yönetim platformu. Müşteri paneli, teknisyen yönetimi, arıza takibi ve analizleri içerir.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

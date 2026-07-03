@@ -1,0 +1,192 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+:root {
+  /* Primary */
+  --color-primary: #8bde86;
+  --color-primary-light: #a9e8a5;
+  --color-primary-dark: #6cbd66;
+  --color-primary-subtle: #ebfaeb;
+  
+  /* Accent */
+  --color-accent: #131827;
+  --color-accent-hover: #1b2236;
+
+  /* Nötr */
+  --color-white: #ffffff;
+  --color-gray-50: #f8f9fa;
+  --color-gray-100: #f1f3f5;
+  --color-gray-300: #dee2e6;
+  --color-gray-500: #575756;
+  --color-gray-700: #3c3c3b;
+  --color-gray-900: #030404;
+
+  /* Durum */
+  --color-info: #0ea5e9;
+  --color-success: #28a745;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
+
+  /* Gölge */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.1);
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Geçiş */
+  --transition-fast: 0.15s ease-in-out;
+  --transition-base: 0.2s ease-in-out;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-primary: var(--color-primary);
+  --color-primary-light: var(--color-primary-light);
+  --color-primary-dark: var(--color-primary-dark);
+  --color-primary-subtle: var(--color-primary-subtle);
+  
+  --color-accent: var(--color-accent);
+  --color-secondary: var(--color-accent);
+  
+  --color-gray-50: var(--color-gray-50);
+  --color-gray-100: var(--color-gray-100);
+  --color-gray-300: var(--color-gray-300);
+  --color-gray-500: var(--color-gray-500);
+  --color-gray-700: var(--color-gray-700);
+  --color-gray-900: var(--color-gray-900);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-theme: var(--radius-lg);
+  
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+}
+
+@layer base {
+  h1, .h1 {
+    @apply text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 tracking-tight font-display mb-6;
+  }
+  h2, .h2 {
+    @apply text-3xl md:text-4xl font-bold text-gray-900 mb-4 tracking-tight font-display;
+  }
+  h3, .h3 {
+    @apply text-xl sm:text-2xl font-bold text-gray-900 mb-3 font-display;
+  }
+  h4, .h4 {
+    @apply text-lg sm:text-xl font-bold text-gray-900 mb-2 font-display;
+  }
+  p, .p-base {
+    @apply text-base text-gray-600 leading-relaxed mb-4;
+  }
+  
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-base sm:text-lg font-semibold tracking-[0.15em] text-primary uppercase mb-4 before:content-[''] before:w-8 before:h-px before:bg-primary/60 after:content-[''] after:w-8 after:h-px after:bg-primary/60;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply antialiased text-gray-800 bg-gray-50 font-sans;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Page transition */
+.page-enter {
+  animation: pageEnter 0.3s ease-out;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Skeleton loading pulse */
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Body overflow lock for mobile menu */
+body.menu-open {
+  overflow: hidden;
+}
+
+/* 2026 UX/UI Design Trends */
+.card-modern {
+  @apply bg-white border border-gray-200/50 hover:border-primary/20 rounded-3xl p-8 hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.06)] hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden;
+}
+
+.card-modern-dark {
+  @apply bg-gray-900 border border-gray-800 hover:border-primary/20 rounded-3xl p-8 hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.5)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden;
+}
+
+.glow-overlay {
+  @apply absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-125 duration-500 blur-xl;
+}
+
+/* Custom Transition Delays to replace inline style transitionDelay */
+.delay-50 {
+  transition-delay: 50ms;
+}
+.delay-100 {
+  transition-delay: 100ms;
+}
+.delay-150 {
+  transition-delay: 150ms;
+}
+.delay-200 {
+  transition-delay: 200ms;
+}
+.delay-250 {
+  transition-delay: 250ms;
+}
+.delay-300 {
+  transition-delay: 300ms;
+}
+
+@keyframes progressLoader {
+  0% { stroke-dashoffset: 169.6; }
+  100% { stroke-dashoffset: 0; }
+}
+.animate-progress-loader {
+  animation: progressLoader 6s linear forwards;
+}
