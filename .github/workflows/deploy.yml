@@ -55,6 +55,11 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
+            # Profil ve NVM ortam değişkenlerini yükle (Non-interactive shell için gerekli)
+            export PATH=$PATH:/usr/local/bin:/usr/bin:/bin
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
             cd ${{ secrets.SERVER_PATH }}
             
             # Sadece üretim bağımlılıklarını kur
