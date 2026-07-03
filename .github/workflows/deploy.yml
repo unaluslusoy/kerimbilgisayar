@@ -71,6 +71,9 @@ jobs:
             
             cd ${{ secrets.SERVER_PATH }}
             
+            # Sunucudaki hatalı .htaccess dosyasını sil
+            rm -f .htaccess
+            
             npm install --production --legacy-peer-deps
             npm run db:push
             
