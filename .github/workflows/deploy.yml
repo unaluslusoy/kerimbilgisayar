@@ -70,6 +70,28 @@ jobs:
             fi
             
             cd ${{ secrets.SERVER_PATH }}
+
+            cat > .env <<'EOF'
+            DATABASE_HOST=${{ secrets.DATABASE_HOST }}
+            DATABASE_NAME=${{ secrets.DATABASE_NAME }}
+            DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
+            DATABASE_PORT=${{ secrets.DATABASE_PORT }}
+            DATABASE_USER=${{ secrets.DATABASE_USER }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            APP_URL=${{ secrets.APP_URL }}
+            NODE_ENV=production
+            EOF
+
+            export DATABASE_HOST="${{ secrets.DATABASE_HOST }}"
+            export DATABASE_NAME="${{ secrets.DATABASE_NAME }}"
+            export DATABASE_PASSWORD="${{ secrets.DATABASE_PASSWORD }}"
+            export DATABASE_PORT="${{ secrets.DATABASE_PORT }}"
+            export DATABASE_USER="${{ secrets.DATABASE_USER }}"
+            export DATABASE_URL="${{ secrets.DATABASE_URL }}"
+            export GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
+            export APP_URL="${{ secrets.APP_URL }}"
+            export NODE_ENV=production
             
             npm install --legacy-peer-deps
             npm run db:push
