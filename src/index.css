@@ -93,6 +93,12 @@
   }
 }
 
+@layer utilities {
+  .max-w-4xl {
+    max-width: var(--container-7xl);
+  }
+}
+
 html {
   scroll-behavior: smooth;
 }
