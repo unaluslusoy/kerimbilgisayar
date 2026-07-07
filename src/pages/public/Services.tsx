@@ -130,6 +130,7 @@ export default function Services() {
             {filteredServices.map((service) => {
               const catDetails = service.categoryDetails || {};
               const imageUrl = mediaUrl(service.imageUrl) || 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=800';
+              const serviceTags = Array.isArray(catDetails.features) ? catDetails.features.slice(0, 3) : [];
               return (
                 <div key={service.id} id={catDetails.slug || `cat-${service.categoryId}`} className="bg-white rounded-theme shadow-sm border border-gray-200 hover:shadow-xl transition-all duration-300 group scroll-mt-24 flex flex-col justify-between overflow-hidden">
                   <div className="h-48 overflow-hidden relative">
@@ -141,16 +142,25 @@ export default function Services() {
                   </div>
                   <div className="p-8 flex-1 flex flex-col justify-between">
                     <div>
-                      <div className="mb-2 text-primary text-xs font-semibold uppercase tracking-wide">{catDetails.name || 'Kategorisiz'}</div>
+                      <div className="mb-4 inline-flex w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-gray-800 border border-primary/20">{catDetails.name || 'Kategorisiz'}</div>
                       <h2 className="text-2xl font-bold text-gray-900 group-hover:text-primary transition-colors mb-4">{service.name}</h2>
                       <p className="text-gray-600 mb-6 leading-relaxed line-clamp-3">
                         {service.description}
                       </p>
+                      {serviceTags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-6">
+                          {serviceTags.map((tag: string, index: number) => (
+                            <span key={`${service.id}-${index}`} className="rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <div className="flex items-center gap-4 text-sm text-gray-500 mb-6 font-medium">
                         {service.basePrice && (
-                          <div className="flex items-center text-green-700 bg-green-50 px-3 py-1 rounded-full">
+                          <div className="flex items-center text-gray-800 bg-green-50 border border-green-100 px-3 py-1 rounded-full">
                             <Tag className="w-4 h-4 mr-1.5" />
                             {service.basePrice} ₺'den başlayan fiyatlarla
                           </div>

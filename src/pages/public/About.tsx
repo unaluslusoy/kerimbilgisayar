@@ -81,6 +81,27 @@ export default function About() {
               )}
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-16">
+            <div className="bg-gray-50 border border-gray-100 rounded-theme p-8 shadow-sm">
+              <div className="w-12 h-12 bg-white rounded-theme border border-gray-200 shadow-sm flex items-center justify-center mb-5">
+                <Target className="w-6 h-6 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Misyonumuz</h2>
+              <p className="text-gray-600 leading-relaxed mb-0">
+                Bireysel ve kurumsal müşterilerimizin teknoloji ihtiyaçlarını doğru analiz ederek güvenilir, sürdürülebilir ve ölçülebilir bilişim çözümleri sunmak; servis, bakım, güvenlik ve altyapı süreçlerinde kesintisiz destek sağlamaktır.
+              </p>
+            </div>
+            <div className="bg-gray-50 border border-gray-100 rounded-theme p-8 shadow-sm">
+              <div className="w-12 h-12 bg-white rounded-theme border border-gray-200 shadow-sm flex items-center justify-center mb-5">
+                <Shield className="w-6 h-6 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Vizyonumuz</h2>
+              <p className="text-gray-600 leading-relaxed mb-0">
+                Teknolojiyi sadece bir destek aracı değil, işletmelerin büyümesini hızlandıran stratejik bir güç haline getirmek; İstanbul ve çevresinde güvenilir, yenilikçi ve çözüm odaklı bilişim iş ortağı olarak ilk akla gelen marka olmaktır.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

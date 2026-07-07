@@ -81,7 +81,7 @@ export default function ServiceDetail() {
             {service.name}
           </h1>
           <div className="flex items-center gap-2 mt-4">
-            <span className="bg-primary text-white tracking-widest text-xs font-black uppercase px-3 py-1 rounded-full shadow-sm">
+            <span className="bg-primary/10 text-gray-800 border border-primary/20 tracking-widest text-xs font-black uppercase px-3 py-1 rounded-full shadow-sm">
               {catDetails.name || 'Hizmet Detayı'}
             </span>
           </div>

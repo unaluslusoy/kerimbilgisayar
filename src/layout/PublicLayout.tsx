@@ -225,7 +225,7 @@ export default function PublicLayout() {
           <div className="flex items-center h-[88px] gap-8">
 
             {/* Logo */}
-            <Link to="/" className="shrink-0 py-2">
+            <Link to="/" aria-label="Anasayfaya git" onClick={() => setIsMobileMenuOpen(false)} className="shrink-0 py-2">
               <img
                 src={headerLogo}
                 alt={siteTitle}
@@ -325,7 +325,7 @@ export default function PublicLayout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Brand Column */}
           <div className="sm:col-span-2 lg:col-span-2">
-            <Link to="/" className="flex items-center space-x-2 mb-5">
+            <Link to="/" aria-label="Anasayfaya git" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center space-x-2 mb-5">
               <img src={footerLogo} alt={siteTitle} className="h-12 sm:h-14 w-auto object-contain" />
             </Link>
             <p className="text-gray-400 mb-6 max-w-sm text-sm leading-relaxed">
