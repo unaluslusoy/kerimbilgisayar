@@ -23,6 +23,8 @@ export default function AdminLayout() {
     { name: 'Hizmetlerimiz', path: '/admin/hizmetler', icon: Wrench },
     { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri', icon: Tag },
     { name: 'Kullanıcılar', path: '/admin/kullanicilar', icon: Users },
+    { name: 'Müşteriler', path: '/admin/musteriler', icon: Users },
+    { name: 'Abonelik Paketleri', path: '/admin/abonelik-paketleri', icon: Tag },
     { name: 'Başvurular', path: '/admin/basvurular', icon: Inbox },
     { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare },
     { separator: true, name: 'İçerik Yönetimi' },

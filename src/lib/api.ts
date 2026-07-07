@@ -198,6 +198,35 @@ export async function updateAdminUser(id: number, data: any) {
   return adminRequest(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
+// Customers
+export async function fetchAdminCustomers() {
+  return adminRequest('/api/admin/customers');
+}
+
+export async function createAdminCustomer(data: any) {
+  return adminRequest('/api/admin/customers', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateAdminCustomer(id: number, data: any) {
+  return adminRequest(`/api/admin/customers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function assignCustomerSubscription(id: number, data: any) {
+  return adminRequest(`/api/admin/customers/${id}/subscription`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function fetchSubscriptionPlans() {
+  return adminRequest('/api/admin/subscription-plans');
+}
+
+export async function createSubscriptionPlan(data: any) {
+  return adminRequest('/api/admin/subscription-plans', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateSubscriptionPlan(id: number, data: any) {
+  return adminRequest(`/api/admin/subscription-plans/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
 // Taxonomies
 export async function fetchAdminTerms() {
   return adminRequest('/api/admin/terms');
@@ -257,6 +286,10 @@ export async function createCampaign(data: any) {
 
 export async function updateCampaign(id: number, data: any) {
   return adminRequest(`/api/admin/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function importCampaignRemoteImages() {
+  return adminRequest('/api/admin/campaigns/import-remote-images', { method: 'POST' });
 }
 
 // FAQ
@@ -333,6 +366,10 @@ export async function uploadAdminMedia(file: File, folderId?: number | null) {
     throw new Error(errorData?.error || 'API Request failed');
   }
   return res.json();
+}
+
+export async function importRemoteMedia(url: string) {
+  return adminRequest('/api/admin/media/import-remote', { method: 'POST', body: JSON.stringify({ url }) });
 }
 
 // Media Folders

@@ -9,6 +9,10 @@ import { fileURLToPath } from 'url';
 const rootDir = process.cwd();
 import { 
   users, 
+  companies,
+  plans,
+  subscriptions,
+  customerSubscriptions,
   devices,
   services,
   blogPosts,
@@ -47,6 +51,50 @@ import {
 import { eq, desc, and, sql, asc, like } from 'drizzle-orm';
 import crypto from 'crypto';
 import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
+
+const uploadsDir = path.join(rootDir, 'uploads');
+
+async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | null): Promise<string> {
+  if (!/^https?:\/\//i.test(sourceUrl)) return sourceUrl;
+
+  const existing = await db.select().from(mediaLibrary).where(eq(mediaLibrary.description, `remote:${sourceUrl}`)).limit(1);
+  if (existing.length > 0) return existing[0].fileUrl;
+
+  const response = await fetch(sourceUrl, { redirect: 'follow' });
+  if (!response.ok) throw new Error(`Görsel indirilemedi: ${response.status}`);
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.startsWith('image/')) throw new Error('URL bir görsel dosyası değil');
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > 8 * 1024 * 1024) throw new Error('Görsel 8 MB sınırını aşıyor');
+
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  const parsedUrl = new URL(sourceUrl);
+  const originalName = path.basename(parsedUrl.pathname) || 'remote-image';
+  const safeBase = path.parse(originalName).name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'remote-image';
+  const fileName = `${Date.now()}-${safeBase}.webp`;
+  const filePath = path.join(uploadsDir, fileName);
+
+  await sharp(buffer).webp({ quality: 80 }).toFile(filePath);
+
+  const fileUrl = `/uploads/${fileName}`;
+  const title = path.parse(originalName).name || safeBase;
+  await db.insert(mediaLibrary).values({
+    tenantId: 1,
+    uploaderId: uploaderId || null,
+    folderId: null,
+    fileName,
+    fileUrl,
+    mimeType: 'image/webp',
+    fileSize: fs.statSync(filePath).size,
+    title,
+    altText: title,
+    description: `remote:${sourceUrl}`,
+  });
+
+  return fileUrl;
+}
 
 // Simple in-memory token store (for demo; in production use a proper session/JWT)
 const activeSessions: Map<string, { userId: number; email: string; name: string; role: string }> = new Map();
@@ -1840,7 +1888,7 @@ async function startServer() {
         isActive: users.isActive,
         lastLoginAt: users.lastLoginAt,
         createdAt: users.createdAt,
-      }).from(users).orderBy(desc(users.createdAt));
+      }).from(users).where(sql`${users.roleType} <> 'customer'`).orderBy(desc(users.createdAt));
       res.json(allUsers);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -1870,6 +1918,214 @@ async function startServer() {
       if (isActive !== undefined) updateData.isActive = isActive;
       if (roleType) updateData.roleType = roleType;
       await db.update(users).set(updateData).where(eq(users.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // ADMIN API — CUSTOMERS, ACCOUNTS & SUBSCRIPTIONS
+  // ============================================================
+
+  app.get('/api/admin/customers', requireAdmin, async (req, res) => {
+    try {
+      const allCustomers = await db.select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        phone: users.phone,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        companyId: companies.id,
+        companyName: companies.name,
+        taxId: companies.taxId,
+        taxOffice: companies.taxOffice,
+        address: companies.address,
+        sector: companies.sector,
+        subscriptionId: customerSubscriptions.id,
+        subscriptionStatus: customerSubscriptions.status,
+        currentPeriodEnd: customerSubscriptions.currentPeriodEnd,
+        planId: plans.id,
+        planName: plans.name,
+        planPrice: plans.price,
+        billingCycle: plans.billingCycle,
+      }).from(users)
+        .leftJoin(companies, eq(users.companyId, companies.id))
+        .leftJoin(customerSubscriptions, eq(customerSubscriptions.userId, users.id))
+        .leftJoin(plans, eq(customerSubscriptions.planId, plans.id))
+        .where(eq(users.roleType, 'customer'))
+        .orderBy(desc(users.createdAt));
+      res.json(allCustomers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/customers', requireAdmin, async (req, res) => {
+    try {
+      const { firstName, lastName, email, phone, password, companyName, taxId, taxOffice, address, sector } = req.body;
+      let companyId: number | null = null;
+
+      if (companyName || taxId || taxOffice || address || sector) {
+        const insertedCompany = await db.insert(companies).values({
+          tenantId: 1,
+          name: companyName || `${firstName} ${lastName || ''}`.trim(),
+          taxId: taxId || null,
+          taxOffice: taxOffice || null,
+          address: address || null,
+          phone: phone || null,
+          email: email || null,
+          sector: sector || null,
+          type: 'customer',
+        });
+        companyId = (insertedCompany[0] as any).insertId;
+      }
+
+      await db.insert(users).values({
+        tenantId: 1,
+        companyId,
+        firstName,
+        lastName: lastName || '',
+        email,
+        phone: phone || null,
+        roleType: 'customer',
+        passwordHash: password || 'musteri123',
+        isActive: true,
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/admin/customers/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { firstName, lastName, email, phone, isActive, companyName, taxId, taxOffice, address, sector } = req.body;
+      const existing = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      if (existing.length === 0 || existing[0].roleType !== 'customer') return res.status(404).json({ error: 'Müşteri bulunamadı' });
+
+      const userUpdates: any = {};
+      if (firstName !== undefined) userUpdates.firstName = firstName;
+      if (lastName !== undefined) userUpdates.lastName = lastName;
+      if (email !== undefined) userUpdates.email = email;
+      if (phone !== undefined) userUpdates.phone = phone;
+      if (isActive !== undefined) userUpdates.isActive = isActive;
+      if (Object.keys(userUpdates).length > 0) await db.update(users).set(userUpdates).where(eq(users.id, id));
+
+      const companyUpdates: any = {};
+      if (companyName !== undefined) companyUpdates.name = companyName;
+      if (taxId !== undefined) companyUpdates.taxId = taxId;
+      if (taxOffice !== undefined) companyUpdates.taxOffice = taxOffice;
+      if (address !== undefined) companyUpdates.address = address;
+      if (sector !== undefined) companyUpdates.sector = sector;
+      if (phone !== undefined) companyUpdates.phone = phone;
+      if (email !== undefined) companyUpdates.email = email;
+
+      if (Object.keys(companyUpdates).length > 0) {
+        if (existing[0].companyId) {
+          await db.update(companies).set(companyUpdates).where(eq(companies.id, existing[0].companyId));
+        } else {
+          const insertedCompany = await db.insert(companies).values({
+            tenantId: 1,
+            name: companyName || `${firstName || existing[0].firstName} ${lastName || existing[0].lastName || ''}`.trim(),
+            phone: phone || existing[0].phone || null,
+            email: email || existing[0].email || null,
+            type: 'customer',
+            ...companyUpdates,
+          });
+          await db.update(users).set({ companyId: (insertedCompany[0] as any).insertId }).where(eq(users.id, id));
+        }
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/subscription-plans', requireAdmin, async (req, res) => {
+    try {
+      const allPlans = await db.select().from(plans).orderBy(desc(plans.createdAt));
+      res.json(allPlans);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/subscription-plans', requireAdmin, async (req, res) => {
+    try {
+      const { name, slug, description, price, billingCycle, features, isActive } = req.body;
+      await db.insert(plans).values({
+        name,
+        slug: slug || name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        description: description || null,
+        price: (price || 0).toString(),
+        billingCycle: billingCycle || 'monthly',
+        features: String(features || '').split('\n').map(item => item.trim()).filter(Boolean),
+        isActive: isActive !== false,
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/admin/subscription-plans/:id', requireAdmin, async (req, res) => {
+    try {
+      const { name, description, price, billingCycle, features, isActive } = req.body;
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (price !== undefined) updateData.price = price.toString();
+      if (billingCycle !== undefined) updateData.billingCycle = billingCycle;
+      if (features !== undefined) updateData.features = String(features).split('\n').map(item => item.trim()).filter(Boolean);
+      if (isActive !== undefined) updateData.isActive = isActive;
+      await db.update(plans).set(updateData).where(eq(plans.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/customers/:id/subscription', requireAdmin, async (req, res) => {
+    try {
+      const customerId = parseInt(req.params.id);
+      const { planId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd } = req.body;
+      const customer = await db.select().from(users).where(eq(users.id, customerId)).limit(1);
+      if (customer.length === 0 || customer[0].roleType !== 'customer') return res.status(404).json({ error: 'Müşteri bulunamadı' });
+
+      let companyId = customer[0].companyId;
+      if (!companyId) {
+        const insertedCompany = await db.insert(companies).values({
+          tenantId: 1,
+          name: `${customer[0].firstName} ${customer[0].lastName || ''}`.trim(),
+          email: customer[0].email,
+          phone: customer[0].phone,
+          type: 'customer',
+        });
+        companyId = (insertedCompany[0] as any).insertId;
+        await db.update(users).set({ companyId }).where(eq(users.id, customerId));
+      }
+
+      const existing = await db.select().from(customerSubscriptions).where(eq(customerSubscriptions.userId, customerId)).limit(1);
+      const payload = {
+        tenantId: 1,
+        userId: customerId,
+        companyId,
+        planId: parseInt(planId),
+        status: status || 'active',
+        currentPeriodStart: currentPeriodStart ? new Date(currentPeriodStart) : new Date(),
+        currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd) : null,
+        cancelAtPeriodEnd: !!cancelAtPeriodEnd,
+      };
+
+      if (existing.length > 0) {
+        await db.update(customerSubscriptions).set(payload).where(eq(customerSubscriptions.id, existing[0].id));
+      } else {
+        await db.insert(customerSubscriptions).values(payload);
+      }
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -1943,11 +2199,12 @@ async function startServer() {
   app.post('/api/admin/campaigns', requireAdmin, async (req, res) => {
     try {
       const { title, slug, description, imageUrl, startDate, endDate, discountRate, status } = req.body;
+      const localImageUrl = imageUrl ? await saveRemoteImageToMedia(imageUrl, (req as any).adminUser.userId) : imageUrl;
       await db.insert(campaigns).values({
         tenantId: 1,
         title, 
         slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
-        description, imageUrl,
+        description, imageUrl: localImageUrl,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         discountRate: discountRate?.toString(),
@@ -1961,13 +2218,40 @@ async function startServer() {
 
   app.patch('/api/admin/campaigns/:id', requireAdmin, async (req, res) => {
     try {
-      const { status, title, description } = req.body;
+      const { status, title, description, imageUrl, startDate, endDate, discountRate } = req.body;
       const updateData: any = {};
       if (status) updateData.status = status;
       if (title) updateData.title = title;
       if (description) updateData.description = description;
+      if (imageUrl !== undefined) updateData.imageUrl = imageUrl ? await saveRemoteImageToMedia(imageUrl, (req as any).adminUser.userId) : null;
+      if (startDate) updateData.startDate = new Date(startDate);
+      if (endDate) updateData.endDate = new Date(endDate);
+      if (discountRate !== undefined) updateData.discountRate = discountRate?.toString();
       await db.update(campaigns).set(updateData).where(eq(campaigns.id, parseInt(req.params.id)));
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/campaigns/import-remote-images', requireAdmin, async (req, res) => {
+    try {
+      const all = await db.select().from(campaigns);
+      let imported = 0;
+      const errors: string[] = [];
+
+      for (const campaign of all) {
+        if (!campaign.imageUrl || !/^https?:\/\//i.test(campaign.imageUrl)) continue;
+        try {
+          const localImageUrl = await saveRemoteImageToMedia(campaign.imageUrl, (req as any).adminUser.userId);
+          await db.update(campaigns).set({ imageUrl: localImageUrl }).where(eq(campaigns.id, campaign.id));
+          imported += 1;
+        } catch (err: any) {
+          errors.push(`${campaign.title}: ${err.message}`);
+        }
+      }
+
+      res.json({ success: true, imported, errors });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -2263,6 +2547,17 @@ async function startServer() {
         description: '',
       });
       res.json({ success: true, fileUrl, id: (newMedia[0] as any).insertId });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/media/import-remote', requireAdmin, async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: 'URL gerekli' });
+      const fileUrl = await saveRemoteImageToMedia(url, (req as any).adminUser.userId);
+      res.json({ success: true, fileUrl });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

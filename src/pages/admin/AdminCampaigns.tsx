@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Tag, ToggleLeft, ToggleRight } from 'lucide-react';
-import { fetchAdminCampaigns, createCampaign, updateCampaign } from '../../lib/api';
+import { Plus, X, Tag, DownloadCloud } from 'lucide-react';
+import { fetchAdminCampaigns, createCampaign, updateCampaign, importCampaignRemoteImages } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 
 export default function AdminCampaigns() {
@@ -8,6 +8,7 @@ export default function AdminCampaigns() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', imageUrl: '', startDate: '', endDate: '', discountRate: '', status: 'taslak' });
   const [showPicker, setShowPicker] = useState(false);
 
@@ -33,6 +34,16 @@ export default function AdminCampaigns() {
     catch (e: any) { alert('Hata: ' + e.message); }
   };
 
+  const handleImportRemoteImages = async () => {
+    setImporting(true);
+    try {
+      const result = await importCampaignRemoteImages();
+      alert(`${result.imported || 0} kampanya görseli medya kütüphanesine alındı.`);
+      await load();
+    } catch (e: any) { alert('Hata: ' + e.message); }
+    finally { setImporting(false); }
+  };
+
   const STATUS_COLORS: Record<string, string> = { aktif: 'bg-blue-100 text-secondary', pasif: 'bg-gray-100 text-gray-500', taslak: 'bg-yellow-100 text-yellow-700' };
   const STATUS_LABELS: Record<string, string> = { aktif: 'Aktif', pasif: 'Pasif', taslak: 'Taslak' };
 
@@ -43,9 +54,14 @@ export default function AdminCampaigns() {
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Kampanya Yönetimi</h1>
           <p className="text-sm text-gray-500 mt-1">Aktif ve pasif kampanyaları yönetin.</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-theme shadow-sm">
-          <Plus className="w-4 h-4 mr-2" /> Yeni Kampanya
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={handleImportRemoteImages} disabled={importing} className="inline-flex items-center px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-theme border border-gray-200 shadow-sm disabled:opacity-50">
+            <DownloadCloud className="w-4 h-4 mr-2" /> Dış Görselleri İçeri Aktar
+          </button>
+          <button onClick={() => setShowModal(true)} className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-theme shadow-sm">
+            <Plus className="w-4 h-4 mr-2" /> Yeni Kampanya
+          </button>
+        </div>
       </div>
 
       {loading ? (

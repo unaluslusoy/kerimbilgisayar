@@ -9,6 +9,8 @@ import Appointment from './pages/public/Appointment';
 import AdminOverview from './pages/admin/AdminOverview';
 import ServiceManager from './pages/admin/ServiceManager';
 import AdminUsers from './pages/admin/AdminUsers';
+import AdminCustomers from './pages/admin/AdminCustomers';
+import AdminSubscriptionPlans from './pages/admin/AdminSubscriptionPlans';
 import AdminStock from './pages/admin/AdminStock';
 import AdminMessages from './pages/admin/AdminMessages';
 import AdminSettings from './pages/admin/AdminSettings';
@@ -144,6 +146,8 @@ function AppContent() {
          <Route index element={<AdminOverview />} />
          <Route path="servis" element={<ServiceManager />} />
          <Route path="kullanicilar" element={<AdminUsers />} />
+         <Route path="musteriler" element={<AdminCustomers />} />
+         <Route path="abonelik-paketleri" element={<AdminSubscriptionPlans />} />
          <Route path="stok" element={<AdminStock />} />
          <Route path="mesajlar" element={<AdminMessages />} />
          <Route path="ayarlar" element={<AdminSettings />} />

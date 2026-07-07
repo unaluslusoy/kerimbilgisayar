@@ -51,6 +51,21 @@ export const subscriptions = mysqlTable('subscriptions', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
+export const customerSubscriptions = mysqlTable('customer_subscriptions', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id).default(1),
+  userId: int('user_id').references(() => users.id).notNull(),
+  companyId: int('company_id').references(() => companies.id),
+  planId: int('plan_id').references(() => plans.id).notNull(),
+  status: mysqlEnum('status', ['trial', 'active', 'past_due', 'canceled', 'unpaid']).default('active'),
+  currentPeriodStart: timestamp('current_period_start'),
+  currentPeriodEnd: timestamp('current_period_end'),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
+  agreementNotes: text('agreement_notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
 // --- CRM: COMPANIES & LEADS ---
 
 export const companies = mysqlTable('companies', {

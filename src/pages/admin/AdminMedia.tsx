@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Trash2, Copy, Check, Plus, Folder as FolderIcon, File as FileIcon, Image as ImageIcon, FileText, Music, Video, ChevronRight, ArrowLeft } from 'lucide-react';
-import { fetchAdminMedia, uploadAdminMedia, adminRequest, fetchMediaFolders, createMediaFolder, deleteMediaFolder } from '../../lib/api';
+import { Upload, Trash2, Copy, Check, Plus, Folder as FolderIcon, File as FileIcon, Image as ImageIcon, FileText, Music, Video, ChevronRight, ArrowLeft, DownloadCloud } from 'lucide-react';
+import { fetchAdminMedia, uploadAdminMedia, adminRequest, fetchMediaFolders, createMediaFolder, deleteMediaFolder, importRemoteMedia } from '../../lib/api';
 import { mediaUrl } from '../../lib/media';
 
 export default function AdminMedia() {
@@ -9,6 +9,8 @@ export default function AdminMedia() {
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [importingRemote, setImportingRemote] = useState(false);
+  const [remoteUrl, setRemoteUrl] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,6 +55,21 @@ export default function AdminMedia() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleImportRemote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!remoteUrl.trim()) return;
+    setImportingRemote(true);
+    try {
+      await importRemoteMedia(remoteUrl.trim());
+      setRemoteUrl('');
+      await load();
+    } catch (err: any) {
+      alert('İçe aktarma hatası: ' + err.message);
+    } finally {
+      setImportingRemote(false);
     }
   };
 
@@ -223,7 +240,24 @@ export default function AdminMedia() {
             <span>{media.length} Dosya, {currentFolders.length} Klasör</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <form onSubmit={handleImportRemote} className="flex items-center gap-2">
+              <input
+                type="url"
+                value={remoteUrl}
+                onChange={e => setRemoteUrl(e.target.value)}
+                placeholder="Dış görsel URL"
+                className="w-52 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={importingRemote || !remoteUrl.trim()}
+                className="flex items-center gap-2 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <DownloadCloud className="h-4 w-4" />
+                {importingRemote ? 'Alınıyor...' : 'URL’den Al'}
+              </button>
+            </form>
             <input
               type="file"
               ref={fileInputRef}
