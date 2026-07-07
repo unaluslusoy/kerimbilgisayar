@@ -1,5 +1,8 @@
 RewriteEngine On
 
+# Ana sayfa istegini de Node.js uygulamasina gönder; DirectoryIndex statik index'i atlamasin
+RewriteRule ^$ http://127.0.0.1:3000/ [P,L]
+
 # 1. Medya ve build assetleri dogrudan dist altindaki gercek dosyalardan servis et
 RewriteRule ^uploads/(.*)$ /dist/uploads/$1 [L,NC]
 RewriteRule ^assets/(.*)$ /dist/assets/$1 [L,NC]
