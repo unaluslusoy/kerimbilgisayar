@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { fetchPage } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 import { useSettings } from '../../context/SettingsContext';
+import { mediaUrl } from '../../lib/media';
 
 export default function About() {
   usePageTitle('Hakkımızda');
@@ -45,7 +46,7 @@ export default function About() {
             <div className="lg:w-1/2">
               <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-gray-100 sticky top-24">
                 <img 
-                  src={settings?.aboutImage || "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800"} 
+                  src={mediaUrl(settings?.aboutImage) || "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800"} 
                   alt={page?.title || "Hakkımızda"} 
                   className="w-full object-cover aspect-video sm:aspect-square"
                 />

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Calendar, ChevronRight, Tag, Search, TrendingUp, X, Clock } from 'lucide-react';
 import { fetchBlogPosts } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
+import { mediaUrl } from '../../lib/media';
 
 const POPULAR_TAGS = [
   "Bilişim Teknolojileri", "Kurumsal SLA Desteği", "Ağ Entegrasyonu",
@@ -175,7 +176,7 @@ export default function BlogList() {
                   <article key={post.id} className="bg-white rounded-theme shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all group flex flex-col md:flex-row">
                     <div className="md:w-2/5 shrink-0 overflow-hidden relative h-56 md:h-auto">
                       <img
-                        src={post.imageUrl || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80'}
+                        src={mediaUrl(post.imageUrl) || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80'}
                         alt={post.title}
                         className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
                       />

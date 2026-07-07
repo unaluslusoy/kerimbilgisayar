@@ -4,6 +4,7 @@ import { Search, Clock, Tag, MousePointerClick } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { fetchServices, fetchServiceCategories } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
+import { mediaUrl } from '../../lib/media';
 
 const DynamicIcon = ({ name, className }: { name?: string | null; className?: string }) => {
   if (!name) return <MousePointerClick className={className} />;
@@ -128,7 +129,7 @@ export default function Services() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             {filteredServices.map((service) => {
               const catDetails = service.categoryDetails || {};
-              const imageUrl = service.imageUrl || 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=800';
+              const imageUrl = mediaUrl(service.imageUrl) || 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=800';
               return (
                 <div key={service.id} id={catDetails.slug || `cat-${service.categoryId}`} className="bg-white rounded-theme shadow-sm border border-gray-200 hover:shadow-xl transition-all duration-300 group scroll-mt-24 flex flex-col justify-between overflow-hidden">
                   <div className="h-48 overflow-hidden relative">

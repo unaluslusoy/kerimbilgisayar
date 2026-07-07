@@ -38,6 +38,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { mediaUrl } from '../../lib/media';
 import { useSettings } from '../../context/SettingsContext';
 import { useEffect, useState } from 'react';
 import { fetchServices, fetchCampaigns } from '../../lib/api';
@@ -243,7 +244,7 @@ export default function Home() {
                       {/* Image — rounded-3xl */}
                       <div className="relative rounded-3xl overflow-hidden h-64 sm:h-80 lg:h-auto lg:min-h-[430px] w-full mb-6 lg:mb-0 order-first lg:order-last">
                         <img
-                          src={slide.image || "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&q=80&w=900"}
+                          src={mediaUrl(slide.image) || "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&q=80&w=900"}
                           alt={slide.title?.replace(/<[^>]+>/g, '') || 'Slider'}
                           className="absolute inset-0 w-full h-full object-cover object-center"
                         />
@@ -360,7 +361,7 @@ export default function Home() {
             <div className="relative hidden lg:grid grid-cols-[1fr_auto] gap-4 items-stretch py-6">
               <div className="relative rounded-2xl overflow-hidden bg-gray-100 shadow-xl">
                 <img
-                  src={settings?.homeHeroImage || "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&q=80&w=900"}
+                  src={mediaUrl(settings?.homeHeroImage) || "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&q=80&w=900"}
                   alt="Kerim Bilgisayar"
                   className="absolute inset-0 w-full h-full object-cover"
                 />
@@ -443,7 +444,7 @@ export default function Home() {
               <div key={`set1-${idx}`} className="flex-none flex items-center justify-center h-24 px-10 border-r border-gray-200">
                 <div className="flex items-center justify-center font-bold text-xl sm:text-2xl text-gray-400 grayscale opacity-80 hover:opacity-100 hover:grayscale-0 hover:text-gray-900 hover:-translate-y-0.5 transition-all duration-300 cursor-default flex-col">
                   {p.logo ? (
-                    <img src={p.logo} className="h-8 md:h-10 w-auto object-contain" alt={p.name} />
+                    <img src={mediaUrl(p.logo)} className="h-8 md:h-10 w-auto object-contain" alt={p.name} />
                   ) : (
                     <>
                       <span className="whitespace-nowrap font-serif italic tracking-tight">{p.name}</span>
@@ -458,7 +459,7 @@ export default function Home() {
               <div key={`set2-${idx}`} className="flex-none flex items-center justify-center h-24 px-10 border-r border-gray-200 last:border-r-0">
                 <div className="flex items-center justify-center font-bold text-xl sm:text-2xl text-gray-400 grayscale opacity-80 hover:opacity-100 hover:grayscale-0 hover:text-gray-900 hover:-translate-y-0.5 transition-all duration-300 cursor-default flex-col">
                   {p.logo ? (
-                    <img src={p.logo} className="h-8 md:h-10 w-auto object-contain" alt={p.name} />
+                    <img src={mediaUrl(p.logo)} className="h-8 md:h-10 w-auto object-contain" alt={p.name} />
                   ) : (
                     <>
                       <span className="whitespace-nowrap font-serif italic tracking-tight">{p.name}</span>
@@ -535,7 +536,7 @@ export default function Home() {
               <div key={i} className="bg-white rounded-theme overflow-hidden shadow-lg border border-primary/10 hover:shadow-xl transition-shadow flex flex-col">
                 {camp.imageUrl && (
                   <div className="h-48 relative overflow-hidden">
-                    <img src={camp.imageUrl} alt={camp.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+                    <img src={mediaUrl(camp.imageUrl)} alt={camp.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
                     {camp.discountRate && (
                       <div className="absolute top-4 right-4 bg-primary text-white font-bold px-3 py-1 rounded-full text-sm shadow">
                         %{Number(camp.discountRate)} İndirim
@@ -610,7 +611,7 @@ export default function Home() {
           <div className="rounded-[2rem] p-10 md:p-14 text-white relative overflow-hidden group shadow-2xl hover:shadow-purple-500/20 transition-shadow duration-500">
             <div className="absolute inset-0 bg-gray-950"></div>
             <img
-              src={settings?.homeGamingImage || "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&q=80"}
+              src={mediaUrl(settings?.homeGamingImage) || "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&q=80"}
               alt={settings?.homeGamingTitle || "Profesyonel Gaming Sistemler"}
               className="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-luminosity group-hover:scale-105 transition-transform duration-700"
               loading="lazy"
@@ -643,7 +644,7 @@ export default function Home() {
           <div className="rounded-[2rem] p-10 md:p-14 text-white relative overflow-hidden group shadow-2xl hover:shadow-primary/20 transition-shadow duration-500">
             <div className="absolute inset-0 bg-gray-950"></div>
             <img
-              src={settings?.homeCorporateImage || "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80"}
+              src={mediaUrl(settings?.homeCorporateImage) || "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80"}
               alt={settings?.homeCorporateTitle || "Kurumsal Bakım Anlaşmaları"}
               className="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-luminosity group-hover:scale-105 transition-transform duration-700"
               loading="lazy"

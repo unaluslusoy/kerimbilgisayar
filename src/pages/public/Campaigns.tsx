@@ -3,6 +3,7 @@ import { Tag, Calendar, ChevronRight, Percent, Clock, X, Info } from 'lucide-rea
 import { Link } from 'react-router-dom';
 import { fetchCampaigns } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
+import { mediaUrl } from '../../lib/media';
 
 export default function Campaigns() {
   usePageTitle('Kampanyalar');
@@ -116,7 +117,7 @@ export default function Campaigns() {
                     <div key={camp.id} className="bg-white rounded-theme shadow-sm border border-gray-200 overflow-hidden hover:shadow-xl transition-all group flex flex-col">
                       <div className="relative h-48 overflow-hidden">
                         <img
-                          src={camp.imageUrl || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80'}
+                          src={mediaUrl(camp.imageUrl) || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80'}
                           alt={camp.title}
                           className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
                         />
@@ -177,7 +178,7 @@ export default function Campaigns() {
                     <div key={camp.id} className="bg-white rounded-theme border border-gray-200 overflow-hidden opacity-60 flex flex-col">
                       <div className="relative h-40 overflow-hidden">
                         <img
-                          src={camp.imageUrl || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80'}
+                          src={mediaUrl(camp.imageUrl) || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80'}
                           alt={camp.title}
                           className="w-full h-full object-cover grayscale"
                         />
@@ -208,7 +209,7 @@ export default function Campaigns() {
               <X className="w-5 h-5" />
             </button>
             <div className="h-64 relative">
-              <img src={selectedCampaign.imageUrl || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80'} alt={selectedCampaign.title} className="w-full h-full object-cover" />
+              <img src={mediaUrl(selectedCampaign.imageUrl) || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80'} alt={selectedCampaign.title} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent"></div>
               {selectedCampaign.discountRate && (
                 <div className="absolute bottom-6 left-6 bg-primary text-white font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-lg">

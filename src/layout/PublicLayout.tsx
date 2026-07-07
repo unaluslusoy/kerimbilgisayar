@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import CookieConsent from '../components/CookieConsent';
 import { useSettings } from '../context/SettingsContext';
+import { mediaUrl } from '../lib/media';
 
 const buildTree = (items: any[], parentId: number | null = null): any[] => {
   return items
@@ -158,8 +159,8 @@ export default function PublicLayout() {
   const contactEmail = settings?.contactEmail || settings?.contact_email || '';
   const contactAddress = settings?.contactAddress || settings?.contact_address || '';
   const siteTitle = settings?.site_title || 'Kerim Bilgisayar';
-  const headerLogo = settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo.svg';
-  const footerLogo = settings?.footerLogo || settings?.siteLogoWhite || settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo-beyaz.svg';
+  const headerLogo = mediaUrl(settings?.logoUrl || settings?.siteLogo) || '/assets/images/kerim-logo.svg';
+  const footerLogo = mediaUrl(settings?.footerLogo || settings?.siteLogoWhite || settings?.logoUrl || settings?.siteLogo) || '/assets/images/kerim-logo-beyaz.svg';
 
   if (activePlugins.includes('maintenance-mode')) {
     return (
