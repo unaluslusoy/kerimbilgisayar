@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, CheckCircle, Send, Globe, Mail, Image, Monitor, Share2, Layout } from 'lucide-react';
 import { adminRequest } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
+import { mediaUrl } from '../../lib/media';
 
 export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState('genel');
@@ -165,7 +166,7 @@ export default function AdminSettings() {
                   <input type="text" value={settings.logoUrl || ''} onChange={e => handleChange('logoUrl', e.target.value)} className={inputCls} placeholder="https://..." />
                   <button type="button" onClick={() => setPickerConfig({ onSelect: (url) => handleChange('logoUrl', url) })} className="px-3 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-theme text-xs font-semibold text-gray-700 shrink-0">Seç</button>
                 </div>
-                {settings.logoUrl && <img src={settings.logoUrl} alt="Logo önizleme" className="mt-3 h-12 object-contain border rounded-theme p-1" />}
+                {settings.logoUrl && <img src={mediaUrl(settings.logoUrl)} alt="Logo önizleme" className="mt-3 h-12 object-contain border rounded-theme p-1" />}
               </div>
               <div>
                 <label className={labelCls}>Footer Telif Metni (Copyright)</label>
@@ -249,7 +250,7 @@ export default function AdminSettings() {
                       <input type="text" value={settings.contactBannerImage || ''} onChange={e => handleChange('contactBannerImage', e.target.value)} className={inputCls} placeholder="https://images.unsplash.com/..." />
                       <button type="button" onClick={() => setPickerConfig({ onSelect: (url) => handleChange('contactBannerImage', url) })} className="px-3 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-theme text-xs font-semibold text-gray-700 shrink-0">Seç</button>
                     </div>
-                    {settings.contactBannerImage && <img src={settings.contactBannerImage} alt="Banner önizleme" className="mt-3 h-16 object-cover border rounded-theme" />}
+                    {settings.contactBannerImage && <img src={mediaUrl(settings.contactBannerImage)} alt="Banner önizleme" className="mt-3 h-16 object-cover border rounded-theme" />}
                   </div>
                 </div>
               </div>
@@ -320,7 +321,7 @@ export default function AdminSettings() {
                       <input type="text" value={settings.contactBankQrCode || ''} onChange={e => handleChange('contactBankQrCode', e.target.value)} className={inputCls} placeholder="https://..." />
                       <button type="button" onClick={() => setPickerConfig({ onSelect: (url) => handleChange('contactBankQrCode', url) })} className="px-3 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-theme text-xs font-semibold text-gray-700 shrink-0">Seç</button>
                     </div>
-                    {settings.contactBankQrCode && <img src={settings.contactBankQrCode} alt="QR önizleme" className="mt-3 h-24 object-contain border rounded-theme p-1" />}
+                    {settings.contactBankQrCode && <img src={mediaUrl(settings.contactBankQrCode)} alt="QR önizleme" className="mt-3 h-24 object-contain border rounded-theme p-1" />}
                   </div>
                 </div>
               </div>
@@ -404,7 +405,7 @@ export default function AdminSettings() {
                       <button type="button" onClick={() => setPickerConfig({ onSelect: (url) => handleChange('siteOgImage', url) })} className="px-3 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-theme text-xs font-semibold text-gray-700 shrink-0">Seç</button>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">Facebook, LinkedIn paylaşımlarında görünür. Önerilen boyut: 1200x630px</p>
-                    {settings.siteOgImage && <img src={settings.siteOgImage} alt="OG görsel önizleme" className="mt-2 h-24 object-cover rounded-theme border" />}
+                    {settings.siteOgImage && <img src={mediaUrl(settings.siteOgImage)} alt="OG görsel önizleme" className="mt-2 h-24 object-cover rounded-theme border" />}
                   </div>
                   <div>
                     <label className={labelCls}>Odak Anahtar Kelime</label>

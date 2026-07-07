@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Copy, Check, Info, X, Image as ImageIcon } from 'lucide-react';
 import { fetchAdminMedia, uploadAdminMedia } from '../../lib/api';
+import { mediaUrl } from '../../lib/media';
 
 interface MediaPickerProps {
   isOpen: boolean;
@@ -126,7 +127,7 @@ export default function MediaPicker({ isOpen, onClose, onSelect }: MediaPickerPr
                     }`}
                   >
                     {file.mimeType?.startsWith('image/') ? (
-                      <img src={file.fileUrl} alt={file.fileName} className="w-full h-full object-cover" />
+                      <img src={mediaUrl(file.fileUrl)} alt={file.fileName} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center">
                         <ImageIcon className="w-6 h-6 text-gray-400 mb-1" />
@@ -152,7 +153,7 @@ export default function MediaPicker({ isOpen, onClose, onSelect }: MediaPickerPr
               <div className="space-y-4 overflow-y-auto flex-1 pb-4">
                 <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-wider">Görsel Detayları</h3>
                 {selectedItem.mimeType?.startsWith('image/') && (
-                  <img src={selectedItem.fileUrl} alt={selectedItem.fileName} className="max-h-[160px] object-contain rounded border bg-white mx-auto shadow-sm" />
+                  <img src={mediaUrl(selectedItem.fileUrl)} alt={selectedItem.fileName} className="max-h-[160px] object-contain rounded border bg-white mx-auto shadow-sm" />
                 )}
                 
                 <div className="text-[11px] text-gray-600 space-y-1 bg-white p-2.5 rounded border border-gray-150">

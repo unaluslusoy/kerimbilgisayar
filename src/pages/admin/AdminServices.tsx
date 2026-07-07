@@ -3,6 +3,7 @@ import { Plus, Edit2, ToggleLeft, ToggleRight, X, Image as ImageIcon } from 'luc
 import MediaPickerModal from '../../components/admin/MediaPickerModal';
 import { adminRequest } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { mediaUrl } from '../../lib/media';
 
 
 
@@ -210,7 +211,7 @@ export default function AdminServices() {
                 <div className="flex items-center gap-3">
                   <div className="h-16 w-16 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
                     {form.imageUrl ? (
-                      <img src={form.imageUrl} alt="Seçili" className="w-full h-full object-cover" />
+                      <img src={mediaUrl(form.imageUrl)} alt="Seçili" className="w-full h-full object-cover" />
                     ) : (
                       <ImageIcon className="h-6 w-6 text-gray-400" />
                     )}

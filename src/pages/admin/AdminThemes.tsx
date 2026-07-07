@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Palette, Save, CheckCircle, Type, Square, Image as ImageIcon, LayoutTemplate, Layout, Loader2 } from 'lucide-react';
 import { adminRequest } from '../../lib/api';
+import { mediaUrl } from '../../lib/media';
 
 const THEME_PRESETS = [
   { id: 'blue', name: 'Kurumsal Mavi', primary: '#2563eb', hover: '#1d4ed8' },
@@ -178,7 +179,7 @@ export default function AdminThemes() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Site Logosu URL</label>
               <input type="text" value={siteLogo} onChange={e => setSiteLogo(e.target.value)} placeholder="https://ornek.com/logo.png" className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors" />
               <p className="text-xs text-gray-400 mt-2">Sitenin sol üst köşesinde görünecek ana logo.</p>
-              {siteLogo && <img src={siteLogo} alt="Logo Önizleme" className="mt-3 h-10 object-contain bg-gray-50 p-2 rounded border" />}
+              {siteLogo && <img src={mediaUrl(siteLogo)} alt="Logo Önizleme" className="mt-3 h-10 object-contain bg-gray-50 p-2 rounded border" />}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Favicon URL</label>
@@ -284,7 +285,7 @@ export default function AdminThemes() {
         >
           {/* Header Preview */}
           <div className={`bg-white shadow-sm h-14 flex items-center px-6 ${headerLayout === 'centered' ? 'justify-center gap-8' : 'justify-between'}`}>
-            <div className="font-bold text-lg" style={{ color: primaryColor }}>{siteLogo ? <img src={siteLogo} className="h-6" alt="Logo" /> : 'Marka'}</div>
+            <div className="font-bold text-lg" style={{ color: primaryColor }}>{siteLogo ? <img src={mediaUrl(siteLogo)} className="h-6" alt="Logo" /> : 'Marka'}</div>
             <div className="flex space-x-4 text-sm font-medium text-gray-600">
               <span className="hover:text-primary cursor-pointer transition-colors" style={{ color: primaryColor }}>Ana Sayfa</span>
               <span>Kurumsal</span>

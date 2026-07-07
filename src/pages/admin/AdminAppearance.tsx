@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Image as ImageIcon, Layout, Columns, AppWindow, Loader2, GripVertical, Plus, Trash2, CheckCircle, Monitor } from 'lucide-react';
 import { adminRequest } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
+import { mediaUrl } from '../../lib/media';
 
 export default function AdminAppearance() {
   const [activeTab, setActiveTab] = useState('slider');
@@ -237,7 +238,7 @@ export default function AdminAppearance() {
                         <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-theme bg-white relative overflow-hidden group/img h-[220px]">
                           {slide.image ? (
                             <>
-                              <img src={slide.image} alt="Slide Preview" className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover/img:scale-105 transition-transform duration-500" />
+                              <img src={mediaUrl(slide.image)} alt="Slide Preview" className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover/img:scale-105 transition-transform duration-500" />
                               <button onClick={() => setPickerConfig({ onSelect: (url) => updateSlide(index, 'image', url) })} className="relative z-10 bg-white/90 backdrop-blur text-gray-900 px-5 py-2.5 rounded-theme font-medium shadow-md opacity-0 group-hover/img:opacity-100 transition-opacity">Değiştir</button>
                             </>
                           ) : (
@@ -326,7 +327,7 @@ export default function AdminAppearance() {
                       <input type="text" value={settings.homeGamingImage} onChange={e => handleChange('homeGamingImage', e.target.value)} className={inputCls} placeholder="https://..." />
                       <button onClick={() => setPickerConfig({ onSelect: (url) => handleChange('homeGamingImage', url) })} className="px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 font-medium rounded-theme whitespace-nowrap transition-colors shadow-sm">Kütüphaneden Seç</button>
                     </div>
-                    {settings.homeGamingImage && <img src={settings.homeGamingImage} className="mt-4 h-40 w-full object-cover rounded-theme border border-gray-200 shadow-sm" alt="Preview"/>}
+                    {settings.homeGamingImage && <img src={mediaUrl(settings.homeGamingImage)} className="mt-4 h-40 w-full object-cover rounded-theme border border-gray-200 shadow-sm" alt="Preview"/>}
                   </div>
                 </div>
               </div>
@@ -355,7 +356,7 @@ export default function AdminAppearance() {
                       <input type="text" value={settings.homeCorporateImage} onChange={e => handleChange('homeCorporateImage', e.target.value)} className={inputCls} placeholder="https://..." />
                       <button onClick={() => setPickerConfig({ onSelect: (url) => handleChange('homeCorporateImage', url) })} className="px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 font-medium rounded-theme whitespace-nowrap transition-colors shadow-sm">Kütüphaneden Seç</button>
                     </div>
-                    {settings.homeCorporateImage && <img src={settings.homeCorporateImage} className="mt-4 h-40 w-full object-cover rounded-theme border border-gray-200 shadow-sm" alt="Preview"/>}
+                    {settings.homeCorporateImage && <img src={mediaUrl(settings.homeCorporateImage)} className="mt-4 h-40 w-full object-cover rounded-theme border border-gray-200 shadow-sm" alt="Preview"/>}
                   </div>
                 </div>
               </div>
@@ -392,7 +393,7 @@ export default function AdminAppearance() {
                         </div>
                         {partner.logo && (
                            <div className="mt-3 bg-white p-3 rounded-theme border border-gray-200 inline-block">
-                             <img src={partner.logo} className="h-10 object-contain" alt="Logo preview" />
+                             <img src={mediaUrl(partner.logo)} className="h-10 object-contain" alt="Logo preview" />
                            </div>
                         )}
                       </div>

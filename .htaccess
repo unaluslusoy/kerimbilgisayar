@@ -1,14 +1,24 @@
 RewriteEngine On
 
-# 1. Eğer gelen istek bir API isteğiyse (/api), arka plandaki Node.js sunucusuna gönder
+# 1. Medya ve build assetleri dogrudan dist altindaki gercek dosyalardan servis et
+RewriteRule ^uploads/(.*)$ /dist/uploads/$1 [L,NC]
+RewriteRule ^assets/(.*)$ /dist/assets/$1 [L,NC]
+
+<IfModule mod_headers.c>
+	<FilesMatch "\.(svg|png|jpe?g|webp|gif|ico)$">
+		Header set Cache-Control "no-cache, must-revalidate"
+	</FilesMatch>
+</IfModule>
+
+# 2. Eğer gelen istek bir API isteğiyse (/api), arka plandaki Node.js sunucusuna gönder
 RewriteRule ^api/(.*)$ http://127.0.0.1:3000/api/$1 [P,L]
 
-# 2. Eğer istek zaten "/dist/" klasörüne yönlenmişse ve böyle bir dosya/klasör yoksa index.html ver (React Router)
+# 3. Eğer istek zaten "/dist/" klasörüne yönlenmişse ve böyle bir dosya/klasör yoksa index.html ver (React Router)
 RewriteCond %{REQUEST_URI} ^/dist/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^dist/(.*)$ /dist/index.html [L]
 
-# 3. Gelen normal site ziyaretlerini arkaplanda gizlice "dist" klasörüne yönlendir
+# 4. Gelen normal site ziyaretlerini arkaplanda gizlice "dist" klasörüne yönlendir
 RewriteCond %{REQUEST_URI} !^/dist/
 RewriteRule ^(.*)$ /dist/$1 [L]

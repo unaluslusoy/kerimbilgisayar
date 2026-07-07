@@ -7,9 +7,11 @@ export function mediaUrl(url?: string | null): string {
   if (!trimmedUrl) return '';
 
   const isLocalUpload = trimmedUrl.startsWith('/uploads/');
+  const isLocalAsset = trimmedUrl.startsWith('/assets/images/');
   const isAbsoluteUpload = /^https?:\/\/kerimbilgisayar\.com\/uploads\//i.test(trimmedUrl);
+  const isAbsoluteAsset = /^https?:\/\/kerimbilgisayar\.com\/assets\/images\//i.test(trimmedUrl);
 
-  if (!isLocalUpload && !isAbsoluteUpload) {
+  if (!isLocalUpload && !isLocalAsset && !isAbsoluteUpload && !isAbsoluteAsset) {
     return trimmedUrl;
   }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Trash2, Copy, Check, Plus, Folder as FolderIcon, File as FileIcon, Image as ImageIcon, FileText, Music, Video, ChevronRight, ArrowLeft } from 'lucide-react';
 import { fetchAdminMedia, uploadAdminMedia, adminRequest, fetchMediaFolders, createMediaFolder, deleteMediaFolder } from '../../lib/api';
+import { mediaUrl } from '../../lib/media';
 
 export default function AdminMedia() {
   const [media, setMedia] = useState<any[]>([]);
@@ -271,7 +272,7 @@ export default function AdminMedia() {
                   <div className="aspect-square bg-gray-100 flex items-center justify-center p-2">
                     {item.mimeType?.startsWith('image/') ? (
                       <img
-                        src={item.fileUrl}
+                        src={mediaUrl(item.fileUrl)}
                         alt={item.altText || item.title || item.fileName}
                         className="w-full h-full object-cover rounded"
                         loading="lazy"
@@ -334,7 +335,7 @@ export default function AdminMedia() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div className="bg-gray-100 rounded-lg p-2 aspect-video flex items-center justify-center overflow-hidden">
                {selectedItem.mimeType?.startsWith('image/') ? (
-                 <img src={selectedItem.fileUrl} alt={selectedItem.title} className="max-w-full max-h-full object-contain" />
+                 <img src={mediaUrl(selectedItem.fileUrl)} alt={selectedItem.title} className="max-w-full max-h-full object-contain" />
                ) : (
                  getFileIcon(selectedItem.mimeType)
                )}

@@ -262,7 +262,7 @@ export default function Contact() {
                     <div className="mt-6 pt-6 border-t border-[#d3ecd6]">
                       <p className="text-xs text-gray-600 font-semibold mb-3 text-center">QR Kod ile Hızlı Ödeme</p>
                       <div className="bg-white p-3 rounded-2xl border border-gray-200 mx-auto w-full max-w-[160px] shadow-sm">
-                        <img src={settings.contactBankQrCode} alt="Hızlı Ödeme QR Kodu" className="w-full h-auto object-contain rounded-xl" />
+                        <img src={mediaUrl(settings.contactBankQrCode)} alt="Hızlı Ödeme QR Kodu" className="w-full h-auto object-contain rounded-xl" />
                       </div>
                     </div>
                   )}

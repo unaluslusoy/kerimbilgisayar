@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchAdminMedia, fetchMediaFolders } from '../../lib/api';
 import { Folder as FolderIcon, File as FileIcon, Image as ImageIcon, FileText, Music, Video, ChevronRight, ArrowLeft, X } from 'lucide-react';
+import { mediaUrl } from '../../lib/media';
 
 interface MediaPickerModalProps {
   isOpen: boolean;
@@ -113,7 +114,7 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect, acceptedTy
                   <div className="aspect-square bg-gray-100 flex items-center justify-center p-2">
                     {item.mimeType?.startsWith('image/') ? (
                       <img
-                        src={item.fileUrl}
+                        src={mediaUrl(item.fileUrl)}
                         alt={item.title}
                         className="w-full h-full object-cover rounded"
                         loading="lazy"
