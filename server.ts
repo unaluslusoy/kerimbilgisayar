@@ -251,7 +251,8 @@ async function startServer() {
         'contactKep', 'contactEsnafSicil', 'contactNaceKodu', 'contactMukellefAdi', 'contactTicaretUnvan',
         'contactCard1Title', 'contactCard1Link', 'contactCard2Title', 'contactCard2Link', 'contactCard3Title', 'contactCard3Link',
         'contactSubtitle', 'contactBannerTitle', 'contactBannerDesc', 'contactBannerImage',
-        'contactBankName', 'contactBankAccount', 'contactBankIban', 'contactBankQrCode'
+        'contactBankName', 'contactBankAccount', 'contactBankIban', 'contactBankQrCode',
+        'siteMetaDescription', 'siteOgImage', 'siteFocusKeyword', 'googleAnalyticsId', 'googleSearchConsoleCode'
       ];
       
       const publicSettings: Record<string, string> = {};
@@ -1429,6 +1430,89 @@ async function startServer() {
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  const getSettingsMap = async () => {
+    const allSettings = await db.select().from(settings);
+    const settingsMap: Record<string, string> = {};
+    allSettings.forEach(s => {
+      if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
+    });
+    return settingsMap;
+  };
+
+  const cloudflareRequest = async (settingsMap: Record<string, string>, pathName: string, init: RequestInit = {}) => {
+    const zoneId = settingsMap.cloudflareZoneId?.trim();
+    const apiToken = settingsMap.cloudflareApiToken?.trim();
+
+    if (!zoneId || !apiToken) {
+      const error = new Error('Cloudflare Zone ID ve API Token zorunludur.');
+      (error as any).statusCode = 400;
+      throw error;
+    }
+
+    const response = await fetch(`https://api.cloudflare.com/client/v4${pathName.replace(':zoneId', zoneId)}`, {
+      ...init,
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+        'Content-Type': 'application/json',
+        ...(init.headers || {}),
+      },
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data?.success === false) {
+      const message = data?.errors?.[0]?.message || `Cloudflare isteği başarısız oldu (${response.status}).`;
+      const error = new Error(message);
+      (error as any).statusCode = response.status || 500;
+      throw error;
+    }
+
+    return data;
+  };
+
+  app.post('/api/admin/cloudflare/test', requireAdmin, async (req, res) => {
+    try {
+      const settingsMap = await getSettingsMap();
+      const data = await cloudflareRequest(settingsMap, '/zones/:zoneId');
+      res.json({ success: true, zone: data.result });
+    } catch (e: any) {
+      res.status(e.statusCode || 500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/admin/cloudflare/purge-cache', requireAdmin, async (req, res) => {
+    try {
+      const settingsMap = await getSettingsMap();
+      const files = Array.isArray(req.body?.files) ? req.body.files.filter((file: unknown) => typeof file === 'string' && file.trim()) : [];
+      const body = files.length > 0 ? { files } : { purge_everything: true };
+      const data = await cloudflareRequest(settingsMap, '/zones/:zoneId/purge_cache', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      res.json({ success: true, result: data.result });
+    } catch (e: any) {
+      res.status(e.statusCode || 500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/admin/cloudflare/setting', requireAdmin, async (req, res) => {
+    try {
+      const allowedSettings = new Set(['development_mode', 'ssl', 'always_use_https', 'browser_cache_ttl']);
+      const { setting, value } = req.body || {};
+      if (!allowedSettings.has(setting)) {
+        return res.status(400).json({ success: false, error: 'Bu Cloudflare ayarı desteklenmiyor.' });
+      }
+
+      const settingsMap = await getSettingsMap();
+      const data = await cloudflareRequest(settingsMap, `/zones/:zoneId/settings/${setting}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ value }),
+      });
+      res.json({ success: true, result: data.result });
+    } catch (e: any) {
+      res.status(e.statusCode || 500).json({ success: false, error: e.message });
     }
   });
 
@@ -2617,9 +2701,39 @@ Sitemap: https://kerimbilgisayar.com/sitemap.xml`;
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.use(express.static(distPath, { index: false }));
+    app.get('*all', async (req, res) => {
+      try {
+        const htmlPath = path.join(distPath, 'index.html');
+        let html = await fs.promises.readFile(htmlPath, 'utf8');
+        const allSettings = await db.select().from(settings);
+        const settingsMap: Record<string, string> = {};
+        allSettings.forEach(s => {
+          if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
+        });
+        const googleAnalyticsId = (settingsMap.googleAnalyticsId || '').trim();
+        const searchConsoleCode = (settingsMap.googleSearchConsoleCode || '').trim();
+        const googleSiteVerification = searchConsoleCode.match(/content=["']([^"']+)["']/i)?.[1] || searchConsoleCode;
+        const safeGoogleAnalyticsId = googleAnalyticsId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const escapeHtml = (value: string) => value
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+        const headTags = [
+          googleSiteVerification ? `<meta name="google-site-verification" content="${escapeHtml(googleSiteVerification)}">` : '',
+          googleAnalyticsId ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(googleAnalyticsId)}"></script>` : '',
+          googleAnalyticsId ? `<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${safeGoogleAnalyticsId}');</script>` : '',
+        ].filter(Boolean).join('\n    ');
+
+        if (headTags) {
+          html = html.replace('</head>', `    ${headTags}\n  </head>`);
+        }
+        res.type('html').send(html);
+      } catch (e) {
+        console.error('Failed to render index.html with dynamic head tags:', e);
+        res.sendFile(path.join(distPath, 'index.html'));
+      }
     });
   }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import {
   Monitor, Phone, MapPin, Mail, Shield, ShieldCheck,
   ChevronDown, Menu as MenuIcon, X,
@@ -161,6 +162,9 @@ export default function PublicLayout() {
   const siteTitle = settings?.site_title || 'Kerim Bilgisayar';
   const headerLogo = mediaUrl(settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo.svg');
   const footerLogo = mediaUrl(settings?.footerLogo || settings?.siteLogoWhite || settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo-beyaz.svg');
+  const googleAnalyticsId = (settings?.googleAnalyticsId || '').trim();
+  const googleSearchConsoleCode = (settings?.googleSearchConsoleCode || '').trim();
+  const googleSiteVerification = googleSearchConsoleCode.match(/content=["']([^"']+)["']/i)?.[1] || googleSearchConsoleCode;
 
   if (activePlugins.includes('maintenance-mode')) {
     return (
@@ -195,6 +199,20 @@ export default function PublicLayout() {
           font-family: var(--theme-font);
         }
       `}</style>
+      <Helmet>
+        {googleSiteVerification && <meta name="google-site-verification" content={googleSiteVerification} />}
+        {googleAnalyticsId && <script async src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`} />}
+        {googleAnalyticsId && (
+          <script>
+            {`
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', '${googleAnalyticsId}');
+            `}
+          </script>
+        )}
+      </Helmet>
 
       {/* ===== SEARCH OVERLAY ===== */}
       <div className={`fixed inset-0 bg-white z-[60] transition-all duration-300 ease-in-out ${isSearchOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>

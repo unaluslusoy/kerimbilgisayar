@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, CheckCircle, Send, Globe, Mail, Image, Monitor, Share2, Layout } from 'lucide-react';
+import { Save, CheckCircle, Send, Globe, Mail, Image, Monitor, Share2, Layout, Cloud, RefreshCw } from 'lucide-react';
 import { adminRequest } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import { mediaUrl } from '../../lib/media';
@@ -27,11 +27,20 @@ export default function AdminSettings() {
     siteFocusKeyword: '',
     googleAnalyticsId: '',
     googleSearchConsoleCode: '',
+    cloudflareZoneId: '',
+    cloudflareApiToken: '',
+    cloudflareAccountEmail: '',
+    cloudflareSslMode: 'full',
+    cloudflareAlwaysUseHttps: 'on',
+    cloudflareDevelopmentMode: 'off',
+    cloudflareBrowserCacheTtl: '14400',
   });
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [smtpTestMsg, setSmtpTestMsg] = useState('');
+  const [cloudflareBusy, setCloudflareBusy] = useState<string | null>(null);
+  const [cloudflareMsg, setCloudflareMsg] = useState('');
   const [pickerConfig, setPickerConfig] = useState<{ onSelect: (url: string) => void } | null>(null);
 
 
@@ -85,12 +94,34 @@ export default function AdminSettings() {
     }
   };
 
+  const runCloudflareAction = async (action: 'test' | 'purge' | 'setting', payload: Record<string, any> = {}) => {
+    setCloudflareBusy(action);
+    setCloudflareMsg('');
+    try {
+      await adminRequest('/api/admin/settings', { method: 'PUT', body: JSON.stringify(settings) });
+      const endpoint = action === 'test'
+        ? '/api/admin/cloudflare/test'
+        : action === 'purge'
+          ? '/api/admin/cloudflare/purge-cache'
+          : '/api/admin/cloudflare/setting';
+      const res = await adminRequest(endpoint, { method: 'POST', body: JSON.stringify(payload) });
+      setCloudflareMsg(res.success ? 'Cloudflare işlemi başarıyla tamamlandı.' : `Cloudflare hatası: ${res.error || 'Bilinmeyen hata'}`);
+      loadSettings();
+    } catch (e: any) {
+      setCloudflareMsg('Cloudflare hatası: ' + e.message);
+    } finally {
+      setCloudflareBusy(null);
+      setTimeout(() => setCloudflareMsg(''), 6000);
+    }
+  };
+
   const tabs = [
     { id: 'genel', label: 'Genel Ayarlar', icon: Monitor },
     { id: 'iletisim', label: 'İletişim', icon: Mail },
     { id: 'sosyal', label: 'Sosyal Medya', icon: Share2 },
     { id: 'smtp', label: 'E-Posta (SMTP)', icon: Send },
     { id: 'seo', label: 'SEO', icon: Globe },
+    { id: 'cloudflare', label: 'Cloudflare', icon: Cloud },
   ];
 
   const inputCls = 'w-full border border-gray-300 rounded-theme px-4 py-2 focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-sm';
@@ -427,6 +458,78 @@ export default function AdminSettings() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'cloudflare' && (
+            <div className="space-y-6 max-w-2xl">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">Cloudflare Entegrasyonu</h3>
+                <div className="space-y-5">
+                  <div>
+                    <label className={labelCls}>Zone ID</label>
+                    <input type="text" value={settings.cloudflareZoneId || ''} onChange={e => handleChange('cloudflareZoneId', e.target.value)} className={inputCls} placeholder="Cloudflare Zone ID" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>API Token</label>
+                    <input type="password" value={settings.cloudflareApiToken || ''} onChange={e => handleChange('cloudflareApiToken', e.target.value)} className={inputCls} placeholder="Zone Cache Purge ve Zone Settings yetkili token" autoComplete="new-password" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Hesap E-postası</label>
+                    <input type="email" value={settings.cloudflareAccountEmail || ''} onChange={e => handleChange('cloudflareAccountEmail', e.target.value)} className={inputCls} placeholder="opsiyonel" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>SSL/TLS Modu</label>
+                  <select value={settings.cloudflareSslMode || 'full'} onChange={e => handleChange('cloudflareSslMode', e.target.value)} className={inputCls}>
+                    <option value="off">Kapalı</option>
+                    <option value="flexible">Flexible</option>
+                    <option value="full">Full</option>
+                    <option value="strict">Full Strict</option>
+                  </select>
+                  <button type="button" onClick={() => runCloudflareAction('setting', { setting: 'ssl', value: settings.cloudflareSslMode || 'full' })} disabled={!!cloudflareBusy} className="mt-2 px-3 py-2 bg-gray-900 text-white text-xs font-semibold rounded-theme disabled:opacity-50">SSL Modunu Uygula</button>
+                </div>
+                <div>
+                  <label className={labelCls}>Always Use HTTPS</label>
+                  <select value={settings.cloudflareAlwaysUseHttps || 'on'} onChange={e => handleChange('cloudflareAlwaysUseHttps', e.target.value)} className={inputCls}>
+                    <option value="on">Açık</option>
+                    <option value="off">Kapalı</option>
+                  </select>
+                  <button type="button" onClick={() => runCloudflareAction('setting', { setting: 'always_use_https', value: settings.cloudflareAlwaysUseHttps || 'on' })} disabled={!!cloudflareBusy} className="mt-2 px-3 py-2 bg-gray-900 text-white text-xs font-semibold rounded-theme disabled:opacity-50">HTTPS Ayarını Uygula</button>
+                </div>
+                <div>
+                  <label className={labelCls}>Development Mode</label>
+                  <select value={settings.cloudflareDevelopmentMode || 'off'} onChange={e => handleChange('cloudflareDevelopmentMode', e.target.value)} className={inputCls}>
+                    <option value="off">Kapalı</option>
+                    <option value="on">Açık</option>
+                  </select>
+                  <button type="button" onClick={() => runCloudflareAction('setting', { setting: 'development_mode', value: settings.cloudflareDevelopmentMode || 'off' })} disabled={!!cloudflareBusy} className="mt-2 px-3 py-2 bg-gray-900 text-white text-xs font-semibold rounded-theme disabled:opacity-50">Development Mode Uygula</button>
+                </div>
+                <div>
+                  <label className={labelCls}>Browser Cache TTL</label>
+                  <select value={settings.cloudflareBrowserCacheTtl || '14400'} onChange={e => handleChange('cloudflareBrowserCacheTtl', e.target.value)} className={inputCls}>
+                    <option value="0">Respect Existing Headers</option>
+                    <option value="14400">4 Saat</option>
+                    <option value="86400">1 Gün</option>
+                    <option value="604800">7 Gün</option>
+                    <option value="2592000">1 Ay</option>
+                  </select>
+                  <button type="button" onClick={() => runCloudflareAction('setting', { setting: 'browser_cache_ttl', value: Number(settings.cloudflareBrowserCacheTtl || 14400) })} disabled={!!cloudflareBusy} className="mt-2 px-3 py-2 bg-gray-900 text-white text-xs font-semibold rounded-theme disabled:opacity-50">TTL Ayarını Uygula</button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-200">
+                <button type="button" onClick={() => runCloudflareAction('test')} disabled={!!cloudflareBusy} className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-800 text-sm font-semibold rounded-theme hover:bg-gray-50 disabled:opacity-50">
+                  <Cloud className="w-4 h-4 mr-2" /> Bağlantıyı Test Et
+                </button>
+                <button type="button" onClick={() => runCloudflareAction('purge')} disabled={!!cloudflareBusy} className="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-semibold rounded-theme hover:bg-secondary disabled:opacity-50">
+                  <RefreshCw className={`w-4 h-4 mr-2 ${cloudflareBusy === 'purge' ? 'animate-spin' : ''}`} /> Tüm Cache'i Temizle
+                </button>
+              </div>
+              {cloudflareMsg && <div className="p-3 rounded-theme border border-blue-200 bg-blue-50 text-blue-800 text-sm font-medium">{cloudflareMsg}</div>}
             </div>
           )}
 
