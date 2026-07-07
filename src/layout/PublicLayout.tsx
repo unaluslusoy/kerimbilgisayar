@@ -163,7 +163,14 @@ export default function PublicLayout() {
   const headerLogo = mediaUrl(settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo.svg');
   const footerLogo = mediaUrl(settings?.footerLogo || settings?.siteLogoWhite || settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo-beyaz.svg');
   const googleAnalyticsId = (settings?.googleAnalyticsId || '').trim();
-  const googleSearchConsoleCode = (settings?.googleSearchConsoleCode || '').trim();
+  const googleSearchConsoleCode = (
+    settings?.googleSearchConsoleCode
+    || settings?.googleSiteVerification
+    || settings?.googleSearchConsoleVerification
+    || settings?.googleVerificationCode
+    || settings?.searchConsoleCode
+    || ''
+  ).trim();
   const googleSiteVerification = googleSearchConsoleCode.match(/content=["']([^"']+)["']/i)?.[1] || googleSearchConsoleCode;
 
   if (activePlugins.includes('maintenance-mode')) {

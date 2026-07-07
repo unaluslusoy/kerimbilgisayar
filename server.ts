@@ -252,7 +252,8 @@ async function startServer() {
         'contactCard1Title', 'contactCard1Link', 'contactCard2Title', 'contactCard2Link', 'contactCard3Title', 'contactCard3Link',
         'contactSubtitle', 'contactBannerTitle', 'contactBannerDesc', 'contactBannerImage',
         'contactBankName', 'contactBankAccount', 'contactBankIban', 'contactBankQrCode',
-        'siteMetaDescription', 'siteOgImage', 'siteFocusKeyword', 'googleAnalyticsId', 'googleSearchConsoleCode'
+        'siteMetaDescription', 'siteOgImage', 'siteFocusKeyword', 'googleAnalyticsId', 'googleSearchConsoleCode',
+        'googleSiteVerification', 'googleSearchConsoleVerification', 'googleVerificationCode', 'searchConsoleCode'
       ];
       
       const publicSettings: Record<string, string> = {};
@@ -2712,7 +2713,14 @@ Sitemap: https://kerimbilgisayar.com/sitemap.xml`;
           if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
         });
         const googleAnalyticsId = (settingsMap.googleAnalyticsId || '').trim();
-        const searchConsoleCode = (settingsMap.googleSearchConsoleCode || '').trim();
+        const searchConsoleCode = (
+          settingsMap.googleSearchConsoleCode
+          || settingsMap.googleSiteVerification
+          || settingsMap.googleSearchConsoleVerification
+          || settingsMap.googleVerificationCode
+          || settingsMap.searchConsoleCode
+          || ''
+        ).trim();
         const googleSiteVerification = searchConsoleCode.match(/content=["']([^"']+)["']/i)?.[1] || searchConsoleCode;
         const safeGoogleAnalyticsId = googleAnalyticsId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const escapeHtml = (value: string) => value
