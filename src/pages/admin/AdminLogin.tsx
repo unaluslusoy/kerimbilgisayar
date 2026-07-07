@@ -37,7 +37,7 @@ export default function AdminLogin() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col justify-center py-12 sm:px-6 relative overflow-hidden">
+    <div className="admin-panel min-h-screen bg-gray-950 flex flex-col justify-center py-12 sm:px-6 relative overflow-hidden">
       <div className="absolute top-0 left-1/2 -ml-[400px] w-[800px] h-[800px] bg-green-900/20 rounded-full blur-3xl opacity-50 mix-blend-screen pointer-events-none"></div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">

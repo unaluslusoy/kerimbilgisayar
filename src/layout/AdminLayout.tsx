@@ -48,7 +48,7 @@ export default function AdminLayout() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col font-sans text-[#3c434a] bg-[#f0f0f1]">
+    <div className="admin-panel min-h-screen flex flex-col font-sans text-[#3c434a] bg-[#f0f0f1]">
       
       {/* Top Admin Bar (WordPress Style) */}
       <div className="h-8 bg-[#1d2327] text-[#f0f0f1] flex items-center justify-between px-3 shrink-0 z-50 sticky top-0">

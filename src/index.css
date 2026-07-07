@@ -107,6 +107,23 @@ body {
   @apply antialiased text-gray-800 bg-gray-50 font-sans;
 }
 
+.admin-panel :where(button, a).bg-primary {
+  color: var(--color-gray-900) !important;
+}
+
+.admin-panel :where(button, a).bg-primary:hover {
+  background-color: var(--color-primary-dark) !important;
+  color: var(--color-gray-900) !important;
+}
+
+.admin-panel :where(button, a).bg-primary :where(svg) {
+  color: currentColor !important;
+}
+
+.admin-panel :where(button, a).bg-primary:disabled {
+  opacity: 0.9;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
