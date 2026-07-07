@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, CheckCircle, Send, Globe, Mail, Image, Monitor, Share2, Layout, Cloud, RefreshCw } from 'lucide-react';
+import { Save, CheckCircle, Send, Globe, Mail, Image, Monitor, Share2, Layout, Cloud, RefreshCw, Shield } from 'lucide-react';
 import { adminRequest } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import { mediaUrl } from '../../lib/media';
@@ -27,6 +27,20 @@ export default function AdminSettings() {
     siteFocusKeyword: '',
     googleAnalyticsId: '',
     googleSearchConsoleCode: '',
+    siteBaseUrl: 'https://kerimbilgisayar.com',
+    sitemapBaseUrl: 'https://kerimbilgisayar.com',
+    sitemapDefaultChangefreq: 'weekly',
+    sitemapExtraUrls: '',
+    robotsTxt: '',
+    securityIpBlocklist: '',
+    securityAdminIpAllowlist: '',
+    securityAutoBlockEnabled: 'true',
+    securityRequestLimit: '180',
+    securityWindowSeconds: '60',
+    securityAutoBlockMinutes: '30',
+    captchaEnabled: 'false',
+    turnstileSiteKey: '',
+    turnstileSecretKey: '',
     cloudflareZoneId: '',
     cloudflareApiToken: '',
     cloudflareAccountEmail: '',
@@ -121,6 +135,7 @@ export default function AdminSettings() {
     { id: 'sosyal', label: 'Sosyal Medya', icon: Share2 },
     { id: 'smtp', label: 'E-Posta (SMTP)', icon: Send },
     { id: 'seo', label: 'SEO', icon: Globe },
+    { id: 'security', label: 'Güvenlik', icon: Shield },
     { id: 'cloudflare', label: 'Cloudflare', icon: Cloud },
   ];
 
@@ -458,6 +473,37 @@ export default function AdminSettings() {
                   </div>
                 </div>
               </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">SEO Araçları</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className={labelCls}>Site Ana URL</label>
+                    <input type="url" value={settings.siteBaseUrl || ''} onChange={e => handleChange('siteBaseUrl', e.target.value)} className={inputCls} placeholder="https://kerimbilgisayar.com" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Sitemap Base URL</label>
+                    <input type="url" value={settings.sitemapBaseUrl || ''} onChange={e => handleChange('sitemapBaseUrl', e.target.value)} className={inputCls} placeholder="https://kerimbilgisayar.com" />
+                    <p className="text-xs text-gray-500 mt-1">Sitemap: /sitemap.xml, Robots: /robots.txt</p>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Varsayılan Changefreq</label>
+                    <select value={settings.sitemapDefaultChangefreq || 'weekly'} onChange={e => handleChange('sitemapDefaultChangefreq', e.target.value)} className={inputCls}>
+                      <option value="daily">daily</option>
+                      <option value="weekly">weekly</option>
+                      <option value="monthly">monthly</option>
+                      <option value="yearly">yearly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Ek Sitemap URL'leri</label>
+                    <textarea rows={4} value={settings.sitemapExtraUrls || ''} onChange={e => handleChange('sitemapExtraUrls', e.target.value)} className={inputCls} placeholder="/kampanyalar\nhttps://ornek.com/ozel-sayfa" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>robots.txt İçeriği</label>
+                    <textarea rows={8} value={settings.robotsTxt || ''} onChange={e => handleChange('robotsTxt', e.target.value)} className={`${inputCls} font-mono`} placeholder={'User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: https://kerimbilgisayar.com/sitemap.xml'} />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -530,6 +576,65 @@ export default function AdminSettings() {
                 </button>
               </div>
               {cloudflareMsg && <div className="p-3 rounded-theme border border-blue-200 bg-blue-50 text-blue-800 text-sm font-medium">{cloudflareMsg}</div>}
+            </div>
+          )}
+
+          {activeTab === 'security' && (
+            <div className="space-y-6 max-w-2xl">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">IP Filtreleme ve Bot Koruması</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className={labelCls}>Kara Liste IP'ler</label>
+                    <textarea rows={5} value={settings.securityIpBlocklist || ''} onChange={e => handleChange('securityIpBlocklist', e.target.value)} className={`${inputCls} font-mono`} placeholder={'1.2.3.4\n5.6.7.8'} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Admin Beyaz Liste IP'ler</label>
+                    <textarea rows={4} value={settings.securityAdminIpAllowlist || ''} onChange={e => handleChange('securityAdminIpAllowlist', e.target.value)} className={`${inputCls} font-mono`} placeholder="Boş bırakılırsa tüm yetkili girişleri izinlidir" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelCls}>Otomatik Engel</label>
+                      <select value={settings.securityAutoBlockEnabled || 'true'} onChange={e => handleChange('securityAutoBlockEnabled', e.target.value)} className={inputCls}>
+                        <option value="true">Açık</option>
+                        <option value="false">Kapalı</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Limit</label>
+                      <input type="number" value={settings.securityRequestLimit || '180'} onChange={e => handleChange('securityRequestLimit', e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Pencere/sn</label>
+                      <input type="number" value={settings.securityWindowSeconds || '60'} onChange={e => handleChange('securityWindowSeconds', e.target.value)} className={inputCls} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Otomatik Engel Süresi (dakika)</label>
+                    <input type="number" value={settings.securityAutoBlockMinutes || '30'} onChange={e => handleChange('securityAutoBlockMinutes', e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">Cloudflare Turnstile Captcha</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className={labelCls}>Captcha Durumu</label>
+                    <select value={settings.captchaEnabled || 'false'} onChange={e => handleChange('captchaEnabled', e.target.value)} className={inputCls}>
+                      <option value="false">Kapalı</option>
+                      <option value="true">Açık</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Turnstile Site Key</label>
+                    <input type="text" value={settings.turnstileSiteKey || ''} onChange={e => handleChange('turnstileSiteKey', e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Turnstile Secret Key</label>
+                    <input type="password" value={settings.turnstileSecretKey || ''} onChange={e => handleChange('turnstileSecretKey', e.target.value)} className={inputCls} autoComplete="new-password" />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

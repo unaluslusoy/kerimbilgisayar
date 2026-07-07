@@ -3,10 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { submitAppointment } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 import { Info, Calendar as CalendarIcon, Clock, UserCircle, Server, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
+import TurnstileWidget from '../../components/TurnstileWidget';
 
 
 export default function Appointment() {
   usePageTitle('Randevu Al');
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [appointmentType, setAppointmentType] = useState<'bireysel' | 'kurumsal' | null>(null);
@@ -24,6 +27,7 @@ export default function Appointment() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [ticketId, setTicketId] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const handleSubmit = async () => {
     setError('');
@@ -39,7 +43,8 @@ export default function Appointment() {
     try {
       const res = await submitAppointment({
         type: appointmentType,
-        ...formData
+        ...formData,
+        turnstileToken
       });
       setTicketId(res?.ticketId || `TLP-${Math.floor(Math.random() * 10000)}`);
       setSuccess(true);
@@ -315,6 +320,8 @@ export default function Appointment() {
                         Talebinizin sisteme ulaşmasının ardından, {appointmentType === 'kurumsal' ? 'kurumsal proje yöneticimiz' : 'teknik servis danışmanımız'} detaylı bilgilendirme ve teyit amacıyla sizinle iletişime geçecektir.
                       </p>
                     </div>
+
+                    <TurnstileWidget enabled={settings?.captchaEnabled === 'true'} siteKey={settings?.turnstileSiteKey} onVerify={setTurnstileToken} />
 
                     <div className="pt-6 flex justify-between border-t border-gray-200">
                       <button onClick={() => setStep(3)} className="text-gray-500 hover:text-gray-800 font-bold py-3 px-6 rounded-theme transition-colors border border-transparent hover:bg-gray-100">Geri</button>

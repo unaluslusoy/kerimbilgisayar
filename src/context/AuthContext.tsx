@@ -10,7 +10,7 @@ interface AdminUser {
 interface AuthContextType {
   user: AdminUser | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, remember?: boolean, turnstileToken?: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -28,8 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('admin_token');
-    const storedUser = localStorage.getItem('admin_user');
+    const storedToken = localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token');
+    const storedUser = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user');
     if (storedToken && storedUser) {
       setToken(storedToken);
       try {
@@ -38,11 +38,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, remember = true, turnstileToken = '') => {
     const res = await fetch('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, turnstileToken }),
     });
     if (!res.ok) {
       const data = await res.json();
@@ -51,8 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     setToken(data.token);
     setUser(data.user);
-    localStorage.setItem('admin_token', data.token);
-    localStorage.setItem('admin_user', JSON.stringify(data.user));
+    const persistentStorage = remember ? localStorage : sessionStorage;
+    const temporaryStorage = remember ? sessionStorage : localStorage;
+    temporaryStorage.removeItem('admin_token');
+    temporaryStorage.removeItem('admin_user');
+    persistentStorage.setItem('admin_token', data.token);
+    persistentStorage.setItem('admin_user', JSON.stringify(data.user));
   };
 
   const logout = () => {
@@ -60,6 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_user');
+    sessionStorage.removeItem('admin_token');
+    sessionStorage.removeItem('admin_user');
   };
 
   return (

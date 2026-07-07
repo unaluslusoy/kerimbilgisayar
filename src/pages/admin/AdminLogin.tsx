@@ -1,11 +1,15 @@
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Monitor, Lock, Mail, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import TurnstileWidget from '../../components/TurnstileWidget';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(true);
+  const [captchaSettings, setCaptchaSettings] = useState({ enabled: false, siteKey: '' });
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -16,7 +20,7 @@ export default function AdminLogin() {
     setIsLoading(true);
     setError('');
     try {
-      await login(email, password);
+      await login(email, password, remember, turnstileToken);
       navigate('/admin');
     } catch (err: any) {
       setError(err.message || 'Giriş başarısız. Bilgilerinizi kontrol edin.');
@@ -24,6 +28,13 @@ export default function AdminLogin() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetch('/api/public/settings')
+      .then(res => res.json())
+      .then(data => setCaptchaSettings({ enabled: data?.captchaEnabled === 'true', siteKey: data?.turnstileSiteKey || '' }))
+      .catch(() => null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col justify-center py-12 sm:px-6 relative overflow-hidden">
@@ -97,6 +108,18 @@ export default function AdminLogin() {
                 />
               </div>
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-700 bg-gray-950 text-primary focus:ring-primary"
+              />
+              Beni hatırla
+            </label>
+
+            <TurnstileWidget enabled={captchaSettings.enabled} siteKey={captchaSettings.siteKey} onVerify={setTurnstileToken} />
 
             <div>
               <button

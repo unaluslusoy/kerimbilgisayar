@@ -121,8 +121,89 @@ async function requireApiKey(req: express.Request, res: express.Response, next: 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
+  const requestCounters = new Map<string, { count: number; startedAt: number }>();
+  const autoBlockedIps = new Map<string, number>();
 
   app.use(express.json());
+
+  const parseList = (value?: string) => (value || '')
+    .split(/[\n,]/)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+  const getClientIp = (req: express.Request) => {
+    const forwarded = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'];
+    const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
+    return (raw || req.ip || '').replace(/^::ffff:/, '').trim();
+  };
+
+  const readSettingsMap = async () => {
+    const allSettings = await db.select().from(settings);
+    const settingsMap: Record<string, string> = {};
+    allSettings.forEach(s => {
+      if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
+    });
+    return settingsMap;
+  };
+
+  const verifyTurnstile = async (req: express.Request) => {
+    const settingsMap = await readSettingsMap();
+    if (settingsMap.captchaEnabled !== 'true') return true;
+    const secret = settingsMap.turnstileSecretKey?.trim();
+    const token = (req.body?.turnstileToken || req.body?.['cf-turnstile-response'] || '').trim();
+    if (!secret || !token) return false;
+
+    const formData = new URLSearchParams();
+    formData.set('secret', secret);
+    formData.set('response', token);
+    formData.set('remoteip', getClientIp(req));
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json().catch(() => ({}));
+    return Boolean(data?.success);
+  };
+
+  app.use(async (req, res, next) => {
+    try {
+      if (req.path.startsWith('/assets/') || req.path.startsWith('/uploads/')) return next();
+
+      const settingsMap = await readSettingsMap();
+
+      const ip = getClientIp(req);
+      const blocklist = parseList(settingsMap.securityIpBlocklist);
+      const adminAllowlist = parseList(settingsMap.securityAdminIpAllowlist || settingsMap.securityIpAllowlist);
+      const now = Date.now();
+      const autoBlockedUntil = autoBlockedIps.get(ip) || 0;
+
+      if (blocklist.includes(ip) || autoBlockedUntil > now) {
+        return res.status(403).json({ error: 'Erişim engellendi' });
+      }
+
+      if ((req.path.startsWith('/admin') || req.path.startsWith('/api/admin')) && adminAllowlist.length > 0 && !adminAllowlist.includes(ip)) {
+        return res.status(403).json({ error: 'Admin erişimi bu IP için izinli değil' });
+      }
+
+      if ((settingsMap.securityAutoBlockEnabled || 'true') !== 'false') {
+        const windowMs = Number(settingsMap.securityWindowSeconds || 60) * 1000;
+        const limit = Number(settingsMap.securityRequestLimit || 180);
+        const blockMs = Number(settingsMap.securityAutoBlockMinutes || 30) * 60 * 1000;
+        const current = requestCounters.get(ip);
+        const bucket = current && now - current.startedAt < windowMs ? current : { count: 0, startedAt: now };
+        bucket.count += 1;
+        requestCounters.set(ip, bucket);
+        if (bucket.count > limit) {
+          autoBlockedIps.set(ip, now + blockMs);
+          return res.status(429).json({ error: 'Çok fazla istek nedeniyle geçici engel uygulandı' });
+        }
+      }
+
+      next();
+    } catch (e) {
+      next();
+    }
+  });
   
   // Uploads directory static serving. Missing files must not fall through to the SPA shell.
   app.use('/uploads', express.static(path.join(rootDir, 'uploads'), { fallthrough: false }));
@@ -253,7 +334,8 @@ async function startServer() {
         'contactSubtitle', 'contactBannerTitle', 'contactBannerDesc', 'contactBannerImage',
         'contactBankName', 'contactBankAccount', 'contactBankIban', 'contactBankQrCode',
         'siteMetaDescription', 'siteOgImage', 'siteFocusKeyword', 'googleAnalyticsId', 'googleSearchConsoleCode',
-        'googleSiteVerification', 'googleSearchConsoleVerification', 'googleVerificationCode', 'searchConsoleCode'
+        'googleSiteVerification', 'googleSearchConsoleVerification', 'googleVerificationCode', 'searchConsoleCode',
+        'captchaEnabled', 'turnstileSiteKey'
       ];
       
       const publicSettings: Record<string, string> = {};
@@ -664,6 +746,7 @@ async function startServer() {
   // Appointments
   app.post('/api/appointments', async (req, res) => {
     try {
+      if (!(await verifyTurnstile(req))) return res.status(400).json({ error: 'Captcha doğrulaması başarısız' });
       const { type, serviceType, details, date, time, companyName, fullName, phone } = req.body;
       const note = `Tipi: ${type}\nHizmet/Cihaz Türü: ${serviceType}\nTarih/Saat: ${date} ${time}\nŞikayet/Detaylar: ${details}`.trim();
       const [result] = await db.insert(leads).values({
@@ -684,6 +767,7 @@ async function startServer() {
   // Contact Form
   app.post('/api/contact', async (req, res) => {
     try {
+      if (!(await verifyTurnstile(req))) return res.status(400).json({ error: 'Captcha doğrulaması başarısız' });
       const { name, email, phone, subject, message } = req.body;
       let formRes = await db.select().from(forms).where(eq(forms.name, 'İletişim Formu')).limit(1);
       let formId = 0;
@@ -726,6 +810,7 @@ async function startServer() {
 
   app.post('/api/admin/login', async (req, res) => {
     try {
+      if (!(await verifyTurnstile(req))) return res.status(400).json({ error: 'Captcha doğrulaması başarısız' });
       const { email, password } = req.body;
       if (!email || !password) {
         return res.status(400).json({ error: 'E-posta ve şifre gerekli' });
@@ -2604,7 +2689,17 @@ async function startServer() {
   
   app.get('/sitemap.xml', async (req, res) => {
     try {
-      const baseUrl = 'https://kerimbilgisayar.com';
+      const allSettings = await db.select().from(settings);
+      const settingsMap: Record<string, string> = {};
+      allSettings.forEach(s => {
+        if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
+      });
+      const baseUrl = (settingsMap.sitemapBaseUrl || settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com').replace(/\/$/, '');
+      const defaultChangefreq = settingsMap.sitemapDefaultChangefreq || 'weekly';
+      const extraUrls = (settingsMap.sitemapExtraUrls || '')
+        .split('\n')
+        .map(url => url.trim())
+        .filter(Boolean);
       
       // Fetch dynamic pages
       const allPages = await db.select().from(pages).where(eq(pages.isPublished, true));
@@ -2630,7 +2725,7 @@ async function startServer() {
   </url>
   <url>
     <loc>${baseUrl}/hizmetler</loc>
-    <changefreq>weekly</changefreq>
+    <changefreq>${defaultChangefreq}</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
@@ -2667,6 +2762,16 @@ async function startServer() {
   </url>`;
       });
 
+      extraUrls.forEach(url => {
+        const loc = url.startsWith('http') ? url : `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
+        xml += `
+  <url>
+    <loc>${loc}</loc>
+    <changefreq>${defaultChangefreq}</changefreq>
+    <priority>0.6</priority>
+  </url>`;
+      });
+
       xml += `\n</urlset>`;
       
       res.header('Content-Type', 'application/xml');
@@ -2676,15 +2781,21 @@ async function startServer() {
     }
   });
 
-  app.get('/robots.txt', (req, res) => {
-    const robotsContent = `User-agent: *
+  app.get('/robots.txt', async (req, res) => {
+    const allSettings = await db.select().from(settings);
+    const settingsMap: Record<string, string> = {};
+    allSettings.forEach(s => {
+      if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
+    });
+    const baseUrl = (settingsMap.sitemapBaseUrl || settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com').replace(/\/$/, '');
+    const robotsContent = settingsMap.robotsTxt || `User-agent: *
 Allow: /
 Disallow: /admin/
 Disallow: /api/
 Disallow: /musteri/
 Disallow: /login
 
-Sitemap: https://kerimbilgisayar.com/sitemap.xml`;
+Sitemap: ${baseUrl}/sitemap.xml`;
     
     res.header('Content-Type', 'text/plain');
     res.send(robotsContent);

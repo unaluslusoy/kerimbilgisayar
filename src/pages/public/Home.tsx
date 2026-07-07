@@ -37,6 +37,7 @@ import {
   Shield,
   CheckCircle
 } from 'lucide-react';
+import * as Icons from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { mediaUrl } from '../../lib/media';
 import { useSettings } from '../../context/SettingsContext';
@@ -45,7 +46,14 @@ import { fetchServices, fetchCampaigns } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 import SEO from '../../components/SEO';
 
-const getIconForCategory = (cat: string | null) => {
+const getIconForCategory = (cat?: string | null) => {
+  const normalized = (cat || '').toLocaleLowerCase('tr-TR');
+  if (normalized.includes('ağ') || normalized.includes('network') || normalized.includes('sistem') || normalized.includes('altyap')) return Server;
+  if (normalized.includes('yazılım') || normalized.includes('web') || normalized.includes('eticaret') || normalized.includes('e-ticaret')) return Code;
+  if (normalized.includes('güven') || normalized.includes('kamera') || normalized.includes('cctv') || normalized.includes('pdks')) return ShieldCheck;
+  if (normalized.includes('bakım') || normalized.includes('destek') || normalized.includes('lisans')) return Headset;
+  if (normalized.includes('bulut') || normalized.includes('cloud')) return Cloud;
+  if (normalized.includes('veri') || normalized.includes('database')) return Database;
   switch (cat) {
     case 'ag_sistemleri': return Server;
     case 'yazilim': return Code;
@@ -55,6 +63,13 @@ const getIconForCategory = (cat: string | null) => {
     case 'verikurtarma': return HardDrive;
     default: return MousePointerClick;
   }
+};
+
+const getIconForService = (service: any) => {
+  const iconName = service.categoryDetails?.icon;
+  const iconFromCategory = service.categoryDetails?.name || service.categoryDetails?.slug || service.category || service.name || service.title;
+  const DynamicIcon = iconName ? (Icons as any)[iconName] : null;
+  return DynamicIcon || getIconForCategory(iconFromCategory);
 };
 
 const formatHtml = (htmlStr: string) => {
@@ -210,7 +225,7 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_280px] gap-6 lg:gap-8 pb-10 pt-8">
 
               {/* Slider area (text + image) */}
-              <div className="lg:col-span-2 relative min-h-[430px]">
+              <div className="lg:col-span-2 relative min-h-[430px] pb-24 lg:pb-0">
                 {/* All slides stacked with fade */}
                 {slides.map((slide: any, idx: number) => (
                   <div
@@ -255,7 +270,7 @@ export default function Home() {
 
                 {/* Slide counter — absolute bottom-left inside slider */}
                 {slides.length > 1 && (
-                  <div className="absolute bottom-0 left-0 z-20 flex items-center gap-4 pb-4">
+                  <div className="absolute bottom-4 left-0 z-20 flex items-center gap-4">
                     <button
                       onClick={prevSlide}
                       className="w-14 h-14 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 transition-all relative"
@@ -574,8 +589,10 @@ export default function Home() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 auto-rows-[minmax(280px,auto)]">
           {services.length > 0 ? services.map((service, i) => {
-            const Icon = getIconForCategory(service.category);
+            const Icon = getIconForService(service);
             const isLarge = i === 0 || i === 3;
+            const serviceTitle = service.title || service.name || service.categoryDetails?.name || 'Çözüm';
+            const serviceSummary = service.shortDescription || service.short_description || service.description || '';
             return (
               <div
                 key={i}
@@ -586,8 +603,8 @@ export default function Home() {
                   <div className="bg-[#e6fce8] text-[#5da350] w-14 h-14 rounded-xl flex items-center justify-center mb-6 relative z-10 group-hover:bg-[#5da350] group-hover:text-white transition-colors duration-300">
                     <Icon className="w-7 h-7 transition-colors" />
                   </div>
-                  <h3 className="font-bold text-gray-800 mb-3 relative z-10 font-display text-xl md:text-2xl">{service.title}</h3>
-                  <p className="text-gray-600 leading-relaxed relative z-10 line-clamp-3">{service.short_description || service.description?.substring(0, 100) + '...'}</p>
+                  <h3 className="font-bold text-gray-800 mb-3 relative z-10 font-display text-xl md:text-2xl">{serviceTitle}</h3>
+                  <p className="text-gray-600 leading-relaxed relative z-10 line-clamp-3">{serviceSummary.length > 120 ? `${serviceSummary.substring(0, 120)}...` : serviceSummary}</p>
                 </div>
                 <Link
                   to={`/hizmetler/${service.id}`}

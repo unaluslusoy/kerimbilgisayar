@@ -7,6 +7,7 @@ import { usePageTitle } from '../../lib/usePageTitle';
 import SEO from '../../components/SEO';
 import { useTranslation } from 'react-i18next';
 import { mediaUrl } from '../../lib/media';
+import TurnstileWidget from '../../components/TurnstileWidget';
 
 
 export default function Contact() {
@@ -26,13 +27,14 @@ export default function Contact() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      await submitContactForm(formData);
+      await submitContactForm({ ...formData, turnstileToken });
       setSuccess(true);
       setFormData({ name: '', email: '', phone: '', subject: 'İletişim Formu', message: '' });
     } catch (err: any) {
@@ -353,6 +355,7 @@ export default function Contact() {
                       <label className="block text-sm font-semibold text-gray-700 mb-1">{t('form.phone', 'Telefon Numarası')} <span className="text-red-500">*</span></label>
                       <input required type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#63b956]/50 focus:border-[#63b956]" />
                     </div>
+                    <TurnstileWidget enabled={settings?.captchaEnabled === 'true'} siteKey={settings?.turnstileSiteKey} onVerify={setTurnstileToken} />
                     <button disabled={loading} type="submit" className="w-full bg-[#63b956] hover:bg-[#52a046] text-white font-bold py-4 rounded-xl transition-colors mt-2 flex items-center justify-center shadow-lg shadow-[#63b956]/20">
                       {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('form.submit', 'Gönder')}
                     </button>

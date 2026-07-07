@@ -161,6 +161,12 @@ body.menu-open {
   @apply bg-white border border-gray-200/50 hover:border-primary/20 rounded-3xl p-8 hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.06)] hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden;
 }
 
+@supports (color: color-mix(in lab, red, red)) {
+  .card-modern {
+    border-color: color-mix(in oklab, var(--color-gray-400, #9ca3af) 50%, transparent);
+  }
+}
+
 .card-modern-dark {
   @apply bg-gray-900 border border-gray-800 hover:border-primary/20 rounded-3xl p-8 hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.5)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden;
 }
