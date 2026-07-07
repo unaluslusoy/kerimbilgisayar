@@ -30,6 +30,7 @@ export const plans = mysqlTable('plans', {
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   description: text('description'),
   price: decimal('price', { precision: 10, scale: 2 }).notNull(),
+  discountRate: decimal('discount_rate', { precision: 5, scale: 2 }).default('0.00'),
   billingCycle: mysqlEnum('billing_cycle', ['monthly', 'yearly']).notNull(),
   features: json('features'), 
   isActive: boolean('is_active').default(true),

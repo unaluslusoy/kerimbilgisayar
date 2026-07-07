@@ -4,7 +4,7 @@ import { createSubscriptionPlan, fetchSubscriptionPlans, updateSubscriptionPlan 
 
 const inputCls = 'w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary';
 
-const emptyPlan = { name: '', description: '', price: '', billingCycle: 'monthly', features: '', isActive: true };
+const emptyPlan = { name: '', description: '', price: '', discountRate: '', billingCycle: 'monthly', features: '', isActive: true };
 
 export default function AdminSubscriptionPlans() {
   const [plans, setPlans] = useState<any[]>([]);
@@ -34,6 +34,7 @@ export default function AdminSubscriptionPlans() {
       name: plan.name || '',
       description: plan.description || '',
       price: plan.price || '',
+      discountRate: plan.discountRate || '',
       billingCycle: plan.billingCycle || 'monthly',
       features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
       isActive: plan.isActive !== false,
@@ -90,7 +91,11 @@ export default function AdminSubscriptionPlans() {
                 </div>
                 <span className={`px-2 py-1 text-[11px] font-bold rounded-full ${plan.isActive ? 'bg-blue-100 text-secondary' : 'bg-gray-100 text-gray-500'}`}>{plan.isActive ? 'Aktif' : 'Pasif'}</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900 mb-3">{Number(plan.price).toLocaleString('tr-TR')} TL</div>
+              <div className="text-2xl font-bold text-gray-900 mb-1">{Number(plan.price).toLocaleString('tr-TR')} TL</div>
+              {Number(plan.discountRate || 0) > 0 && (
+                <div className="text-xs font-semibold text-green-700 bg-green-50 rounded-full px-2 py-1 w-fit mb-3">%{Number(plan.discountRate)} avantaj</div>
+              )}
+              {Number(plan.discountRate || 0) === 0 && <div className="mb-3" />}
               <p className="text-sm text-gray-500 min-h-10 mb-4">{plan.description}</p>
               <div className="space-y-2 flex-1 mb-5">
                 {(Array.isArray(plan.features) ? plan.features : []).slice(0, 6).map((feature: string, idx: number) => (
@@ -123,6 +128,7 @@ export default function AdminSubscriptionPlans() {
                   <option value="yearly">Yıllık</option>
                 </select>
               </div>
+              <input type="number" min="0" max="100" step="0.01" value={form.discountRate} onChange={e => setForm({ ...form, discountRate: e.target.value })} className={inputCls} placeholder="Avantaj / indirim oranı (%)" />
               <textarea value={form.features} onChange={e => setForm({ ...form, features: e.target.value })} className={`${inputCls} resize-none`} rows={6} placeholder={'Özellikleri satır satır yazın\nÖrn: Aylık bakım ziyareti\nÖncelikli destek'} />
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} /> Aktif paket

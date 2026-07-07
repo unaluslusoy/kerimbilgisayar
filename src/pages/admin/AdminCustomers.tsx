@@ -188,7 +188,7 @@ export default function AdminCustomers() {
             </select>
             <select value={assignment.planId} onChange={e => setAssignment({ ...assignment, planId: e.target.value })} className={inputCls}>
               <option value="">Paket seçin</option>
-              {plans.filter(plan => plan.isActive !== false).map(plan => <option key={plan.id} value={plan.id}>{plan.name} - {Number(plan.price).toLocaleString('tr-TR')} TL</option>)}
+              {plans.filter(plan => plan.isActive !== false).map(plan => <option key={plan.id} value={plan.id}>{plan.name} - {Number(plan.price).toLocaleString('tr-TR')} TL / {plan.billingCycle === 'yearly' ? 'Yıllık' : 'Aylık'}{Number(plan.discountRate || 0) > 0 ? ` - %${Number(plan.discountRate)} avantaj` : ''}</option>)}
             </select>
             <select value={assignment.status} onChange={e => setAssignment({ ...assignment, status: e.target.value })} className={inputCls}>
               <option value="active">Aktif</option>

@@ -55,6 +55,18 @@ import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
 
 const uploadsDir = path.join(rootDir, 'uploads');
 
+function nullableDecimal(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized.toString() : null;
+}
+
+function nullableInt(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = parseInt(String(value), 10);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
 async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | null): Promise<string> {
   if (!/^https?:\/\//i.test(sourceUrl)) return sourceUrl;
 
@@ -960,8 +972,8 @@ async function startServer() {
         tenantId: 1,
         name,
         description,
-        basePrice: basePrice?.toString(),
-        categoryId: categoryId ? parseInt(categoryId) : null,
+        basePrice: nullableDecimal(basePrice),
+        categoryId: nullableInt(categoryId),
         imageUrl: imageUrl || null,
         isActive: isActive !== false,
       });
@@ -977,9 +989,9 @@ async function startServer() {
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
-      if (basePrice !== undefined) updateData.basePrice = basePrice.toString();
-      if (categoryId !== undefined) updateData.categoryId = categoryId ? parseInt(categoryId) : null;
-      if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+      if (basePrice !== undefined) updateData.basePrice = nullableDecimal(basePrice);
+      if (categoryId !== undefined) updateData.categoryId = nullableInt(categoryId);
+      if (imageUrl !== undefined) updateData.imageUrl = imageUrl || null;
       if (isActive !== undefined) updateData.isActive = isActive;
       await db.update(services).set(updateData).where(eq(services.id, parseInt(req.params.id)));
       res.json({ success: true });
@@ -1982,6 +1994,7 @@ async function startServer() {
         planId: plans.id,
         planName: plans.name,
         planPrice: plans.price,
+        planDiscountRate: plans.discountRate,
         billingCycle: plans.billingCycle,
       }).from(customers)
         .leftJoin(users, eq(customers.userId, users.id))
@@ -2133,12 +2146,13 @@ async function startServer() {
 
   app.post('/api/admin/subscription-plans', requireAdmin, async (req, res) => {
     try {
-      const { name, slug, description, price, billingCycle, features, isActive } = req.body;
+      const { name, slug, description, price, discountRate, billingCycle, features, isActive } = req.body;
       await db.insert(plans).values({
         name,
         slug: slug || name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
         description: description || null,
         price: (price || 0).toString(),
+        discountRate: (discountRate || 0).toString(),
         billingCycle: billingCycle || 'monthly',
         features: String(features || '').split('\n').map(item => item.trim()).filter(Boolean),
         isActive: isActive !== false,
@@ -2151,11 +2165,12 @@ async function startServer() {
 
   app.patch('/api/admin/subscription-plans/:id', requireAdmin, async (req, res) => {
     try {
-      const { name, description, price, billingCycle, features, isActive } = req.body;
+      const { name, description, price, discountRate, billingCycle, features, isActive } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
       if (price !== undefined) updateData.price = price.toString();
+      if (discountRate !== undefined) updateData.discountRate = discountRate.toString();
       if (billingCycle !== undefined) updateData.billingCycle = billingCycle;
       if (features !== undefined) updateData.features = String(features).split('\n').map(item => item.trim()).filter(Boolean);
       if (isActive !== undefined) updateData.isActive = isActive;
