@@ -37,10 +37,10 @@ import {
   termRelationships,
   themeSettings,
   layoutTemplates,
-  layoutTemplates,
   layoutAssignments,
   languages,
   translations,
+  pageBlocks,
   mediaFolders,
   serviceCategories
 } from './src/db/schema';
@@ -269,6 +269,22 @@ async function startServer() {
 
   // i18n Translation Endpoint (used by i18next-http-backend)
   app.get('/api/public/translations/:lang', async (req, res) => {
+    const getDefaultTranslations = (langCode: string) => {
+      if (langCode === 'tr') {
+        return {
+          'common.loading': 'Yukleniyor...',
+          'common.error': 'Bir hata olustu',
+          'common.submit': 'Gonder'
+        };
+      }
+
+      return {
+        'common.loading': 'Loading...',
+        'common.error': 'An error occurred',
+        'common.submit': 'Submit'
+      };
+    };
+
     try {
       const { lang } = req.params;
       const trans = await db.select().from(translations).where(eq(translations.langCode, lang));
@@ -280,20 +296,15 @@ async function startServer() {
 
       // Default fallbacks if DB is empty for requested lang
       if (Object.keys(result).length === 0) {
-         if (lang === 'tr') {
-            result['common.loading'] = 'Yükleniyor...';
-            result['common.error'] = 'Bir hata oluştu';
-            result['common.submit'] = 'Gönder';
-         } else if (lang === 'en') {
-            result['common.loading'] = 'Loading...';
-            result['common.error'] = 'An error occurred';
-            result['common.submit'] = 'Submit';
-         }
+        Object.assign(result, getDefaultTranslations(lang));
       }
       
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      const { lang } = req.params;
+      console.error('Translations endpoint fallback used:', e?.message || e);
+      res.setHeader('x-fallback-source', 'default-translations');
+      res.json(getDefaultTranslations(lang));
     }
   });
 
