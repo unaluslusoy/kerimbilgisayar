@@ -1,4 +1,5 @@
 RewriteEngine On
+DirectoryIndex disabled
 
 # Ana sayfa istegini de Node.js uygulamasina gönder; DirectoryIndex statik index'i atlamasin
 RewriteRule ^$ http://127.0.0.1:3000/ [P,L]
