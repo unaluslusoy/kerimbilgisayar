@@ -4,9 +4,13 @@ import * as schema from './schema';
 import 'dotenv/config';
 
 // To avoid crashing if run on the client or during build without env variables
-let connectionString = 'mysql://todestek_kerim:39RdaT38tx5rBH7sTvXs@45.43.152.5:3306/todestek_kerim?connectTimeout=10000';
+let connectionString = '';
 if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('mysql')) {
   connectionString = process.env.DATABASE_URL;
+}
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL is required for database connection');
 }
 
 const poolConnection = mysql.createPool({ 

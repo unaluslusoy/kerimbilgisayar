@@ -7,6 +7,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'mysql',
   dbCredentials: {
-    url: 'mysql://todestek_kerim:39RdaT38tx5rBH7sTvXs@45.43.152.5:3306/todestek_kerim',
+    url: process.env.DATABASE_URL || '',
   },
 });

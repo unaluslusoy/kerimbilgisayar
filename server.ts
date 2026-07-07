@@ -313,7 +313,9 @@ async function startServer() {
       // Sadece ID'leri dönelim ki frontend anlasın (Örn: ['maintenance-mode', 'google-business'])
       res.json(activePlugins.map(p => p.pluginId));
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error('Plugins endpoint fallback used:', e?.message || e);
+      res.setHeader('x-fallback-source', 'default-plugins');
+      res.json([]);
     }
   });
 
