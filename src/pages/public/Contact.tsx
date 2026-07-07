@@ -5,10 +5,12 @@ import { submitContactForm } from '../../lib/api';
 import { Link } from 'react-router-dom';
 import { usePageTitle } from '../../lib/usePageTitle';
 import SEO from '../../components/SEO';
+import { useTranslation } from 'react-i18next';
 
 
 export default function Contact() {
-  usePageTitle('İletişim');
+  const { t } = useTranslation();
+  usePageTitle(t('contact.title', 'İletişim'));
   const { settings } = useSettings();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -33,7 +35,7 @@ export default function Contact() {
       setSuccess(true);
       setFormData({ name: '', email: '', phone: '', subject: 'İletişim Formu', message: '' });
     } catch (err: any) {
-      setError(err.message || 'Bir hata oluştu');
+      setError(err.message || t('common.error', 'Bir hata oluştu'));
     } finally {
       setLoading(false);
     }
@@ -55,15 +57,15 @@ export default function Contact() {
       <div className="pt-[140px] pb-8 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-sm text-gray-500 mb-6 flex items-center gap-2 font-medium">
-            <Link to="/" className="hover:text-primary transition-colors">Anasayfa</Link>
+            <Link to="/" className="hover:text-primary transition-colors">{t('common.home', 'Anasayfa')}</Link>
             <span>&gt;</span>
-            <span className="text-gray-900">İletişim</span>
+            <span className="text-gray-900">{t('contact.title', 'İletişim')}</span>
           </div>
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
-            İletişim
+            {t('contact.title', 'İletişim')}
           </h1>
           <p className="text-lg text-gray-600">
-            {settings?.contactSubtitle || 'İhtiyaçlarınıza en uygun bilişim sistemleri çözümlerini birlikte geliştirmek için bizimle iletişime geçin.'}
+            {settings?.contactSubtitle}
           </p>
         </div>
       </div>
@@ -73,17 +75,17 @@ export default function Contact() {
         {/* Top 3 Cards (Dynamic from Settings) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           {[
-            { icon: Headset, title: settings?.contactCard1Title || 'Ürün desteği', link: settings?.contactCard1Link || '#' },
-            { icon: ShoppingCart, title: settings?.contactCard2Title || 'Satış desteği', link: settings?.contactCard2Link || '#' },
-            { icon: HelpCircle, title: settings?.contactCard3Title || 'Destek Merkezi', link: settings?.contactCard3Link || '#' }
-          ].map((card, i) => (
+            { icon: Headset, title: settings?.contactCard1Title, link: settings?.contactCard1Link || '#' },
+            { icon: ShoppingCart, title: settings?.contactCard2Title, link: settings?.contactCard2Link || '#' },
+            { icon: HelpCircle, title: settings?.contactCard3Title, link: settings?.contactCard3Link || '#' }
+          ].filter(card => card.title).map((card, i) => (
             <div key={i} className="border border-gray-200 rounded-3xl p-8 hover:shadow-lg transition-shadow bg-white flex flex-col justify-between group">
               <div>
                 <card.icon className="w-10 h-10 text-[#63b956] mb-6" strokeWidth={1.5} />
                 <h3 className="text-xl font-bold text-gray-900 mb-6">{card.title}</h3>
               </div>
               <Link to={card.link} className="text-sm font-semibold text-gray-600 group-hover:text-[#63b956] transition-colors flex items-center gap-1">
-                Tümünü İncele <ChevronRight className="w-4 h-4" />
+                {t('contact.viewAll', 'Tümünü İncele')} <ChevronRight className="w-4 h-4" />
               </Link>
             </div>
           ))}
@@ -326,32 +328,32 @@ export default function Contact() {
                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                     <CheckCircle className="w-8 h-8 text-green-600" />
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Talebiniz Alındı</h3>
-                  <p className="text-gray-600 mb-8">Uzmanlarımız en kısa sürede sizinle iletişime geçecektir.</p>
-                  <button onClick={() => { setSuccess(false); setIsModalOpen(false); }} className="bg-primary text-white font-bold py-3 px-8 rounded-full">Kapat</button>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">{t('form.successTitle', 'Talebiniz Alındı')}</h3>
+                  <p className="text-gray-600 mb-8">{t('form.successMessage', 'Uzmanlarımız en kısa sürede sizinle iletişime geçecektir.')}</p>
+                  <button onClick={() => { setSuccess(false); setIsModalOpen(false); }} className="bg-primary text-white font-bold py-3 px-8 rounded-full">{t('common.close', 'Kapat')}</button>
                 </div>
               ) : (
                 <>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Formu Doldurun</h3>
-                  <p className="text-gray-500 mb-8 text-sm">İşletmenize uygun bilişim çözümleri için sizi arayalım.</p>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">{t('form.fillForm', 'Formu Doldurun')}</h3>
+                  <p className="text-gray-500 mb-8 text-sm">{t('form.fillFormDesc', 'İşletmenize uygun bilişim çözümleri için sizi arayalım.')}</p>
                   
                   {error && <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium flex gap-2 items-center"><AlertCircle className="w-4 h-4 shrink-0"/> {error}</div>}
                   
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Adınız Soyadınız <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">{t('form.name', 'Adınız Soyadınız')} <span className="text-red-500">*</span></label>
                       <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#63b956]/50 focus:border-[#63b956]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">E-Posta <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">{t('form.email', 'E-Posta')} <span className="text-red-500">*</span></label>
                       <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#63b956]/50 focus:border-[#63b956]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Telefon Numarası <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">{t('form.phone', 'Telefon Numarası')} <span className="text-red-500">*</span></label>
                       <input required type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#63b956]/50 focus:border-[#63b956]" />
                     </div>
                     <button disabled={loading} type="submit" className="w-full bg-[#63b956] hover:bg-[#52a046] text-white font-bold py-4 rounded-xl transition-colors mt-2 flex items-center justify-center shadow-lg shadow-[#63b956]/20">
-                      {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Gönder'}
+                      {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('form.submit', 'Gönder')}
                     </button>
                   </form>
                 </>

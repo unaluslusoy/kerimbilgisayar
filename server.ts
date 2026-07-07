@@ -38,7 +38,12 @@ import {
   termRelationships,
   themeSettings,
   layoutTemplates,
-  layoutAssignments
+  layoutTemplates,
+  layoutAssignments,
+  languages,
+  translations,
+  mediaFolders,
+  serviceCategories
 } from './src/db/schema';
 
 import { eq, desc, and, sql, asc, like } from 'drizzle-orm';
@@ -258,6 +263,36 @@ async function startServer() {
         }
       });
       res.json(publicSettings);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // i18n Translation Endpoint (used by i18next-http-backend)
+  app.get('/api/public/translations/:lang', async (req, res) => {
+    try {
+      const { lang } = req.params;
+      const trans = await db.select().from(translations).where(eq(translations.langCode, lang));
+      
+      const result: Record<string, string> = {};
+      trans.forEach(t => {
+        result[t.key] = t.value || '';
+      });
+
+      // Default fallbacks if DB is empty for requested lang
+      if (Object.keys(result).length === 0) {
+         if (lang === 'tr') {
+            result['common.loading'] = 'Yükleniyor...';
+            result['common.error'] = 'Bir hata oluştu';
+            result['common.submit'] = 'Gönder';
+         } else if (lang === 'en') {
+            result['common.loading'] = 'Loading...';
+            result['common.error'] = 'An error occurred';
+            result['common.submit'] = 'Submit';
+         }
+      }
+      
+      res.json(result);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -508,8 +543,19 @@ async function startServer() {
   // Services
   app.get('/api/services', async (req, res) => {
     try {
-      const allServices = await db.select().from(services).where(eq(services.isActive, true));
-      res.json(allServices);
+      const allServices = await db.select({
+        service: services,
+        category: serviceCategories
+      })
+      .from(services)
+      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
+      .where(eq(services.isActive, true));
+
+      const formatted = allServices.map(row => ({
+         ...row.service,
+         categoryDetails: row.category
+      }));
+      res.json(formatted);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -517,9 +563,22 @@ async function startServer() {
 
   app.get('/api/services/:id', async (req, res) => {
     try {
-      const result = await db.select().from(services).where(eq(services.id, parseInt(req.params.id))).limit(1);
+      const result = await db.select({
+        service: services,
+        category: serviceCategories
+      })
+      .from(services)
+      .leftJoin(serviceCategories, eq(services.categoryId, serviceCategories.id))
+      .where(eq(services.id, parseInt(req.params.id)))
+      .limit(1);
+
       if (result.length === 0) return res.status(404).json({ error: 'Service not found' });
-      res.json(result[0]);
+      
+      const serviceData = {
+         ...result[0].service,
+         categoryDetails: result[0].category
+      };
+      res.json(serviceData);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -725,13 +784,14 @@ async function startServer() {
 
   app.post('/api/admin/services', requireAdmin, async (req, res) => {
     try {
-      const { name, description, basePrice, category, isActive } = req.body;
+      const { name, description, basePrice, categoryId, imageUrl, isActive } = req.body;
       await db.insert(services).values({
         tenantId: 1,
         name,
         description,
         basePrice: basePrice?.toString(),
-        category: category || 'diger',
+        categoryId: categoryId ? parseInt(categoryId) : null,
+        imageUrl: imageUrl || null,
         isActive: isActive !== false,
       });
       res.json({ success: true });
@@ -742,12 +802,13 @@ async function startServer() {
 
   app.put('/api/admin/services/:id', requireAdmin, async (req, res) => {
     try {
-      const { name, description, basePrice, category, isActive } = req.body;
+      const { name, description, basePrice, categoryId, imageUrl, isActive } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
       if (basePrice !== undefined) updateData.basePrice = basePrice.toString();
-      if (category !== undefined) updateData.category = category;
+      if (categoryId !== undefined) updateData.categoryId = categoryId ? parseInt(categoryId) : null;
+      if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
       if (isActive !== undefined) updateData.isActive = isActive;
       await db.update(services).set(updateData).where(eq(services.id, parseInt(req.params.id)));
       res.json({ success: true });
@@ -764,6 +825,114 @@ async function startServer() {
       res.status(500).json({ error: e.message });
     }
   });
+
+  // ============================================================
+  // ADMIN API — SERVICE CATEGORIES CRUD
+  // ============================================================
+
+  app.get('/api/admin/service-categories', requireAdmin, async (req, res) => {
+    try {
+      const all = await db.select().from(serviceCategories).orderBy(asc(serviceCategories.displayOrder));
+      res.json(all);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/service-categories', requireAdmin, async (req, res) => {
+    try {
+      await db.insert(serviceCategories).values({
+        tenantId: 1,
+        ...req.body
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put('/api/admin/service-categories/:id', requireAdmin, async (req, res) => {
+    try {
+      await db.update(serviceCategories).set(req.body).where(eq(serviceCategories.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/service-categories/:id', requireAdmin, async (req, res) => {
+    try {
+      await db.update(serviceCategories).set({ isActive: false }).where(eq(serviceCategories.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/public/service-categories', async (req, res) => {
+    try {
+      const all = await db.select().from(serviceCategories).where(eq(serviceCategories.isActive, true)).orderBy(asc(serviceCategories.displayOrder));
+      res.json(all);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // ADMIN API (i18n TRANSLATIONS)
+  // ============================================================
+  
+  app.get('/api/admin/languages', async (req, res) => {
+    try {
+      const allLangs = await db.select().from(languages);
+      res.json(allLangs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/languages', async (req, res) => {
+    try {
+      const { code, name, isDefault, isActive } = req.body;
+      const result = await db.insert(languages).values({ code, name, isDefault, isActive });
+      res.json({ id: result[0].insertId });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/translations', async (req, res) => {
+    try {
+      const allTrans = await db.select().from(translations);
+      res.json(allTrans);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/translations', async (req, res) => {
+    try {
+      const { langCode, translations: updates } = req.body; // updates: Record<string, string>
+      
+      // Delete existing for this lang to replace them
+      // Alternatively, we can UPSERT, but delete/insert is simpler for bulk update
+      if (langCode && updates) {
+        await db.delete(translations).where(eq(translations.langCode, langCode));
+        const entries = Object.entries(updates).map(([k, v]) => ({
+          langCode,
+          key: k,
+          value: v as string
+        }));
+        if (entries.length > 0) {
+          await db.insert(translations).values(entries);
+        }
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
 
   // ============================================================
   // ADMIN API — TICKETS (Servis Kayıtları)
@@ -1791,13 +1960,72 @@ async function startServer() {
     }
   });
 
+  // --- MEDIA FOLDERS ---
+  app.get('/api/admin/media/folders', requireAdmin, async (req, res) => {
+    try {
+      const folders = await db.select().from(mediaFolders).orderBy(asc(mediaFolders.name));
+      res.json(folders);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/media/folders', requireAdmin, async (req, res) => {
+    try {
+      const { name, parentId } = req.body;
+      const newFolder = await db.insert(mediaFolders).values({
+        tenantId: 1,
+        name,
+        parentId: parentId || null
+      });
+      res.json({ success: true, id: (newFolder[0] as any).insertId });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put('/api/admin/media/folders/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, parentId } = req.body;
+      await db.update(mediaFolders).set({
+        name,
+        parentId: parentId || null
+      }).where(eq(mediaFolders.id, id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/media/folders/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Move files in this folder to root before deleting
+      await db.update(mediaLibrary).set({ folderId: null }).where(eq(mediaLibrary.folderId, id));
+      // Delete the folder
+      await db.delete(mediaFolders).where(eq(mediaFolders.id, id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // --- MEDIA LIBRARY ---
   app.get('/api/admin/media', requireAdmin, async (req, res) => {
     try {
-      // In a real database we'd query the mediaLibrary table.
-      // But we just created it in schema, let's query it.
-      // Wait, is it exported? Yes, mediaLibrary.
-      const mediaFiles = await db.select().from(mediaLibrary).orderBy(desc(mediaLibrary.createdAt));
+      const folderIdParam = req.query.folderId;
+      let query = db.select().from(mediaLibrary);
+      
+      if (folderIdParam !== undefined) {
+         if (folderIdParam === 'null' || folderIdParam === '') {
+             query = query.where(sql`${mediaLibrary.folderId} IS NULL`) as any;
+         } else {
+             query = query.where(eq(mediaLibrary.folderId, parseInt(folderIdParam as string))) as any;
+         }
+      }
+      
+      const mediaFiles = await query.orderBy(desc(mediaLibrary.createdAt));
       res.json(mediaFiles);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -1838,10 +2066,13 @@ async function startServer() {
         }
       }
 
+      const folderId = req.body.folderId ? parseInt(req.body.folderId) : null;
+      
       const fileUrl = `/uploads/${finalFilename}`;
       const newMedia = await db.insert(mediaLibrary).values({
         tenantId: 1,
         uploaderId: (req as any).adminUser.userId,
+        folderId: folderId,
         fileName: finalOriginalName,
         fileUrl: fileUrl,
         mimeType: finalMimeType,
@@ -1859,12 +2090,13 @@ async function startServer() {
   app.put('/api/admin/media/:id', requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { title, altText, description } = req.body;
-      await db.update(mediaLibrary).set({
-        title,
-        altText,
-        description
-      }).where(eq(mediaLibrary.id, id));
+      const { title, altText, description, folderId } = req.body;
+      const updateData: any = { title, altText, description };
+      if (folderId !== undefined) {
+         updateData.folderId = folderId === null ? null : parseInt(folderId);
+      }
+      
+      await db.update(mediaLibrary).set(updateData).where(eq(mediaLibrary.id, id));
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

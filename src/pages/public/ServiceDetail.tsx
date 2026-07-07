@@ -1,50 +1,14 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { fetchService, fetchServices } from '../../lib/api';
-import { Server, Code, Network, Video, MonitorSmartphone, Database, MousePointerClick, ArrowLeft, CheckCircle2, ChevronRight, Activity, Zap, ShieldCheck } from 'lucide-react';
+import { MousePointerClick, ArrowLeft, CheckCircle2, ChevronRight, Activity, Zap, ShieldCheck } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { usePageTitle } from '../../lib/usePageTitle';
 
-const getIconForCategory = (cat: string | null) => {
-  switch (cat) {
-    case 'ag_sistemleri': return Server;
-    case 'yazilim': return Code;
-    case 'guvenlik': return Video;
-    case 'bakim': return Network;
-    case 'donanim': return MonitorSmartphone;
-    case 'verikurtarma': return Database;
-    default: return MousePointerClick;
-  }
-};
-
-const getImageForCategory = (cat: string | null) => {
-  switch (cat) {
-    case 'ag_sistemleri': return "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&q=80&w=1920";
-    case 'yazilim': return "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&q=80&w=1920";
-    case 'guvenlik': return "https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&q=80&w=1920";
-    case 'bakim': return "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&q=80&w=1920";
-    case 'donanim': return "https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&q=80&w=1920";
-    case 'verikurtarma': return "https://images.unsplash.com/photo-1614064641913-6b7140414c71?auto=format&fit=crop&q=80&w=1920";
-    default: return "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=1920";
-  }
-};
-
-const getCategoryFeatures = (cat: string | null) => {
-  switch (cat) {
-    case 'ag_sistemleri': 
-       return ['Yüksek Performanslı Altyapı ve Kablolama', 'Kesintisiz Yedekli Bağlantı (Redundancy)', 'Kurumsal Ağ Güvenliği (Firewall) Optimizasyonu', '7/24 Kesintisiz Monitoring (İzleme)'];
-    case 'yazilim': 
-       return ['Kuruma Özel B2B/B2C İş Çözümleri', 'Ölçeklenebilir ve Modüler Mimari', 'Güncel Teknolojiler (React, Node.js)', 'Tüm Cihazlarla %100 Mobil & Web Uyumlu'];
-    case 'guvenlik': 
-       return ['Yüksek Çözünürlüklü (HD) Gece Görüş Sistemleri', 'Mobil Cihazlardan Uzaktan İzleme Desteği', 'Akıllı Hareket ve Yüz Algılama (AI) Sistemleri', 'KVKK Uyumlu Güvenli Kayıt Yönetimi'];
-    case 'bakim': 
-       return ['Aylık Düzenli Fiziksel ve Yazılımsal Bakım', 'Yerinde Anında Hızlı Müdahale', 'Donanım Temizliği ve Periyodik Kontrol', 'Güvenli Bulut Yedekleme ve Raporlama'];
-    case 'donanim': 
-       return ['Garantili Orijinal Yedek Parça Değişimi', 'Yetkili Servis Kalitesinde Onarım', 'Hızlı Onarım ve Teslimat Süreci', 'Kurulum Sonrası Kapsamlı Performans Testleri'];
-    case 'verikurtarma': 
-       return ['Laboratuvar Ortamında %98 Başarı Oranı', 'ISO Standartlarında Temiz Oda Teknolojisi', 'Hukuki Gizlilik Sözleşmesi (NDA) Güvencesi', 'İşlem Öncesi Ücretsiz Analiz Raporu'];
-    default: 
-       return ['Profesyonel ve Şeffaf Yaklaşım', 'Tamamen Müşteri Odaklı Sistemler', 'Uluslararası Standartlarda Kaliteli Altyapı', 'İşlem Sonrası Garantili Servis Desteği'];
-  }
+const DynamicIcon = ({ name, className }: { name?: string | null; className?: string }) => {
+  if (!name) return <MousePointerClick className={className} />;
+  const IconComponent = (LucideIcons as any)[name];
+  return IconComponent ? <IconComponent className={className} /> : <MousePointerClick className={className} />;
 };
 
 export default function ServiceDetail() {
@@ -61,11 +25,9 @@ export default function ServiceDetail() {
       fetchService(id)
         .then(res => {
           setService(res);
-          // Fetch related services
           return fetchServices();
         })
         .then(all => {
-          // will be filtered after service is set
           if (Array.isArray(all)) {
             setRelatedServices(all);
           }
@@ -97,8 +59,11 @@ export default function ServiceDetail() {
     );
   }
 
-  const Icon = getIconForCategory(service.category);
-  const featuresList = getCategoryFeatures(service.category);
+  const catDetails = service.categoryDetails || {};
+  let featuresList = Array.isArray(catDetails.features) ? catDetails.features : [];
+  if (featuresList.length === 0) {
+    featuresList = ['Profesyonel ve Şeffaf Yaklaşım', 'Tamamen Müşteri Odaklı Sistemler', 'Uluslararası Standartlarda Kaliteli Altyapı', 'İşlem Sonrası Garantili Servis Desteği'];
+  }
 
   return (
     <div className="bg-white min-h-screen">
@@ -117,7 +82,7 @@ export default function ServiceDetail() {
           </h1>
           <div className="flex items-center gap-2 mt-4">
             <span className="bg-primary text-white tracking-widest text-xs font-black uppercase px-3 py-1 rounded-full shadow-sm">
-              {service.category?.replaceAll('_', ' ')}
+              {catDetails.name || 'Hizmet Detayı'}
             </span>
           </div>
         </div>
@@ -158,11 +123,11 @@ export default function ServiceDetail() {
             {/* Related Services */}
             {(() => {
               const related = relatedServices
-                .filter(s => s.id !== service.id && s.status !== 'pasif')
-                .filter(s => s.category === service.category)
+                .filter(s => s.id !== service.id && s.isActive !== false)
+                .filter(s => s.categoryId === service.categoryId)
                 .slice(0, 3);
               const fallback = related.length === 0
-                ? relatedServices.filter(s => s.id !== service.id && s.status !== 'pasif').slice(0, 3)
+                ? relatedServices.filter(s => s.id !== service.id && s.isActive !== false).slice(0, 3)
                 : related;
               if (fallback.length === 0) return null;
               return (
@@ -170,7 +135,6 @@ export default function ServiceDetail() {
                   <h2 className="text-2xl font-bold text-gray-900 mb-6">İlgili Hizmetler</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {fallback.map((s: any) => {
-                      const RelIcon = getIconForCategory(s.category);
                       return (
                         <Link
                           key={s.id}
@@ -178,7 +142,7 @@ export default function ServiceDetail() {
                           className="group bg-gray-50 hover:bg-white border border-gray-100 hover:border-primary/20 hover:shadow-md rounded-theme p-5 transition-all"
                         >
                           <div className="w-10 h-10 bg-primary/10 rounded-theme flex items-center justify-center mb-3 group-hover:bg-primary transition-colors">
-                            <RelIcon className="w-5 h-5 text-primary group-hover:text-white transition-colors" />
+                            <DynamicIcon name={s.categoryDetails?.icon} className="w-5 h-5 text-primary group-hover:text-white transition-colors" />
                           </div>
                           <p className="font-semibold text-gray-900 text-sm line-clamp-2">{s.name}</p>
                           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{s.shortDescription || s.excerpt}</p>
@@ -197,11 +161,11 @@ export default function ServiceDetail() {
               {/* Features List */}
               <div className="bg-gray-900 rounded-theme p-8 border border-gray-800 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-5">
-                   <Icon className="w-32 h-32 text-white" />
+                   <DynamicIcon name={catDetails.icon} className="w-32 h-32 text-white" />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-8 border-b border-gray-700 pb-4 relative z-10">Öne Çıkan Özellikler</h3>
                 <ul className="space-y-5 relative z-10">
-                   {featuresList.map((item, i) => (
+                   {featuresList.map((item: string, i: number) => (
                       <li key={i} className="flex items-start">
                          <CheckCircle2 className="w-5 h-5 text-green-400 mr-3 shrink-0 mt-0.5" />
                          <span className="text-gray-300 font-medium">{item}</span>
@@ -231,4 +195,3 @@ export default function ServiceDetail() {
     </div>
   );
 }
-

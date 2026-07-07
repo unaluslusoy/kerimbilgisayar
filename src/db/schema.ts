@@ -149,13 +149,29 @@ export const devices = mysqlTable('devices', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+export const serviceCategories = mysqlTable('service_categories', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  description: text('description'),
+  icon: varchar('icon', { length: 100 }),
+  features: json('features'),
+  metaTitle: varchar('meta_title', { length: 255 }),
+  metaDescription: text('meta_description'),
+  isActive: boolean('is_active').default(true),
+  displayOrder: int('display_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 export const services = mysqlTable('services', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   basePrice: decimal('base_price', { precision: 10, scale: 2 }),
-  category: mysqlEnum('category', ['donanim', 'yazilim', 'ag_sistemleri', 'guvenlik', 'danismanlik', 'diger']).default('diger'),
+  categoryId: int('category_id').references(() => serviceCategories.id),
+  imageUrl: varchar('image_url', { length: 500 }),
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
 });
@@ -414,10 +430,19 @@ export const auditLogs = mysqlTable('audit_logs', {
 
 // --- CMS: MEDIA & UPLOADS ---
 
+export const mediaFolders = mysqlTable('media_folders', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  parentId: int('parent_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 export const mediaLibrary = mysqlTable('media_library', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
   uploaderId: int('uploader_id').references(() => users.id),
+  folderId: int('folder_id').references(() => mediaFolders.id),
   fileName: varchar('file_name', { length: 255 }).notNull(),
   fileUrl: varchar('file_url', { length: 500 }).notNull(),
   mimeType: varchar('mime_type', { length: 100 }),
@@ -560,6 +585,26 @@ export const themeSettings = mysqlTable('theme_settings', {
   settingValue: json('setting_value').notNull(),
   isDraft: boolean('is_draft').default(false).notNull(), // for Live Customizer
   updatedBy: int('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+// --- i18n TRANSLATIONS ---
+
+export const languages = mysqlTable('languages', {
+  id: int('id').autoincrement().primaryKey(),
+  code: varchar('code', { length: 10 }).notNull().unique(), // 'tr', 'en', 'de'
+  name: varchar('name', { length: 50 }).notNull(), // 'Türkçe', 'English'
+  isDefault: boolean('is_default').default(false),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const translations = mysqlTable('translations', {
+  id: int('id').autoincrement().primaryKey(),
+  langCode: varchar('lang_code', { length: 10 }).references(() => languages.code).notNull(),
+  key: varchar('key', { length: 255 }).notNull(), // e.g. 'common.loading'
+  value: text('value'), // e.g. 'Yükleniyor...'
+  createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 

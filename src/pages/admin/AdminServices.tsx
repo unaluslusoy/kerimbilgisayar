@@ -1,46 +1,38 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { Plus, Edit2, ToggleLeft, ToggleRight, X, Image as ImageIcon } from 'lucide-react';
+import MediaPickerModal from '../../components/admin/MediaPickerModal';
 import { adminRequest } from '../../lib/api';
 import { cn } from '../../lib/utils';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  donanim: 'Donanım',
-  yazilim: 'Yazılım',
-  ag_sistemleri: 'Ağ & Sistemler',
-  guvenlik: 'Güvenlik',
-  danismanlik: 'Danışmanlık',
-  diger: 'Diğer',
-};
 
-const CATEGORY_COLORS: Record<string, string> = {
-  donanim: 'bg-blue-100 text-blue-700',
-  yazilim: 'bg-purple-100 text-purple-700',
-  ag_sistemleri: 'bg-green-100 text-green-700',
-  guvenlik: 'bg-red-100 text-red-700',
-  danismanlik: 'bg-orange-100 text-orange-700',
-  diger: 'bg-gray-100 text-gray-600',
-};
 
 const defaultForm = {
   name: '',
   description: '',
   basePrice: '',
-  category: 'diger',
+  categoryId: '',
+  imageUrl: '',
   isActive: true,
 };
 
 export default function AdminServices() {
   const [services, setServices] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ ...defaultForm });
   const [saving, setSaving] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
   const load = async () => {
     try {
-      const data = await adminRequest('/api/admin/services');
-      setServices(data);
+      const [svcData, catData] = await Promise.all([
+        adminRequest('/api/admin/services'),
+        adminRequest('/api/admin/service-categories')
+      ]);
+      setServices(svcData);
+      setCategories(catData);
     } catch (e) {
       console.error(e);
     } finally {
@@ -62,7 +54,8 @@ export default function AdminServices() {
       name: svc.name || '',
       description: svc.description || '',
       basePrice: svc.basePrice || '',
-      category: svc.category || 'diger',
+      categoryId: svc.categoryId || '',
+      imageUrl: svc.imageUrl || '',
       isActive: svc.isActive !== false,
     });
     setShowModal(true);
@@ -151,8 +144,8 @@ export default function AdminServices() {
                       )}
                     </td>
                     <td className="px-5 py-4">
-                      <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold', CATEGORY_COLORS[svc.category] || CATEGORY_COLORS.diger)}>
-                        {CATEGORY_LABELS[svc.category] || svc.category}
+                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                        {svc.categoryDetails ? svc.categoryDetails.name : (categories.find(c => c.id === svc.categoryId)?.name || 'Kategorisiz')}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-gray-700 font-mono">
@@ -210,16 +203,52 @@ export default function AdminServices() {
                   placeholder="Hizmet hakkında kısa açıklama..."
                 />
               </div>
+              
+              {/* Media Picker for Image */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Öne Çıkan Görsel</label>
+                <div className="flex items-center gap-3">
+                  <div className="h-16 w-16 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+                    {form.imageUrl ? (
+                      <img src={form.imageUrl} alt="Seçili" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon className="h-6 w-6 text-gray-400" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowMediaPicker(true)}
+                        className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded transition-colors"
+                      >
+                        Görsel Seç
+                      </button>
+                      {form.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, imageUrl: '' })}
+                          className="px-3 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded transition-colors"
+                        >
+                          Kaldır
+                        </button>
+                      )}
+                    </div>
+                    {form.imageUrl && <p className="text-xs text-gray-500 mt-1 truncate max-w-xs">{form.imageUrl}</p>}
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
                   <select
-                    value={form.category}
-                    onChange={e => setForm({ ...form, category: e.target.value })}
+                    value={form.categoryId}
+                    onChange={e => setForm({ ...form, categoryId: e.target.value })}
                     className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
                   >
-                    {Object.entries(CATEGORY_LABELS).map(([val, label]) => (
-                      <option key={val} value={val}>{label}</option>
+                    <option value="">Seçiniz</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
                   </select>
                 </div>
@@ -265,6 +294,13 @@ export default function AdminServices() {
           </div>
         </div>
       )}
+
+      <MediaPickerModal 
+        isOpen={showMediaPicker} 
+        onClose={() => setShowMediaPicker(false)} 
+        onSelect={(url) => setForm({ ...form, imageUrl: url })} 
+        acceptedTypes="image/*"
+      />
     </div>
   );
 }

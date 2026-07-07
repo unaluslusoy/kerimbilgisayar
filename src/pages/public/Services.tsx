@@ -1,44 +1,31 @@
-import { Server, Code, Network, Video, MousePointerClick, MonitorSmartphone, ShieldCheck, Database, Search, Clock, Tag } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { fetchServices } from '../../lib/api';
+import { Search, Clock, Tag, MousePointerClick } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
+import { fetchServices, fetchServiceCategories } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 
-const getIconForCategory = (cat: string | null) => {
-  switch (cat) {
-    case 'ag_sistemleri': return Server;
-    case 'yazilim': return Code;
-    case 'guvenlik': return Video;
-    case 'bakim': return Network;
-    case 'donanim': return MonitorSmartphone;
-    case 'verikurtarma': return Database;
-    default: return MousePointerClick;
-  }
-};
-
-const getImageForCategory = (cat: string | null) => {
-  switch (cat) {
-    case 'ag_sistemleri': return "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&q=80&w=800"; // Servers
-    case 'yazilim': return "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&q=80&w=800"; // Coding
-    case 'guvenlik': return "https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&q=80&w=800"; // Security camera
-    case 'bakim': return "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&q=80&w=800"; // Consulting
-    case 'donanim': return "https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&q=80&w=800"; // PC Hardware
-    case 'verikurtarma': return "https://images.unsplash.com/photo-1614064641913-6b7140414c71?auto=format&fit=crop&q=80&w=800"; // Hard drive
-    default: return "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=800";
-  }
+const DynamicIcon = ({ name, className }: { name?: string | null; className?: string }) => {
+  if (!name) return <MousePointerClick className={className} />;
+  const IconComponent = (LucideIcons as any)[name];
+  return IconComponent ? <IconComponent className={className} /> : <MousePointerClick className={className} />;
 };
 
 export default function Services() {
   usePageTitle('Hizmetlerimiz');
   const { hash } = useLocation();
   const [services, setServices] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [activeCategory, setActiveCategory] = useState<number | 'all'>('all');
 
   useEffect(() => {
-    fetchServices()
-      .then(res => setServices(res))
+    Promise.all([fetchServices(), fetchServiceCategories()])
+      .then(([svcRes, catRes]) => {
+        setServices(svcRes);
+        setCategories(catRes);
+      })
       .catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, []);
@@ -56,27 +43,12 @@ export default function Services() {
     }
   }, [hash, loading]);
 
-  const categories: string[] = ['all', ...Array.from(new Set<string>(services.map(s => s.category as string)))];
-
   const filteredServices = services.filter(service => {
     const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (service.description && service.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesCategory = activeCategory === 'all' || service.category === activeCategory;
+    const matchesCategory = activeCategory === 'all' || service.categoryId === activeCategory;
     return matchesSearch && matchesCategory;
   });
-
-  const getCategoryName = (cat: string) => {
-    const map: Record<string, string> = {
-      'all': 'Tümü',
-      'ag_sistemleri': 'Ağ Sistemleri',
-      'yazilim': 'Yazılım Çözümleri',
-      'guvenlik': 'Güvenlik Sistemleri',
-      'bakim': 'Kurumsal Bakım',
-      'donanim': 'Donanım Servisi',
-      'verikurtarma': 'Veri Kurtarma'
-    };
-    return map[cat] || cat;
-  };
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -101,13 +73,19 @@ export default function Services() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 mb-4">
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-theme shadow-sm border border-gray-100">
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            <button
+              onClick={() => setActiveCategory('all')}
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeCategory === 'all' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Tümü
+            </button>
             {categories.map(cat => (
               <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeCategory === cat ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeCategory === cat.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
               >
-                {getCategoryName(cat)}
+                {cat.name}
               </button>
             ))}
           </div>
@@ -149,19 +127,20 @@ export default function Services() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             {filteredServices.map((service) => {
-              const Icon = getIconForCategory(service.category);
-              const imageUrl = service.imageUrl || getImageForCategory(service.category);
+              const catDetails = service.categoryDetails || {};
+              const imageUrl = service.imageUrl || 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=800';
               return (
-                <div key={service.id} id={service.category} className="bg-white rounded-theme shadow-sm border border-gray-200 hover:shadow-xl transition-all duration-300 group scroll-mt-24 flex flex-col justify-between overflow-hidden">
+                <div key={service.id} id={catDetails.slug || `cat-${service.categoryId}`} className="bg-white rounded-theme shadow-sm border border-gray-200 hover:shadow-xl transition-all duration-300 group scroll-mt-24 flex flex-col justify-between overflow-hidden">
                   <div className="h-48 overflow-hidden relative">
                     <img src={imageUrl} alt={service.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                     <div className="absolute bottom-4 left-4 bg-white/20 backdrop-blur-md p-3 rounded-xl border border-white/30">
-                       <Icon className="w-6 h-6 text-white" />
+                       <DynamicIcon name={catDetails.icon} className="w-6 h-6 text-white" />
                     </div>
                   </div>
                   <div className="p-8 flex-1 flex flex-col justify-between">
                     <div>
+                      <div className="mb-2 text-primary text-xs font-semibold uppercase tracking-wide">{catDetails.name || 'Kategorisiz'}</div>
                       <h2 className="text-2xl font-bold text-gray-900 group-hover:text-primary transition-colors mb-4">{service.name}</h2>
                       <p className="text-gray-600 mb-6 leading-relaxed line-clamp-3">
                         {service.description}

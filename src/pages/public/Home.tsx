@@ -134,17 +134,11 @@ export default function Home() {
   const nextSlide = () => setActiveSlide(prev => (prev + 1) % slides.length);
 
   // Compute dynamic features based on settings
-  const defaultFeatures = [
-    { icon: Zap, title: "Hızlı Müdahale ve Çözüm", desc: "İleri düzey arıza analizi, orijinal yedek parça güvencesi ve minimize edilmiş onarım süreleriyle yüksek hızlı teslimat." },
-    { icon: ShieldCheck, title: "Hizmet Seviyesi Güvencesi (SLA)", desc: "Tüm entegrasyon, bakım anlaşmaları ve sistem kurulum işlemlerimizde resmi hizmet kalitesi ve servis garantisi." },
-    { icon: HardDrive, title: "KVKK ve Bilgi Güvenliği", desc: "Veri kurtarma ve sistem yönetimi operasyonlarında uluslararası standartlarda gizlilik koruması ve tam KVKK/GDPR uyumluluğu." }
-  ];
-
   const dynamicFeatures = [
-    { icon: Zap, title: settings?.homeFeature1Title || defaultFeatures[0].title, desc: settings?.homeFeature1Desc || defaultFeatures[0].desc },
-    { icon: ShieldCheck, title: settings?.homeFeature2Title || defaultFeatures[1].title, desc: settings?.homeFeature2Desc || defaultFeatures[1].desc },
-    { icon: HardDrive, title: settings?.homeFeature3Title || defaultFeatures[2].title, desc: settings?.homeFeature3Desc || defaultFeatures[2].desc }
-  ];
+    { icon: Zap, title: settings?.homeFeature1Title, desc: settings?.homeFeature1Desc },
+    { icon: ShieldCheck, title: settings?.homeFeature2Title, desc: settings?.homeFeature2Desc },
+    { icon: HardDrive, title: settings?.homeFeature3Title, desc: settings?.homeFeature3Desc }
+  ].filter(f => f.title); // Sadece başlığı olanları göster
 
   const getDisplayPartners = () => {
     if (settings?.homePartnersJson) {
@@ -157,13 +151,7 @@ export default function Home() {
         console.error('Failed to parse homePartnersJson:', e);
       }
     }
-    return [
-      { name: "Google", logo: "https://upload.wikimedia.org/wikipedia/commons/archive/c/c1/20210618182605%21Google_%22G%22_logo.svg", role: "Partner" },
-      { name: "Microsoft", logo: "https://upload.wikimedia.org/wikipedia/commons/9/96/Microsoft_logo_%282012%29.svg", role: "Partner" },
-      { name: "Hikvision", logo: "https://upload.wikimedia.org/wikipedia/commons/4/4e/Hikvision_logo.svg", role: "Partner" },
-      { name: "Apple", logo: "https://upload.wikimedia.org/wikipedia/commons/1/1b/Apple_logo_grey.svg", role: "Partner" },
-      { name: "Ruijie | Reyee", logo: "", role: "Partner" }
-    ];
+    return [];
   };
 
   const getDisplayTestimonials = () => {
@@ -179,13 +167,7 @@ export default function Home() {
         list.push({ name, role, comment, rating: 5 });
       }
     }
-    if (list.length > 0) return list;
-    
-    return [
-      { name: "Ahmet Yılmaz", role: "Teknoloji Direktörü, Yılmaz Lojistik", comment: "Kerim Bilgisayar ile kurumsal bakım anlaşması yaptığımızdan beri IT altyapımızda hiçbir kesinti yaşamadık. 7/24 destekleri harika.", rating: 5 },
-      { name: "Zeynep Kaya", role: "Grafik Tasarımcı", comment: "Toplama gaming/workstation bilgisayarım için kendilerinden destek aldım. Sıvı soğutma montajı ve performans ayarları kusursuz yapıldı.", rating: 5 },
-      { name: "Mehmet Demir", role: "Kurucu, Demir Güvenlik", comment: "Ofisimizin firewall kurulumu, ağ tasarımı ve Hikvision kamera sistemleri entegrasyonunu anahtar teslim tamamladılar. Son derece profesyonel bir ekip.", rating: 5 }
-    ];
+    return list;
   };
 
   const getSectionOrder = () => {
@@ -503,147 +485,8 @@ export default function Home() {
   };
 
   const renderReferences = () => {
-    const sectors = [
-      { id: 'egitim', title: 'Eğitim', count: '25+', icon: GraduationCap, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
-      { id: 'saglik', title: 'Sağlık', count: '18+', icon: HeartPulse, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-100' },
-      { id: 'yazilim', title: 'Yazılım', count: '15+', icon: Monitor, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
-      { id: 'lojistik', title: 'Lojistik', count: '12+', icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-      { id: 'muhendislik', title: 'Mühendislik', count: '10+', icon: Settings, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' },
-      { id: 'diger', title: 'Diğer', count: '20+', icon: Building2, color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-100' },
-    ];
-
-    const projects = [
-      {
-        id: 1,
-        title: 'Beta Eğitim Kurumları',
-        desc: 'Tüm kampüs ağ altyapısı ve 200+ bilgisayar sistemi kurulumu',
-        category: 'Eğitim',
-        duration: '3 Yıl',
-        image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?q=80&w=2070&auto=format&fit=crop',
-        services: ['Network Kurulumu', 'Sistem Yönetimi', 'Teknik Destek'],
-        satisfaction: '%98',
-        active: true
-      },
-      {
-        id: 2,
-        title: 'Delta Yazılım A.Ş.',
-        desc: 'Kurumsal IT altyapısı ve güvenlik sistemleri implementasyonu',
-        category: 'Yazılım',
-        duration: '2 Yıl',
-        image: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop',
-        services: ['Server Kurulumu', 'Güvenlik Çözümleri', 'Veri Yedekleme'],
-        satisfaction: '%100',
-        active: true
-      },
-      {
-        id: 3,
-        title: 'Kartal Diş Kliniği',
-        desc: 'Klinik yönetim sistemi ve hasta kayıt altyapısı kurulumu',
-        category: 'Sağlık',
-        duration: '4 Yıl',
-        image: 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?q=80&w=2070&auto=format&fit=crop',
-        services: ['Sistem Kurulumu', 'Veri Güvenliği', 'Bakım Desteği'],
-        satisfaction: '%95',
-        active: true
-      }
-    ];
-
-    return (
-      <section className="py-24 bg-gray-50 border-b border-gray-200 overflow-hidden relative">
-        {/* Background Accents */}
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent"></div>
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16 text-center max-w-3xl">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-6 font-display">
-            Referanslarımız
-          </h2>
-          <p className="text-lg text-gray-600 leading-relaxed">
-            Farklı sektörlerden değerli iş ortaklarımızla uzun vadeli güven ilişkileri kurarak, onların teknoloji ihtiyaçlarını karşılıyor ve dijital dönüşüm süreçlerinde yanlarında oluyoruz.
-          </p>
-        </div>
-        
-        {/* Sectors Grid */}
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mb-20">
-          <h3 className="text-center text-3xl md:text-4xl font-bold text-gray-800 mb-8 font-display">Hizmet Verdiğimiz Sektörler</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {sectors.map((sector) => (
-              <div 
-                key={sector.id} 
-                className={`flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-gray-100 hover:border-gray-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer group`}
-              >
-                <div className={`w-14 h-14 rounded-full ${sector.bg} ${sector.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                  <sector.icon className="w-7 h-7" strokeWidth={1.5} />
-                </div>
-                <span className="font-semibold text-gray-900 mb-1">{sector.title}</span>
-                <span className={`text-sm font-bold ${sector.color}`}>{sector.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Projects Grid */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {projects.map((project) => (
-              <div key={project.id} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col h-full">
-                {/* Image Header */}
-                <div className="relative h-56 overflow-hidden">
-                  <div className="absolute inset-0 bg-gray-900/10 group-hover:bg-transparent transition-colors duration-300 z-10"></div>
-                  <img 
-                    src={project.image} 
-                    alt={project.title} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                  />
-                  {/* Category Badge (Top Right) */}
-                  <div className="absolute top-4 right-4 z-20 bg-white/95 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-gray-800 shadow-sm border border-gray-100">
-                    {project.category}
-                  </div>
-                  {/* Duration Badge (Bottom Left) */}
-                  <div className="absolute bottom-4 left-4 z-20 bg-green-500/90 backdrop-blur-sm px-3 py-1 rounded-md text-xs font-bold text-white shadow-sm flex items-center gap-1.5">
-                    <Clock className="w-3 h-3" />
-                    {project.duration}
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="p-6 flex flex-col flex-grow">
-                  <h4 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary transition-colors">{project.title}</h4>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6 flex-grow">
-                    {project.desc}
-                  </p>
-
-                  {/* Services List */}
-                  <div className="mb-6">
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Verilen Hizmetler:</div>
-                    <div className="flex flex-wrap gap-2">
-                      {project.services.map((service, idx) => (
-                        <span key={idx} className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-medium bg-green-50 text-green-700 border border-green-100">
-                          {service}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Footer Stats */}
-                  <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-amber-500">
-                      <Star className="w-4 h-4 fill-current" />
-                      <span className="text-sm font-bold text-gray-900">{project.satisfaction} Memnuniyet</span>
-                    </div>
-                    {project.active && (
-                      <div className="flex items-center gap-1.5 text-green-600">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span className="text-xs font-semibold">Aktif Müşteri</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
+    // Referanslar bölümü: admin panelden yönetilecek, şimdilik boş
+    return null;
   };
 
   const renderFeatures = () => (
@@ -753,34 +596,7 @@ export default function Home() {
                 </Link>
               </div>
             );
-          }) : [
-            { icon: Server, id: "ag_sistemleri", title: "Ağ Tasarımı & Sistem Entegrasyonları", desc: "Kurumsal ağ altyapı tasarımı, siber güvenlik yapılandırmaları (Next-Gen Firewall), aktif cihaz kurulumları ve yapısal kablolama mühendisliği." },
-            { icon: Code, id: "yazilim", title: "Kurumsal Web & E-Ticaret Yazılımları", desc: "Dönüşüm odaklı B2B/B2C e-ticaret platformları, prestijli kurumsal web projeleri ve işletmenize özel ölçeklenebilir web uygulamaları." },
-            { icon: Network, id: "bakim", title: "Sistem ve Platform Entegrasyonları", desc: "Farklı yazılım ve veritabanı platformlarının entegre edilmesi, ERP/CRM sistem geçişleri ve API bağlantı optimizasyonu çözümleri." },
-            { icon: Video, id: "guvenlik", title: "Entegre Güvenlik & PDKS Çözümleri", desc: "Yetkili Hikvision iş ortağı sıfatıyla kapalı devre (CCTV) kamera izleme, akıllı görüntü analiz ve personel geçiş kontrol (PDKS) sistemleri tasarımı." },
-            { icon: MousePointerClick, id: "default", title: "Kurumsal BT Danışmanlığı & SLA", desc: "Mevcut yazılımsal altyapınız için SLA standartlarında bakım-destek, Microsoft/Google lisanslama mimarisi ve BT süreç danışmanlığı." },
-            { icon: MonitorSmartphone, id: "donanim", title: "İleri Düzey Donanım & Teknik Servis", desc: "Kritik donanım bileşenleri değişimi, mikro-lehimleme ve devre onarımı, yüksek performanslı iş istasyonları (Workstation) kurulumu." }
-          ].map((service, i) => {
-            const isLarge = i === 0 || i === 3;
-            return (
-              <div
-                key={i}
-                className={`card-modern group cursor-pointer flex flex-col justify-between ${isLarge ? 'md:col-span-2 lg:col-span-2' : 'col-span-1'} ${i === 1 ? 'delay-50' : i === 2 ? 'delay-100' : i === 3 ? 'delay-150' : ''}`}
-              >
-                <div className="glow-overlay" />
-                <div>
-                  <div className="bg-gray-900 w-14 h-14 rounded-xl flex items-center justify-center mb-6 relative z-10 group-hover:bg-primary transition-colors duration-300">
-                    <service.icon className="w-7 h-7 text-white group-hover:text-gray-900 transition-colors" />
-                  </div>
-                  <h3 className={`font-bold text-gray-900 mb-3 relative z-10 font-display ${isLarge ? 'text-2xl' : 'text-xl'}`}>{service.title}</h3>
-                  <p className="text-gray-600 leading-relaxed relative z-10 line-clamp-3">{service.desc}</p>
-                </div>
-                <Link to={`/hizmetler#${service.id}`} className="mt-8 flex items-center text-primary font-semibold text-sm relative z-10 gap-2 group-hover:text-accent transition-colors">
-                  Detaylı İncele <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
-                </Link>
-              </div>
-            );
-          })}
+          }) : null}
         </div>
       </div>
     </section>
@@ -802,12 +618,12 @@ export default function Home() {
             <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-900/80 to-transparent"></div>
             <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-purple-500 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
             <Gamepad2 className="w-12 h-12 text-purple-400 mb-6 relative z-10" />
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 relative z-10 font-display">{settings?.homeGamingTitle || 'Profesyonel Gaming Sistemler'}</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 relative z-10 font-display">{settings?.homeGamingTitle}</h2>
             <p className="text-gray-100 mb-8 leading-relaxed relative z-10">
-              {settings?.homeGamingDesc || 'Amatörden espor seviyesine kadar, bütçenize en uygun ve en yüksek performanslı oyuncu bilgisayarlarını topluyoruz. Termal optimizasyon, RGB kurulumu ve overclock destekleri ile rakiplerinizden bir adım önde olun.'}
+              {settings?.homeGamingDesc}
             </p>
             <ul className="space-y-3 mb-8 text-white font-medium relative z-10">
-              {(settings?.homeGamingBullets || 'Özel Sıvı Soğutma Sistemleri, FPS Optimizasyonu & Test, Oyun Ekipmanı Tamirleri')
+              {(settings?.homeGamingBullets || '')
                 .split(',')
                 .map(s => s.trim())
                 .filter(Boolean)
@@ -818,8 +634,8 @@ export default function Home() {
                 ))
               }
             </ul>
-            <Link to={settings?.homeGamingBtnUrl || '/randevu'} className="inline-flex font-semibold bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-theme transition-colors relative z-10 shadow-lg">
-              {settings?.homeGamingBtnText || 'Gaming Danışmanlığı Al'}
+            <Link to={settings?.homeGamingBtnUrl || '#'} className="inline-flex font-semibold bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-theme transition-colors relative z-10 shadow-lg">
+              {settings?.homeGamingBtnText}
             </Link>
           </div>
 
@@ -835,12 +651,12 @@ export default function Home() {
             <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/80 to-transparent"></div>
             <div className="absolute bottom-0 right-0 -mb-8 -mr-8 w-48 h-48 bg-white rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-500"></div>
             <Server className="w-12 h-12 text-white mb-6 relative z-10" />
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 relative z-10 font-display">{settings?.homeCorporateTitle || 'Kurumsal Bakım Anlaşmaları'}</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 relative z-10 font-display">{settings?.homeCorporateTitle}</h2>
             <p className="text-gray-100 mb-8 leading-relaxed relative z-10">
-              {settings?.homeCorporateDesc || 'İşletmenizin bilişim altyapısını güvence altına alın. Aylık düzenli bakım, anında uzak destek, server kurulumları ve ağ güvenliği çözümleriyle iş kesintilerinizi sıfıra indiriyoruz.'}
+              {settings?.homeCorporateDesc}
             </p>
             <ul className="space-y-3 mb-8 text-white font-medium relative z-10">
-              {(settings?.homeCorporateBullets || '7/24 Öncelikli Destek Hattı, KVKK Uyumlu Sunucu Yönetimi, Düzenli Veri Yedekleme')
+              {(settings?.homeCorporateBullets || '')
                 .split(',')
                 .map(s => s.trim())
                 .filter(Boolean)
@@ -851,8 +667,8 @@ export default function Home() {
                 ))
               }
             </ul>
-            <Link to={settings?.homeCorporateBtnUrl || '/randevu'} className="inline-flex font-semibold bg-white text-primary hover:bg-gray-50 px-6 py-3 rounded-theme transition-colors relative z-10 shadow-lg">
-              {settings?.homeCorporateBtnText || 'Talep Oluştur'}
+            <Link to={settings?.homeCorporateBtnUrl || '#'} className="inline-flex font-semibold bg-white text-primary hover:bg-gray-50 px-6 py-3 rounded-theme transition-colors relative z-10 shadow-lg">
+              {settings?.homeCorporateBtnText}
             </Link>
           </div>
         </div>

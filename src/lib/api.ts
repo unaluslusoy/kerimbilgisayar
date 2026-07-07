@@ -1,4 +1,20 @@
 // Public API helpers
+
+// API sağlık kontrolü — uygulama açılışında çağrılır
+export async function checkApiHealth(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch('/api/health', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data?.status === 'ok';
+  } catch {
+    return false;
+  }
+}
+
 async function handleResponse(res: Response) {
   if (res.status === 401) {
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
@@ -12,7 +28,17 @@ async function handleResponse(res: Response) {
     console.error('API Error:', res.status, text);
     throw new Error('API Error: ' + text);
   }
-  return res.json();
+  // JSON olmayan yanıtları güvenli işle
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return res.json();
+  }
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('API yanıtı geçerli JSON değil');
+  }
 }
 
 export async function fetchSettings() {
@@ -32,6 +58,11 @@ export async function fetchServices() {
 
 export async function fetchService(id: string) {
   const res = await fetch(`/api/services/${id}`);
+  return handleResponse(res);
+}
+
+export async function fetchServiceCategories() {
+  const res = await fetch('/api/public/service-categories');
   return handleResponse(res);
 }
 
@@ -279,14 +310,18 @@ export async function deleteAdminPage(id: number) {
   return adminRequest(`/api/admin/pages/${id}`, { method: 'DELETE' });
 }
 
-export async function fetchAdminMedia() {
-  return adminRequest('/api/admin/media');
+export async function fetchAdminMedia(folderId?: number | null) {
+  const q = folderId !== undefined ? `?folderId=${folderId === null ? 'null' : folderId}` : '';
+  return adminRequest(`/api/admin/media${q}`);
 }
 
-export async function uploadAdminMedia(file: File) {
+export async function uploadAdminMedia(file: File, folderId?: number | null) {
   const token = localStorage.getItem('admin_token');
   const formData = new FormData();
   formData.append('file', file);
+  if (folderId) {
+    formData.append('folderId', folderId.toString());
+  }
   
   const res = await fetch('/api/admin/media/upload', {
     method: 'POST',
@@ -298,6 +333,23 @@ export async function uploadAdminMedia(file: File) {
     throw new Error(errorData?.error || 'API Request failed');
   }
   return res.json();
+}
+
+// Media Folders
+export async function fetchMediaFolders() {
+  return adminRequest('/api/admin/media/folders');
+}
+
+export async function createMediaFolder(data: { name: string; parentId?: number }) {
+  return adminRequest('/api/admin/media/folders', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateMediaFolder(id: number, data: { name: string; parentId?: number }) {
+  return adminRequest(`/api/admin/media/folders/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export async function deleteMediaFolder(id: number) {
+  return adminRequest(`/api/admin/media/folders/${id}`, { method: 'DELETE' });
 }
 
 export async function fetchAdminMenus() {

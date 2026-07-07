@@ -21,6 +21,7 @@ export default function AdminLayout() {
     { name: 'Servis Kayıtları', path: '/admin/servis', icon: Wrench },
     { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
     { name: 'Hizmetlerimiz', path: '/admin/hizmetler', icon: Wrench },
+    { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri', icon: Tag },
     { name: 'Kullanıcılar', path: '/admin/kullanicilar', icon: Users },
     { name: 'Başvurular', path: '/admin/basvurular', icon: Inbox },
     { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare },
@@ -40,6 +41,7 @@ export default function AdminLayout() {
     { name: 'API Anahtarları', path: '/admin/api-anahtarlari', icon: Key },
     { name: 'Webhooks', path: '/admin/webhooks', icon: Webhook },
     { name: 'Eklentiler', path: '/admin/eklentiler', icon: Puzzle },
+    { name: 'Dil Yönetimi', path: '/admin/diller', icon: BookOpen },
     { name: 'Ayarlar', path: '/admin/ayarlar', icon: Settings },
   ];
 

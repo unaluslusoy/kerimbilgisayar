@@ -154,9 +154,9 @@ export default function PublicLayout() {
     return location.pathname.startsWith(path);
   }, [location.pathname]);
 
-  const contactPhone = settings?.contactPhone || settings?.contact_phone || '+90 (212) 555 00 00';
-  const contactEmail = settings?.contactEmail || settings?.contact_email || 'bilgi@kerimbilgisayar.com';
-  const contactAddress = settings?.contactAddress || settings?.contact_address || 'Teknoloji Cad. No:1, İstanbul';
+  const contactPhone = settings?.contactPhone || settings?.contact_phone || '';
+  const contactEmail = settings?.contactEmail || settings?.contact_email || '';
+  const contactAddress = settings?.contactAddress || settings?.contact_address || '';
   const siteTitle = settings?.site_title || 'Kerim Bilgisayar';
 
   if (activePlugins.includes('maintenance-mode')) {
@@ -232,13 +232,7 @@ export default function PublicLayout() {
 
             {/* Desktop Nav */}
             <nav className="hidden lg:flex items-center justify-center gap-2 flex-1">
-              {(headerItems.length > 0 ? buildTree(headerItems) : [
-                { id: 'f1', title: 'Hizmetler', url: '/hizmetler', children: [] },
-                { id: 'f2', title: 'Kurumsal', url: '/hakkimizda', children: [] },
-                { id: 'f3', title: 'Kampanyalar', url: '/kampanyalar', children: [] },
-                { id: 'f5', title: 'Blog', url: '/blog', children: [] },
-                { id: 'f4', title: 'Destek ve İletişim', url: '/iletisim', children: [] }
-              ]).map((item: any) => (
+              {buildTree(headerItems).map((item: any) => (
                 <NavbarItem key={item.id} item={item} isActive={isActive(item.url)} />
               ))}
             </nav>
@@ -272,12 +266,7 @@ export default function PublicLayout() {
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
           <div className="lg:hidden border-t border-gray-100 bg-white px-4 py-4 space-y-1 shadow-lg absolute w-full max-h-[calc(100vh-88px)] overflow-y-auto">
-            {(headerItems.length > 0 ? buildTree(headerItems) : [
-              { id: 'f1', title: 'Hizmetler', url: '/hizmetler' },
-              { id: 'f2', title: 'Kurumsal', url: '/hakkimizda' },
-              { id: 'f3', title: 'Kampanyalar', url: '/kampanyalar' },
-              { id: 'f4', title: 'Destek & İletişim', url: '/iletisim' }
-            ]).map((item: any) => (
+            {buildTree(headerItems).map((item: any) => (
               <Link
                 key={item.id}
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -378,12 +367,7 @@ export default function PublicLayout() {
           <div>
             <h3 className="font-semibold text-white mb-5 text-sm uppercase tracking-wider">Kurumsal</h3>
             <ul className="space-y-3 text-sm">
-              {(footerItems.length > 0 ? footerItems : [
-                { id: 'f1', title: 'Hakkımızda', url: '/hakkimizda' },
-                { id: 'f2', title: 'Vizyon & Misyon', url: '/vizyon-misyon' },
-                { id: 'f3', title: 'Sertifikalarımız', url: '/sertifikalar' },
-                { id: 'f4', title: 'Banka Hesaplarımız', url: '/banka-hesaplari' }
-              ]).map((item: any) => (
+              {footerItems.map((item: any) => (
                 <li key={item.id}>
                   <Link to={item.url} target={item.target} className="hover:text-white transition-colors">
                     {item.title}
@@ -397,12 +381,7 @@ export default function PublicLayout() {
           <div>
             <h3 className="font-semibold text-white mb-5 text-sm uppercase tracking-wider">Hızlı Bağlantılar</h3>
             <ul className="space-y-3 text-sm">
-              {(footerQuickItems.length > 0 ? footerQuickItems : [
-                { id: 'f1', title: 'Ağ Sistemleri', url: '/hizmetler/ag' },
-                { id: 'f2', title: 'Güvenlik Çözümleri', url: '/hizmetler/guvenlik' },
-                { id: 'f3', title: 'Veri Kurtarma', url: '/hizmetler/veri-kurtarma' },
-                { id: 'f4', title: 'Web Yazılım', url: '/hizmetler/yazilim' }
-              ]).map((item: any) => (
+              {footerQuickItems.map((item: any) => (
                 <li key={item.id}>
                   <Link to={item.url} target={item.target} className="hover:text-white transition-colors">
                     {item.title}
@@ -443,11 +422,7 @@ export default function PublicLayout() {
               {settings.footerText || `© ${new Date().getFullYear()} ${siteTitle}. Tüm hakları saklıdır.`}
             </p>
             <div className="flex items-center gap-4 text-gray-600">
-              {(footerBottomItems.length > 0 ? footerBottomItems : [
-                { id: 'f1', title: 'KVKK Metni', url: '/kvkk' },
-                { id: 'f2', title: 'Çerez Politikası', url: '/cerez' },
-                { id: 'f3', title: 'Gizlilik Sözleşmesi', url: '/gizlilik' }
-              ]).map((item: any, idx: number) => (
+              {footerBottomItems.map((item: any, idx: number) => (
                 <React.Fragment key={item.id}>
                   {idx > 0 && <span>•</span>}
                   <Link to={item.url} target={item.target} className="hover:text-gray-400 transition-colors">
