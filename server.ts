@@ -7,8 +7,7 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const rootDir = process.cwd();
 import { 
   users, 
   devices,
@@ -126,12 +125,12 @@ async function startServer() {
 
   app.use(express.json());
   
-  // Serve static uploads
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+  // Uploads directory static serving
+  app.use('/uploads', express.static(path.join(rootDir, 'uploads')));
 
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-      const uploadPath = path.join(__dirname, 'uploads');
+      const uploadPath = path.join(rootDir, 'uploads');
       if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
       cb(null, uploadPath);
     },
@@ -2113,7 +2112,7 @@ async function startServer() {
       await db.delete(mediaLibrary).where(eq(mediaLibrary.id, id));
       
       // Delete physical file
-      const filePath = path.join(__dirname, item[0].fileUrl);
+      const filePath = path.join(rootDir, item[0].fileUrl);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
