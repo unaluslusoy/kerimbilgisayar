@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { db } from './src/db/index';
 import multer from 'multer';
 import fs from 'fs';
@@ -2608,6 +2607,7 @@ Sitemap: https://kerimbilgisayar.com/sitemap.xml`;
   // VITE DEV VEYA PROD SERVE
 
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
