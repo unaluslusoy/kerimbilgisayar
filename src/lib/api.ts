@@ -211,6 +211,10 @@ export async function updateAdminCustomer(id: number, data: any) {
   return adminRequest(`/api/admin/customers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
+export async function migrateCustomerUsers() {
+  return adminRequest('/api/admin/customers/migrate-from-users', { method: 'POST' });
+}
+
 export async function assignCustomerSubscription(id: number, data: any) {
   return adminRequest(`/api/admin/customers/${id}/subscription`, { method: 'POST', body: JSON.stringify(data) });
 }

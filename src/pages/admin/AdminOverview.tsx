@@ -87,7 +87,7 @@ export default function AdminOverview() {
   const kpis = [
     { title: 'Toplam Servis Kaydı', value: stats?.ticketCount ?? '—', icon: Wrench, color: 'text-blue-600', bg: 'bg-blue-50', trend: 'Tüm kayıtlar', link: '/admin/servis' },
     { title: 'Yeni / Bekleyen', value: stats?.newLeads ?? '—', icon: Inbox, color: 'text-amber-600', bg: 'bg-amber-50', trend: 'İşlem bekliyor', link: '/admin/servis' },
-    { title: 'Müşteri Sayısı', value: stats?.customerCount ?? '—', icon: Users, color: 'text-green-600', bg: 'bg-green-50', trend: 'Kayıtlı müşteri', link: '/admin/kullanicilar' },
+    { title: 'Müşteri Sayısı', value: stats?.customerCount ?? '—', icon: Users, color: 'text-green-600', bg: 'bg-green-50', trend: 'Kayıtlı müşteri', link: '/admin/musteriler' },
     { 
       title: 'Kritik Stok', 
       value: stats?.stockAlerts ?? 0, 

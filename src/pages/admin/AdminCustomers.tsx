@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Building2, CheckCircle, CreditCard, Plus, Search, UserPlus, X } from 'lucide-react';
-import { assignCustomerSubscription, createAdminCustomer, fetchAdminCustomers, fetchSubscriptionPlans, updateAdminCustomer } from '../../lib/api';
+import { Building2, CheckCircle, CreditCard, Plus, RefreshCw, Search, UserPlus, X } from 'lucide-react';
+import { assignCustomerSubscription, createAdminCustomer, fetchAdminCustomers, fetchSubscriptionPlans, migrateCustomerUsers, updateAdminCustomer } from '../../lib/api';
 
 const inputCls = 'w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary';
 
 const emptyCustomer = {
   firstName: '', lastName: '', email: '', phone: '', password: 'musteri123',
-  companyName: '', taxId: '', taxOffice: '', address: '', sector: '', isActive: true,
+  companyName: '', taxId: '', taxOffice: '', address: '', sector: '', accountCode: '', balance: '0.00', creditLimit: '0.00', notes: '', isActive: true,
 };
 
 export default function AdminCustomers() {
@@ -14,6 +14,7 @@ export default function AdminCustomers() {
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [migrating, setMigrating] = useState(false);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
@@ -32,7 +33,7 @@ export default function AdminCustomers() {
   useEffect(() => { load(); }, []);
 
   const filtered = customers.filter(customer => {
-    const text = `${customer.firstName} ${customer.lastName} ${customer.email} ${customer.phone} ${customer.companyName}`.toLowerCase();
+    const text = `${customer.firstName} ${customer.lastName} ${customer.email} ${customer.phone} ${customer.companyName} ${customer.accountCode}`.toLowerCase();
     return !search || text.includes(search.toLowerCase());
   });
 
@@ -55,6 +56,10 @@ export default function AdminCustomers() {
       taxOffice: customer.taxOffice || '',
       address: customer.address || '',
       sector: customer.sector || '',
+      accountCode: customer.accountCode || '',
+      balance: customer.balance || '0.00',
+      creditLimit: customer.creditLimit || '0.00',
+      notes: customer.notes || '',
       isActive: customer.isActive !== false,
     });
     setShowModal(true);
@@ -83,6 +88,16 @@ export default function AdminCustomers() {
     finally { setSaving(false); }
   };
 
+  const handleMigrateCustomers = async () => {
+    setMigrating(true);
+    try {
+      const result = await migrateCustomerUsers();
+      alert(`${result.migrated || 0} eski müşteri kaydı yeni cari tabloya taşındı.`);
+      await load();
+    } catch (e: any) { alert('Hata: ' + e.message); }
+    finally { setMigrating(false); }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -90,9 +105,14 @@ export default function AdminCustomers() {
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Müşteriler</h1>
           <p className="text-sm text-gray-500 mt-1">Müşteri kullanıcılarını, cari bilgilerini ve abonelik paketlerini yönetin.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-theme shadow-sm">
-          <UserPlus className="w-4 h-4 mr-2" /> Yeni Müşteri
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={handleMigrateCustomers} disabled={migrating} className="inline-flex items-center px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-theme border border-gray-200 shadow-sm disabled:opacity-60">
+            <RefreshCw className={`w-4 h-4 mr-2 ${migrating ? 'animate-spin' : ''}`} /> Eski Müşterileri Taşı
+          </button>
+          <button onClick={openCreate} className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-theme shadow-sm">
+            <UserPlus className="w-4 h-4 mr-2" /> Yeni Müşteri
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
@@ -113,13 +133,14 @@ export default function AdminCustomers() {
                   <tr>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Müşteri</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cari / Firma</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bakiye</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Paket</th>
                     <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">İşlem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={4} className="text-center py-10 text-gray-400 font-medium">Müşteri bulunamadı</td></tr>
+                    <tr><td colSpan={5} className="text-center py-10 text-gray-400 font-medium">Müşteri bulunamadı</td></tr>
                   ) : filtered.map(customer => (
                     <tr key={customer.id} className="hover:bg-gray-50">
                       <td className="px-5 py-4">
@@ -129,7 +150,11 @@ export default function AdminCustomers() {
                       </td>
                       <td className="px-5 py-4 text-sm text-gray-600">
                         <div className="flex items-center gap-2 font-medium text-gray-800"><Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}</div>
-                        <div className="text-xs text-gray-400 mt-1">{customer.taxId || customer.taxOffice ? `${customer.taxOffice || ''} ${customer.taxId || ''}` : customer.sector || 'Cari bilgi bekliyor'}</div>
+                        <div className="text-xs text-gray-400 mt-1">{customer.accountCode || 'Cari kod yok'} • {customer.taxId || customer.taxOffice ? `${customer.taxOffice || ''} ${customer.taxId || ''}` : customer.sector || 'Cari bilgi bekliyor'}</div>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        <div className="font-semibold text-gray-900">{Number(customer.balance || 0).toLocaleString('tr-TR')} TL</div>
+                        <div className="text-xs text-gray-400">Limit: {Number(customer.creditLimit || 0).toLocaleString('tr-TR')} TL</div>
                       </td>
                       <td className="px-5 py-4">
                         {customer.planName ? (
@@ -194,7 +219,11 @@ export default function AdminCustomers() {
               <input value={form.taxOffice} onChange={e => setForm({ ...form, taxOffice: e.target.value })} className={inputCls} placeholder="Vergi dairesi" />
               <input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} className={inputCls} placeholder="Vergi / TCKN" />
               <input value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} className={inputCls} placeholder="Sektör" />
-              <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className={`${inputCls} md:col-span-2 resize-none`} rows={3} placeholder="Adres / cari not" />
+              <input value={form.accountCode} onChange={e => setForm({ ...form, accountCode: e.target.value })} className={inputCls} placeholder="Cari kod" />
+              <input type="number" value={form.balance} onChange={e => setForm({ ...form, balance: e.target.value })} className={inputCls} placeholder="Cari bakiye" />
+              <input type="number" value={form.creditLimit} onChange={e => setForm({ ...form, creditLimit: e.target.value })} className={inputCls} placeholder="Kredi limiti" />
+              <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className={`${inputCls} md:col-span-2 resize-none`} rows={3} placeholder="Adres" />
+              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className={`${inputCls} md:col-span-2 resize-none`} rows={3} placeholder="Cari not / anlaşma bilgisi" />
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">
               <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-theme font-semibold hover:bg-gray-50">İptal</button>

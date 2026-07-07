@@ -51,21 +51,6 @@ export const subscriptions = mysqlTable('subscriptions', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
-export const customerSubscriptions = mysqlTable('customer_subscriptions', {
-  id: int('id').autoincrement().primaryKey(),
-  tenantId: int('tenant_id').references(() => tenants.id).default(1),
-  userId: int('user_id').references(() => users.id).notNull(),
-  companyId: int('company_id').references(() => companies.id),
-  planId: int('plan_id').references(() => plans.id).notNull(),
-  status: mysqlEnum('status', ['trial', 'active', 'past_due', 'canceled', 'unpaid']).default('active'),
-  currentPeriodStart: timestamp('current_period_start'),
-  currentPeriodEnd: timestamp('current_period_end'),
-  cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
-  agreementNotes: text('agreement_notes'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
-
 // --- CRM: COMPANIES & LEADS ---
 
 export const companies = mysqlTable('companies', {
@@ -113,6 +98,35 @@ export const users = mysqlTable('users', {
   roleType: mysqlEnum('role_type', ['superadmin', 'tenant_admin', 'staff', 'technician', 'customer']).default('customer'),
   isActive: boolean('is_active').default(true),
   lastLoginAt: timestamp('last_login_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+export const customers = mysqlTable('customers', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id).default(1),
+  userId: int('user_id').references(() => users.id).notNull(),
+  companyId: int('company_id').references(() => companies.id),
+  accountCode: varchar('account_code', { length: 50 }),
+  balance: decimal('balance', { precision: 10, scale: 2 }).default('0.00'),
+  creditLimit: decimal('credit_limit', { precision: 10, scale: 2 }).default('0.00'),
+  notes: text('notes'),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+export const customerSubscriptions = mysqlTable('customer_subscriptions', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id).default(1),
+  userId: int('user_id').references(() => users.id).notNull(),
+  companyId: int('company_id').references(() => companies.id),
+  planId: int('plan_id').references(() => plans.id).notNull(),
+  status: mysqlEnum('status', ['trial', 'active', 'past_due', 'canceled', 'unpaid']).default('active'),
+  currentPeriodStart: timestamp('current_period_start'),
+  currentPeriodEnd: timestamp('current_period_end'),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
+  agreementNotes: text('agreement_notes'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });

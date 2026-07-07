@@ -10,6 +10,7 @@ const rootDir = process.cwd();
 import { 
   users, 
   companies,
+  customers,
   plans,
   subscriptions,
   customerSubscriptions,
@@ -94,6 +95,30 @@ async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | n
   });
 
   return fileUrl;
+}
+
+async function ensureCustomerRowsFromUsers(): Promise<number> {
+  const customerUsers = await db.select().from(users).where(eq(users.roleType, 'customer'));
+  let migrated = 0;
+
+  for (const user of customerUsers) {
+    const existingCustomer = await db.select().from(customers).where(eq(customers.userId, user.id)).limit(1);
+    if (existingCustomer.length > 0) continue;
+
+    await db.insert(customers).values({
+      tenantId: user.tenantId || 1,
+      userId: user.id,
+      companyId: user.companyId || null,
+      accountCode: `MUS-${String(user.id).padStart(5, '0')}`,
+      balance: '0.00',
+      creditLimit: '0.00',
+      notes: 'Eski müşteri kullanıcı kaydından otomatik taşındı.',
+      isActive: user.isActive !== false,
+    });
+    migrated += 1;
+  }
+
+  return migrated;
 }
 
 // Simple in-memory token store (for demo; in production use a proper session/JWT)
@@ -1255,13 +1280,14 @@ async function startServer() {
 
   app.get('/api/admin/stats', requireAdmin, async (req, res) => {
     try {
+      await ensureCustomerRowsFromUsers();
       // Tickets count
       const allTickets = await db.select().from(tickets);
       const newTickets = allTickets.filter(t => t.status === 'yeni');
       
       // Users count
       const allUsers = await db.select().from(users);
-      const customerCount = allUsers.filter(u => u.roleType === 'customer').length;
+      const allCustomers = await db.select().from(customers).where(eq(customers.isActive, true));
 
       // CMS counts
       const allPages = await db.select().from(pages);
@@ -1309,7 +1335,7 @@ async function startServer() {
         ticketCount: allTickets.length,
         newLeads: newTickets.length,
         userCount: allUsers.length,
-        customerCount,
+        customerCount: allCustomers.length,
         stockAlerts: stockAlertCount,
         pageCount: allPages.length,
         blogCount: allBlogs.length,
@@ -1930,14 +1956,20 @@ async function startServer() {
 
   app.get('/api/admin/customers', requireAdmin, async (req, res) => {
     try {
+      await ensureCustomerRowsFromUsers();
       const allCustomers = await db.select({
-        id: users.id,
+        id: customers.userId,
+        customerId: customers.id,
         firstName: users.firstName,
         lastName: users.lastName,
         email: users.email,
         phone: users.phone,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
+        isActive: customers.isActive,
+        createdAt: customers.createdAt,
+        accountCode: customers.accountCode,
+        balance: customers.balance,
+        creditLimit: customers.creditLimit,
+        notes: customers.notes,
         companyId: companies.id,
         companyName: companies.name,
         taxId: companies.taxId,
@@ -1951,12 +1983,12 @@ async function startServer() {
         planName: plans.name,
         planPrice: plans.price,
         billingCycle: plans.billingCycle,
-      }).from(users)
-        .leftJoin(companies, eq(users.companyId, companies.id))
-        .leftJoin(customerSubscriptions, eq(customerSubscriptions.userId, users.id))
+      }).from(customers)
+        .leftJoin(users, eq(customers.userId, users.id))
+        .leftJoin(companies, eq(customers.companyId, companies.id))
+        .leftJoin(customerSubscriptions, eq(customerSubscriptions.userId, customers.userId))
         .leftJoin(plans, eq(customerSubscriptions.planId, plans.id))
-        .where(eq(users.roleType, 'customer'))
-        .orderBy(desc(users.createdAt));
+        .orderBy(desc(customers.createdAt));
       res.json(allCustomers);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -1965,7 +1997,7 @@ async function startServer() {
 
   app.post('/api/admin/customers', requireAdmin, async (req, res) => {
     try {
-      const { firstName, lastName, email, phone, password, companyName, taxId, taxOffice, address, sector } = req.body;
+      const { firstName, lastName, email, phone, password, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes } = req.body;
       let companyId: number | null = null;
 
       if (companyName || taxId || taxOffice || address || sector) {
@@ -1983,7 +2015,7 @@ async function startServer() {
         companyId = (insertedCompany[0] as any).insertId;
       }
 
-      await db.insert(users).values({
+      const insertedUser = await db.insert(users).values({
         tenantId: 1,
         companyId,
         firstName,
@@ -1992,6 +2024,17 @@ async function startServer() {
         phone: phone || null,
         roleType: 'customer',
         passwordHash: password || 'musteri123',
+        isActive: true,
+      });
+      const userId = (insertedUser[0] as any).insertId;
+      await db.insert(customers).values({
+        tenantId: 1,
+        userId,
+        companyId,
+        accountCode: accountCode || `MUS-${String(userId).padStart(5, '0')}`,
+        balance: balance?.toString() || '0.00',
+        creditLimit: creditLimit?.toString() || '0.00',
+        notes: notes || null,
         isActive: true,
       });
       res.json({ success: true });
@@ -2003,7 +2046,7 @@ async function startServer() {
   app.patch('/api/admin/customers/:id', requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { firstName, lastName, email, phone, isActive, companyName, taxId, taxOffice, address, sector } = req.body;
+      const { firstName, lastName, email, phone, isActive, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes } = req.body;
       const existing = await db.select().from(users).where(eq(users.id, id)).limit(1);
       if (existing.length === 0 || existing[0].roleType !== 'customer') return res.status(404).json({ error: 'Müşteri bulunamadı' });
 
@@ -2014,6 +2057,30 @@ async function startServer() {
       if (phone !== undefined) userUpdates.phone = phone;
       if (isActive !== undefined) userUpdates.isActive = isActive;
       if (Object.keys(userUpdates).length > 0) await db.update(users).set(userUpdates).where(eq(users.id, id));
+
+      const customerUpdates: any = {};
+      if (accountCode !== undefined) customerUpdates.accountCode = accountCode;
+      if (balance !== undefined) customerUpdates.balance = balance?.toString() || '0.00';
+      if (creditLimit !== undefined) customerUpdates.creditLimit = creditLimit?.toString() || '0.00';
+      if (notes !== undefined) customerUpdates.notes = notes;
+      if (isActive !== undefined) customerUpdates.isActive = isActive;
+      if (Object.keys(customerUpdates).length > 0) {
+        const existingCustomer = await db.select().from(customers).where(eq(customers.userId, id)).limit(1);
+        if (existingCustomer.length > 0) {
+          await db.update(customers).set(customerUpdates).where(eq(customers.userId, id));
+        } else {
+          await db.insert(customers).values({
+            tenantId: 1,
+            userId: id,
+            companyId: existing[0].companyId || null,
+            accountCode: accountCode || `MUS-${String(id).padStart(5, '0')}`,
+            balance: balance?.toString() || '0.00',
+            creditLimit: creditLimit?.toString() || '0.00',
+            notes: notes || null,
+            isActive: isActive !== false,
+          });
+        }
+      }
 
       const companyUpdates: any = {};
       if (companyName !== undefined) companyUpdates.name = companyName;
@@ -2037,9 +2104,19 @@ async function startServer() {
             ...companyUpdates,
           });
           await db.update(users).set({ companyId: (insertedCompany[0] as any).insertId }).where(eq(users.id, id));
+          await db.update(customers).set({ companyId: (insertedCompany[0] as any).insertId }).where(eq(customers.userId, id));
         }
       }
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/customers/migrate-from-users', requireAdmin, async (req, res) => {
+    try {
+      const migrated = await ensureCustomerRowsFromUsers();
+      res.json({ success: true, migrated });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

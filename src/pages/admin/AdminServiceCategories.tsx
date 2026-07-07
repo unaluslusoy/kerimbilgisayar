@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, ToggleLeft, ToggleRight, X, Trash2 } from 'lucide-react';
 import { adminRequest } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import LucideIconPicker from '../../components/admin/LucideIconPicker';
 
 const defaultForm = {
   name: '',
@@ -241,14 +242,8 @@ export default function AdminServiceCategories() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">İkon Adı (Lucide)</label>
-                  <input
-                    type="text"
-                    value={form.icon}
-                    onChange={e => setForm({ ...form, icon: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                    placeholder="Örn: Server, Code, Video"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">lucide-react kütüphanesinden ikon adı giriniz.</p>
+                  <LucideIconPicker value={form.icon} onChange={icon => setForm({ ...form, icon })} />
+                  <p className="text-xs text-gray-500 mt-1">Lucide ikonlarını arayıp listeden seçebilirsiniz.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Görünüm Sırası</label>
