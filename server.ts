@@ -2702,7 +2702,7 @@ async function startServer() {
         .filter(Boolean);
       
       // Fetch dynamic pages
-      const allPages = await db.select().from(pages).where(eq(pages.isPublished, true));
+      const allPages = await db.select().from(pages).where(eq(pages.status, 'yayinlandi'));
       const allServices = await db.select().from(services);
       const allBlogPosts = await db.select().from(blogPosts).where(eq(blogPosts.status, 'published'));
       
