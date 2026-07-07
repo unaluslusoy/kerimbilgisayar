@@ -36,7 +36,7 @@ export default function MaintenancePage() {
       <header className="relative z-10 py-6 px-6">
         <div className="max-w-6xl mx-auto flex justify-center">
           <img
-            src="https://kerimbilgisayar.com/assets/images/kerim-logo.svg"
+            src="/assets/images/kerim-logo.svg"
             alt="Kerim Bilgisayar"
             className="h-14 sm:h-16 w-auto object-contain"
           />

@@ -158,6 +158,8 @@ export default function PublicLayout() {
   const contactEmail = settings?.contactEmail || settings?.contact_email || '';
   const contactAddress = settings?.contactAddress || settings?.contact_address || '';
   const siteTitle = settings?.site_title || 'Kerim Bilgisayar';
+  const headerLogo = settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo.svg';
+  const footerLogo = settings?.footerLogo || settings?.siteLogoWhite || settings?.logoUrl || settings?.siteLogo || '/assets/images/kerim-logo-beyaz.svg';
 
   if (activePlugins.includes('maintenance-mode')) {
     return (
@@ -224,7 +226,7 @@ export default function PublicLayout() {
             {/* Logo */}
             <Link to="/" className="shrink-0 py-2">
               <img
-                src="https://kerimbilgisayar.com/assets/images/kerim-logo.svg"
+                src={headerLogo}
                 alt={siteTitle}
                 className="h-[62px] lg:h-[80px] w-auto object-contain drop-shadow-sm"
               />
@@ -323,7 +325,7 @@ export default function PublicLayout() {
           {/* Brand Column */}
           <div className="sm:col-span-2 lg:col-span-2">
             <Link to="/" className="flex items-center space-x-2 mb-5">
-              <img src="https://kerimbilgisayar.com/assets/images/kerim-logo-beyaz.svg" alt={siteTitle} className="h-12 sm:h-14 w-auto object-contain" />
+              <img src={footerLogo} alt={siteTitle} className="h-12 sm:h-14 w-auto object-contain" />
             </Link>
             <p className="text-gray-400 mb-6 max-w-sm text-sm leading-relaxed">
               {settings.siteTagline || 'Bireysel ve kurumsal IT altyapı çözümleri, proaktif bakım anlaşmaları, sistem entegrasyonu ve siber güvenlik hizmetleri.'}

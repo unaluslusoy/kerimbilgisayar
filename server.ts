@@ -124,8 +124,8 @@ async function startServer() {
 
   app.use(express.json());
   
-  // Uploads directory static serving
-  app.use('/uploads', express.static(path.join(rootDir, 'uploads')));
+  // Uploads directory static serving. Missing files must not fall through to the SPA shell.
+  app.use('/uploads', express.static(path.join(rootDir, 'uploads'), { fallthrough: false }));
 
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
