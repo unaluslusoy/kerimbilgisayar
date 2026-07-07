@@ -2702,7 +2702,7 @@ Sitemap: https://kerimbilgisayar.com/sitemap.xml`;
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath, { index: false }));
-    app.get('*all', async (req, res) => {
+    app.get('*', async (req, res) => {
       try {
         const htmlPath = path.join(distPath, 'index.html');
         let html = await fs.promises.readFile(htmlPath, 'utf8');
