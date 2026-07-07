@@ -1,22 +1,35 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Wrench, Users, Box, MessageSquare, Settings, LogOut,
-  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout
+  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { adminRequest } from '../lib/api';
 
 export default function AdminLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
+  const [isGoogleBusinessActive, setIsGoogleBusinessActive] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      adminRequest('/api/admin/plugins')
+        .then((plugins) => {
+          const gmb = plugins?.find((p: any) => p.pluginId === 'google-business');
+          setIsGoogleBusinessActive(!!gmb?.isActive);
+        })
+        .catch(console.error);
+    }
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return <Navigate to="/admin/login" replace />;
   }
 
-  const navItems = [
+  let navItems: any[] = [
     { name: 'Başlangıç', path: '/admin', icon: LayoutDashboard },
     { name: 'Servis Kayıtları', path: '/admin/servis', icon: Wrench },
     { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
@@ -39,13 +52,23 @@ export default function AdminLayout() {
     { name: 'Özelleştir', path: '/admin/ozellestir', icon: Layout },
     { name: 'Temalar', path: '/admin/temalar', icon: Palette },
     { name: 'Menüler', path: '/admin/menuler', icon: Menu },
-    { separator: true, name: 'Sistem' },
+    { name: 'Sistem', separator: true },
     { name: 'API Anahtarları', path: '/admin/api-anahtarlari', icon: Key },
     { name: 'Webhooks', path: '/admin/webhooks', icon: Webhook },
     { name: 'Eklentiler', path: '/admin/eklentiler', icon: Puzzle },
     { name: 'Dil Yönetimi', path: '/admin/diller', icon: BookOpen },
     { name: 'Ayarlar', path: '/admin/ayarlar', icon: Settings },
   ];
+
+  if (isGoogleBusinessActive) {
+    navItems = navItems.concat([
+      { name: 'Google İşletme', separator: true },
+      { name: 'Yayınlar (Posts)', path: '/admin/google/posts', icon: Megaphone as any },
+      { name: 'Yorumlar', path: '/admin/google/reviews', icon: MessageSquareQuote as any },
+      { name: 'İşletme Bilgileri', path: '/admin/google/info', icon: Store as any },
+      { name: 'İstatistikler', path: '/admin/google/insights', icon: BarChart3 as any },
+    ] as any);
+  }
 
   return (
     <div className="admin-panel min-h-screen flex flex-col font-sans text-[#3c434a] bg-[#f0f0f1]">

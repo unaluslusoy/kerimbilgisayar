@@ -43,13 +43,13 @@ async function seedMenus() {
   await db.insert(menuItems).values([
     // Kurumsal
     { tenantId: 1, menuId: hId, parentId: kurumsalId, title: 'Hakkımızda', url: '/hakkimizda', displayOrder: 1 },
-    { tenantId: 1, menuId: hId, parentId: kurumsalId, title: 'Vizyon & Misyon', url: '/hakkimizda', displayOrder: 2 },
+    { tenantId: 1, menuId: hId, parentId: kurumsalId, title: 'Vizyon & Misyon', url: '/hakkimizda#vizyon-misyon', displayOrder: 2 },
     { tenantId: 1, menuId: hId, parentId: kurumsalId, title: 'S.S.S.', url: '/sss', displayOrder: 3 },
     
     // Çözümlerimiz
-    { tenantId: 1, menuId: hId, parentId: cozumlerId, title: 'Yönetim Bilişim Sistemleri', url: '/hizmetler', displayOrder: 1 },
-    { tenantId: 1, menuId: hId, parentId: cozumlerId, title: 'Ağ ve Siber Güvenlik', url: '/hizmetler', displayOrder: 2 },
-    { tenantId: 1, menuId: hId, parentId: cozumlerId, title: 'Sunucu ve Bulut Çözümleri', url: '/hizmetler', displayOrder: 3 },
+    { tenantId: 1, menuId: hId, parentId: cozumlerId, title: 'Yönetim Bilişim Sistemleri', url: '/hizmetler#ozel-yazilim-gelistirme', displayOrder: 1 },
+    { tenantId: 1, menuId: hId, parentId: cozumlerId, title: 'Ağ ve Siber Güvenlik', url: '/hizmetler#guvenlik-cozumleri', displayOrder: 2 },
+    { tenantId: 1, menuId: hId, parentId: cozumlerId, title: 'Sunucu ve Bulut Çözümleri', url: '/hizmetler#kurumsal-it-hizmetleri', displayOrder: 3 },
 
     // Medya & Blog
     { tenantId: 1, menuId: hId, parentId: medyaId, title: 'Teknoloji Blogu', url: '/blog', displayOrder: 1 },

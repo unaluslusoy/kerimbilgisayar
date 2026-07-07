@@ -99,7 +99,7 @@ export default function Contact() {
           <div className="md:w-1/2 flex justify-center md:justify-start mb-8 md:mb-0 relative z-10">
             {/* Banner Image Placeholder with some decorative circles */}
             <div className="w-48 h-48 bg-white/20 rounded-full flex items-center justify-center p-4">
-              <img src={mediaUrl(settings?.contactBannerImage) || "https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&q=80&w=400"} alt="Destek" className="w-full h-full object-cover rounded-full shadow-lg" />
+              <img src={mediaUrl(settings?.contactBannerImage || "https://images.unsplash.com/photo-1573164713988-8665fc963095", 400)} alt="Destek" className="w-full h-full object-cover rounded-full shadow-lg" />
             </div>
           </div>
           <div className="md:w-1/2 text-white relative z-10 md:pl-10">
@@ -114,13 +114,13 @@ export default function Contact() {
                 onClick={() => setIsModalOpen(true)}
                 className="bg-white text-[#63b956] hover:bg-gray-50 px-8 py-3.5 rounded-full font-bold transition-colors flex items-center shadow-md"
               >
-                Formu doldur <ArrowRight className="w-5 h-5 ml-2" />
+                {settings?.contactBannerBtnText || 'Formu doldur'} <ArrowRight className="w-5 h-5 ml-2" />
               </button>
               <a 
-                href="tel:08508335646" 
+                href={`tel:${settings?.contactPhone?.replace(/[^0-9+]/g, '') || '08508335646'}`}
                 className="bg-white text-gray-900 hover:bg-gray-50 px-8 py-3.5 rounded-full font-bold transition-colors flex items-center shadow-md"
               >
-                <Phone className="w-5 h-5 mr-2 text-gray-500" /> 0850 833 56 46
+                <Phone className="w-5 h-5 mr-2 text-gray-500" /> {settings?.contactPhone || '0850 833 56 46'}
               </a>
             </div>
           </div>

@@ -46,7 +46,7 @@ export default function About() {
             <div className="lg:w-1/2">
               <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-gray-100 sticky top-24">
                 <img 
-                  src={mediaUrl(settings?.aboutImage) || "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800"} 
+                  src={mediaUrl(settings?.aboutImage || "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158", 800)} 
                   alt={page?.title || "Hakkımızda"} 
                   className="w-full object-cover aspect-video sm:aspect-square"
                 />
@@ -82,7 +82,7 @@ export default function About() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-16">
+          <div id="vizyon-misyon" className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-16 scroll-mt-28">
             <div className="bg-gray-50 border border-gray-100 rounded-theme p-8 shadow-sm">
               <div className="w-12 h-12 bg-white rounded-theme border border-gray-200 shadow-sm flex items-center justify-center mb-5">
                 <Target className="w-6 h-6 text-primary" />

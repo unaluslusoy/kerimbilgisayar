@@ -18,8 +18,17 @@ declare global {
 export default function TurnstileWidget({ siteKey, enabled, onVerify }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const hasBypassedRef = useRef(false);
 
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      if (!hasBypassedRef.current) {
+        hasBypassedRef.current = true;
+        onVerify('dev-dummy-token');
+      }
+      return;
+    }
+
     if (!enabled || !siteKey || !containerRef.current) return;
 
     const renderWidget = () => {
@@ -50,6 +59,7 @@ export default function TurnstileWidget({ siteKey, enabled, onVerify }: Turnstil
     };
   }, [enabled, onVerify, siteKey]);
 
+  if (import.meta.env.DEV) return null;
   if (!enabled || !siteKey) return null;
 
   return <div ref={containerRef} className="cf-turnstile" />;

@@ -98,7 +98,7 @@ export default function BlogPost() {
       <article className="max-w-4xl mx-auto px-4 py-16 flex flex-col md:flex-row gap-12">
         <div className="md:w-3/4 prose prose-lg prose-gray max-w-none prose-headings:text-gray-900 prose-a:text-primary hover:prose-a:text-secondary prose-img:rounded-theme text-justify leading-relaxed">
           <img
-            src={mediaUrl(post.imageUrl) || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80'}
+            src={mediaUrl(post.imageUrl || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b', 1000)}
             alt={post.title}
             className="w-full rounded-3xl object-cover aspect-video mb-10 shadow-lg border border-gray-100"
             loading="lazy"

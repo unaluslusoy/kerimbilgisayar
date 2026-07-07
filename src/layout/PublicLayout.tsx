@@ -98,6 +98,7 @@ export default function PublicLayout() {
   const [footerBottomItems, setFooterBottomItems] = useState<any[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [activePlugins, setActivePlugins] = useState<string[]>([]);
+  const [googleRating, setGoogleRating] = useState<any>(null);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -150,6 +151,19 @@ export default function PublicLayout() {
       .then(data => { if (Array.isArray(data)) setActivePlugins(data); })
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (activePlugins.includes('google-business')) {
+      fetch('/api/public/google-business')
+        .then(res => res.json())
+        .then(data => {
+          if (!data.error && data.rating) {
+            setGoogleRating(data);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [activePlugins]);
 
   const isActive = useCallback((path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -356,11 +370,16 @@ export default function PublicLayout() {
             <p className="text-gray-400 mb-6 max-w-sm text-sm leading-relaxed">
               {settings.siteTagline || 'Bireysel ve kurumsal IT altyapı çözümleri, proaktif bakım anlaşmaları, sistem entegrasyonu ve siber güvenlik hizmetleri.'}
             </p>
-            {activePlugins.includes('google-business') && (
-              <div className="flex items-center gap-3 text-sm text-gray-300 font-medium mb-6 bg-gray-800 p-3 rounded-theme border border-gray-700 inline-flex">
+            {activePlugins.includes('google-business') && googleRating && (
+              <a href={googleRating.url || "#"} target="_blank" rel="noreferrer" className="flex items-center gap-3 text-sm text-gray-300 font-medium mb-6 bg-gray-800 hover:bg-gray-750 p-3 rounded-theme border border-gray-700 inline-flex transition-colors group">
                 <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google" className="w-5 h-5" />
-                <span>Google İşletme Puanı: <strong className="text-white ml-1">4.9/5.0</strong></span>
-              </div>
+                <div className="flex flex-col">
+                  <span>Google İşletme Puanı: <strong className="text-white ml-1">{googleRating.rating}/5.0</strong></span>
+                  <span className="text-xs text-gray-400 font-normal group-hover:text-gray-300 transition-colors">
+                    {googleRating.user_ratings_total} değerlendirme
+                  </span>
+                </div>
+              </a>
             )}
             {/* Social Icons */}
             <div className="flex space-x-3">

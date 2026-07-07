@@ -5,6 +5,7 @@ import multer from 'multer';
 import fs from 'fs';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
+import { google } from 'googleapis';
 
 const rootDir = process.cwd();
 import { 
@@ -67,6 +68,27 @@ function nullableInt(value: unknown): number | null {
   return Number.isFinite(normalized) ? normalized : null;
 }
 
+function generateSlug(text: string): string {
+  const mapping: Record<string, string> = {
+    'ç': 'c', 'Ç': 'c',
+    'ğ': 'g', 'Ğ': 'g',
+    'ı': 'i', 'I': 'i', 'İ': 'i',
+    'ö': 'o', 'Ö': 'o',
+    'ş': 's', 'Ş': 's',
+    'ü': 'u', 'Ü': 'u'
+  };
+  let str = text || '';
+  Object.keys(mapping).forEach(key => {
+    str = str.replace(new RegExp(key, 'g'), mapping[key]);
+  });
+  return str.toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]/g, '')
+    .replace(/--+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+}
+
 async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | null): Promise<string> {
   if (!/^https?:\/\//i.test(sourceUrl)) return sourceUrl;
 
@@ -85,7 +107,7 @@ async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | n
   fs.mkdirSync(uploadsDir, { recursive: true });
   const parsedUrl = new URL(sourceUrl);
   const originalName = path.basename(parsedUrl.pathname) || 'remote-image';
-  const safeBase = path.parse(originalName).name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'remote-image';
+  const safeBase = generateSlug(path.parse(originalName).name) || 'remote-image';
   const fileName = `${Date.now()}-${safeBase}.webp`;
   const filePath = path.join(uploadsDir, fileName);
 
@@ -232,6 +254,7 @@ async function startServer() {
   };
 
   const verifyTurnstile = async (req: express.Request) => {
+    if (process.env.NODE_ENV !== 'production') return true;
     const settingsMap = await readSettingsMap();
     if (settingsMap.captchaEnabled !== 'true') return true;
     const secret = settingsMap.turnstileSecretKey?.trim();
@@ -252,11 +275,13 @@ async function startServer() {
 
   app.use(async (req, res, next) => {
     try {
-      if (req.path.startsWith('/assets/') || req.path.startsWith('/uploads/')) return next();
+      if (req.path.startsWith('/assets/') || req.path.startsWith('/uploads/') || (process.env.NODE_ENV !== 'production' && (req.path.startsWith('/src/') || req.path.startsWith('/@')))) return next();
+
+      const ip = getClientIp(req);
+      if (ip === '127.0.0.1' || ip === '::1') return next();
 
       const settingsMap = await readSettingsMap();
 
-      const ip = getClientIp(req);
       const blocklist = parseList(settingsMap.securityIpBlocklist);
       const adminAllowlist = parseList(settingsMap.securityAdminIpAllowlist || settingsMap.securityIpAllowlist);
       const now = Date.now();
@@ -291,7 +316,13 @@ async function startServer() {
   });
   
   // Uploads directory static serving. Missing files must not fall through to the SPA shell.
-  app.use('/uploads', express.static(path.join(rootDir, 'uploads'), { fallthrough: false }));
+  app.use('/uploads', express.static(path.join(rootDir, 'uploads'), {
+    fallthrough: false,
+    maxAge: '30d',
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=2592000');
+    }
+  }));
 
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -485,6 +516,38 @@ async function startServer() {
       console.error('Plugins endpoint fallback used:', e?.message || e);
       res.setHeader('x-fallback-source', 'default-plugins');
       res.json([]);
+    }
+  });
+
+  app.get('/api/public/google-business', async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      if (!gmbPlugin.length || !gmbPlugin[0].isActive) {
+        return res.json({ error: 'Plugin not active' });
+      }
+      let pluginSettings = gmbPlugin[0].settings as any;
+      if (typeof pluginSettings === 'string') {
+        try { pluginSettings = JSON.parse(pluginSettings); } catch (e) { pluginSettings = {}; }
+      }
+      if (!pluginSettings || !pluginSettings.tokens || !pluginSettings.selectedLocation) {
+        return res.json({ error: 'Settings not configured' });
+      }
+      
+      const oauth2Client = new google.auth.OAuth2(pluginSettings.clientId, pluginSettings.clientSecret);
+      oauth2Client.setCredentials(pluginSettings.tokens);
+      
+      const url = `https://mybusiness.googleapis.com/v4/${pluginSettings.selectedLocation}/reviews`;
+      const response = await oauth2Client.request({ url }).catch(() => ({ data: {} }));
+      const reviewsData = (response as any).data || {};
+      
+      res.json({
+        rating: reviewsData.averageRating || 5.0,
+        user_ratings_total: reviewsData.totalReviewCount || reviewsData.reviews?.length || 0,
+        reviews: reviewsData.reviews || [],
+        url: '#'
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -2149,7 +2212,7 @@ async function startServer() {
       const { name, slug, description, price, discountRate, billingCycle, features, isActive } = req.body;
       await db.insert(plans).values({
         name,
-        slug: slug || name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        slug: slug || generateSlug(name),
         description: description || null,
         price: (price || 0).toString(),
         discountRate: (discountRate || 0).toString(),
@@ -2242,7 +2305,7 @@ async function startServer() {
       const { title, slug, content, excerpt, imageUrl, status, metaTitle, metaDescription } = req.body;
       await db.insert(blogPosts).values({
         tenantId: 1,
-        title, slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        title, slug: slug || generateSlug(title),
         content, excerpt, imageUrl,
         status: status || 'taslak',
         metaTitle, metaDescription,
@@ -2295,7 +2358,7 @@ async function startServer() {
       await db.insert(campaigns).values({
         tenantId: 1,
         title, 
-        slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        slug: slug || generateSlug(title),
         description, imageUrl: localImageUrl,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
@@ -2485,7 +2548,7 @@ async function startServer() {
       await db.insert(pages).values({
         tenantId: 1,
         title,
-        slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        slug: slug || generateSlug(title),
         content,
         status: status || 'taslak',
         metaTitle,
@@ -2733,7 +2796,7 @@ async function startServer() {
         tenantId: 1,
         taxonomyId,
         name,
-        slug: name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        slug: generateSlug(name),
         description
       });
       res.json({ success: true });
@@ -3031,6 +3094,330 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/admin/plugins/:pluginId/settings', requireAdmin, async (req, res) => {
+    try {
+      const { pluginId } = req.params;
+      const existing = await db.select().from(plugins).where(eq(plugins.pluginId, pluginId)).limit(1);
+      if (existing.length > 0) {
+        await db.update(plugins).set({ settings: null, isActive: false }).where(eq(plugins.pluginId, pluginId));
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put('/api/admin/plugins/:pluginId/settings', requireAdmin, async (req, res) => {
+    try {
+      const { pluginId } = req.params;
+      const { settings: pluginSettings } = req.body;
+      const existing = await db.select().from(plugins).where(eq(plugins.pluginId, pluginId)).limit(1);
+      if (existing.length > 0) {
+        let oldSettings = existing[0].settings;
+        if (typeof oldSettings === 'string') {
+          try { oldSettings = JSON.parse(oldSettings); } catch (e) { oldSettings = {}; }
+        }
+        const mergedSettings = { ...(oldSettings as any || {}), ...pluginSettings };
+        await db.update(plugins).set({ settings: mergedSettings }).where(eq(plugins.pluginId, pluginId));
+      } else {
+        await db.insert(plugins).values({ tenantId: 1, pluginId, name: pluginId, isActive: false, settings: pluginSettings });
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/plugins/google-business/oauth/url', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.clientId || !settings.clientSecret) {
+        return res.status(400).json({ error: 'Client ID veya Secret eksik' });
+      }
+      
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const redirectUri = `${protocol}://${host}/api/admin/plugins/google-business/oauth/callback`;
+      const oauth2Client = new google.auth.OAuth2(
+        settings.clientId,
+        settings.clientSecret,
+        redirectUri
+      );
+      
+      const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: ['https://www.googleapis.com/auth/business.manage'],
+        prompt: 'consent'
+      });
+      
+      res.json({ url });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/plugins/google-business/oauth/callback', async (req, res) => {
+    try {
+      const { code } = req.query;
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const redirectUri = `${protocol}://${host}/api/admin/plugins/google-business/oauth/callback`;
+      const oauth2Client = new google.auth.OAuth2(
+        settings.clientId,
+        settings.clientSecret,
+        redirectUri
+      );
+      
+      const { tokens } = await oauth2Client.getToken(code as string);
+      const newSettings = { ...settings, tokens };
+      
+      await db.update(plugins).set({ settings: newSettings, isActive: true }).where(eq(plugins.pluginId, 'google-business'));
+      res.redirect('/admin/eklentiler?oauth=success');
+    } catch (e: any) {
+      console.error(e);
+      res.redirect('/admin/eklentiler?oauth=error');
+    }
+  });
+
+  app.get('/api/admin/plugins/google-business/locations', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens) return res.status(400).json({ error: 'Yetki verilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ url: 'https://mybusinessaccountmanagement.googleapis.com/v1/accounts' });
+      const accounts = (response.data as any).accounts || [];
+      
+      let allLocations: any[] = [];
+      for (const acc of accounts) {
+        const locRes = await oauth2Client.request({ url: `https://mybusinessbusinessinformation.googleapis.com/v1/${acc.name}/locations?readMask=name,title,storeCode` });
+        if ((locRes.data as any).locations) {
+          allLocations.push(...(locRes.data as any).locations);
+        }
+      }
+      res.json(allLocations);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/plugins/google-business/posts', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}/localPosts` });
+      const posts = (response.data as any).localPosts || [];
+      res.json(posts);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/plugins/google-business/posts', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ 
+        url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}/localPosts`,
+        method: 'POST',
+        data: req.body
+      });
+      
+      res.json(response.data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/plugins/google-business/reviews', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}/reviews` });
+      const reviews = (response.data as any).reviews || [];
+      res.json(reviews);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put('/api/admin/plugins/google-business/reviews/reply', requireAdmin, async (req, res) => {
+    try {
+      const { reviewName, comment } = req.body;
+      
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ 
+        url: `https://mybusiness.googleapis.com/v4/${reviewName}/reply`,
+        method: 'PUT',
+        data: { comment }
+      });
+      
+      res.json(response.data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/plugins/google-business/info', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ 
+        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${settings.selectedLocation}?readMask=title,profile,primaryPhone` 
+      });
+      res.json(response.data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/admin/plugins/google-business/info', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ 
+        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${settings.selectedLocation}?updateMask=profile,primaryPhone`,
+        method: 'PATCH',
+        data: req.body
+      });
+      res.json(response.data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/plugins/google-business/media', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const response = await oauth2Client.request({ 
+        url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}/media` 
+      });
+      const mediaItems = (response.data as any).mediaItems || [];
+      res.json(mediaItems);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/plugins/google-business/insights', requireAdmin, async (req, res) => {
+    try {
+      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+      let settings = gmbPlugin[0]?.settings as any || {};
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      }
+      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
+      oauth2Client.setCredentials(settings.tokens);
+      
+      const endTime = new Date();
+      const startTime = new Date();
+      startTime.setMonth(startTime.getMonth() - 6);
+
+      const response = await oauth2Client.request({ 
+        url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}:reportInsights`,
+        method: 'POST',
+        data: {
+          locationNames: [settings.selectedLocation],
+          basicRequest: {
+            metricRequests: [
+              { metric: "QUERIES_DIRECT" },
+              { metric: "QUERIES_INDIRECT" },
+              { metric: "VIEWS_MAPS" },
+              { metric: "VIEWS_SEARCH" },
+              { metric: "ACTIONS_WEBSITE" },
+              { metric: "ACTIONS_PHONE" },
+              { metric: "ACTIONS_DRIVING_DIRECTIONS" }
+            ],
+            timeRange: {
+              startTime: startTime.toISOString(),
+              endTime: endTime.toISOString()
+            }
+          }
+        }
+      });
+      res.json(response.data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+
   // ============================================================
   // EXTERNAL API (Secured via API Key)
   // ============================================================
@@ -3200,7 +3587,16 @@ Sitemap: ${baseUrl}/sitemap.xml`;
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath, { index: false }));
+    app.use(express.static(distPath, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.includes(path.join('dist', 'assets')) || filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+        }
+      }
+    }));
     app.get('*', async (req, res) => {
       try {
         const htmlPath = path.join(distPath, 'index.html');

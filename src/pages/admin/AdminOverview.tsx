@@ -3,7 +3,7 @@ import { ArrowUpRight, Wrench, Users, Inbox, Printer, Package, CheckCircle2, Mes
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchAdminStats, createBlogPost } from '../../lib/api';
 import { Link } from 'react-router-dom';
-import { cn } from '../../lib/utils';
+import { cn, generateSlug } from '../../lib/utils';
 
 const STATUS_COLORS_MAP: Record<string, string> = {
   'Yeni': '#10b981',
@@ -60,10 +60,7 @@ export default function AdminOverview() {
         title: draftTitle,
         content: draftContent || '',
         status: 'taslak',
-        slug: draftTitle.toLowerCase()
-          .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
-          .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
-          .replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+        slug: generateSlug(draftTitle),
       });
       setDraftTitle('');
       setDraftContent('');

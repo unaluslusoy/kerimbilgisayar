@@ -12,6 +12,7 @@ export default function AdminSettings() {
     contactEmail: '',
     contactPhone: '',
     contactAddress: '',
+    contactBannerBtnText: '',
     socialFacebook: '',
     socialTwitter: '',
     socialInstagram: '',
@@ -288,6 +289,10 @@ export default function AdminSettings() {
                     <div>
                       <label className={labelCls}>Banner Açıklaması</label>
                       <input type="text" value={settings.contactBannerDesc || ''} onChange={e => handleChange('contactBannerDesc', e.target.value)} className={inputCls} placeholder="İşletmenize uygun Yönetim Bilişim Sistemleri..." />
+                    </div>
+                    <div className="col-span-2">
+                      <label className={labelCls}>Banner Buton Metni (Call to Action)</label>
+                      <input type="text" value={settings.contactBannerBtnText || ''} onChange={e => handleChange('contactBannerBtnText', e.target.value)} className={inputCls} placeholder="Formu doldur" />
                     </div>
                   </div>
                   <div>

@@ -159,8 +159,63 @@ export default function AdminMedia() {
     return <FileIcon className="h-8 w-8 text-gray-400" />;
   };
 
+  const handleDragStart = (e: React.DragEvent, item: any) => {
+    e.dataTransfer.setData('mediaId', item.id.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolderId: number | null) => {
+    e.preventDefault();
+    const mediaIdStr = e.dataTransfer.getData('mediaId');
+    if (!mediaIdStr) return;
+    const mediaId = parseInt(mediaIdStr);
+    
+    try {
+      await adminRequest(`/api/admin/media/${mediaId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ folderId: targetFolderId })
+      });
+      await load();
+    } catch (err: any) {
+      alert('Taşıma başarısız: ' + err.message);
+    }
+  };
+
   const currentFolders = folders.filter(f => (f.parentId || null) === currentFolderId);
   const parentFolder = currentFolderId ? folders.find(f => f.id === currentFolderId) : null;
+
+  const renderFolderTree = (parentId: number | null, level = 0) => {
+    const children = folders.filter(f => f.parentId === parentId);
+    if (children.length === 0) return null;
+    return (
+      <div className={level > 0 ? 'pl-4 border-l border-gray-100 ml-2 mt-1 space-y-1' : 'mt-2 space-y-1 pl-4 border-l border-gray-100 ml-2'}>
+        {children.map(folder => (
+          <div key={folder.id}>
+            <div 
+              className={`flex items-center justify-between p-2 rounded cursor-pointer group ${currentFolderId === folder.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'}`}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, folder.id)}
+            >
+              <div className="flex items-center gap-2" onClick={() => setCurrentFolderId(folder.id)}>
+                <FolderIcon className="h-4 w-4" />
+                <span className="text-sm truncate max-w-[120px]">{folder.name}</span>
+              </div>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
+                className="text-gray-400 hover:text-red-600 hidden group-hover:block"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            {renderFolderTree(folder.id, level + 1)}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-[calc(100vh-100px)] gap-6">
@@ -194,32 +249,15 @@ export default function AdminMedia() {
 
           <div 
             onClick={() => setCurrentFolderId(null)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, null)}
             className={`flex items-center gap-2 p-2 rounded cursor-pointer ${currentFolderId === null ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'}`}
           >
             <FolderIcon className="h-4 w-4" />
             <span className="text-sm font-medium">Ana Dizin (Kök)</span>
           </div>
 
-          <div className="mt-2 space-y-1 pl-4 border-l border-gray-100 ml-2">
-            {folders.filter(f => f.parentId === null).map(folder => (
-              <div key={folder.id}>
-                <div 
-                  className={`flex items-center justify-between p-2 rounded cursor-pointer group ${currentFolderId === folder.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'}`}
-                >
-                  <div className="flex items-center gap-2" onClick={() => setCurrentFolderId(folder.id)}>
-                    <FolderIcon className="h-4 w-4" />
-                    <span className="text-sm">{folder.name}</span>
-                  </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
-                    className="text-gray-400 hover:text-red-600 hidden group-hover:block"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          {renderFolderTree(null)}
         </div>
       </div>
 
@@ -229,7 +267,12 @@ export default function AdminMedia() {
         <div className="p-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4 bg-gray-50">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             {currentFolderId && (
-              <button onClick={() => setCurrentFolderId(parentFolder?.parentId || null)} className="flex items-center gap-1 hover:text-blue-600">
+              <button 
+                onClick={() => setCurrentFolderId(parentFolder?.parentId || null)} 
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, parentFolder?.parentId || null)}
+                className="flex items-center gap-1 hover:text-blue-600 p-1 rounded hover:bg-blue-50 border border-transparent hover:border-blue-200"
+              >
                 <ArrowLeft className="h-4 w-4" /> Geri
               </button>
             )}
@@ -289,10 +332,21 @@ export default function AdminMedia() {
                 <div 
                   key={`folder-${folder.id}`} 
                   onClick={() => setCurrentFolderId(folder.id)}
-                  className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, folder.id)}
+                  className="relative group bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition-colors"
                 >
                   <FolderIcon className="h-10 w-10 text-blue-500" fill="currentColor" opacity={0.2} />
                   <span className="text-sm font-medium text-gray-700 text-center truncate w-full">{folder.name}</span>
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
+                      className="p-1.5 bg-white/90 backdrop-blur-sm rounded shadow-sm text-gray-600 hover:text-red-600"
+                      title="Sil"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
               ))}
 
@@ -300,6 +354,8 @@ export default function AdminMedia() {
               {media.map((item) => (
                 <div
                   key={item.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item)}
                   className={`relative group bg-white border rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition-shadow ${selectedItem?.id === item.id ? 'ring-2 ring-blue-500 border-transparent' : 'border-gray-200'}`}
                   onClick={() => handleOpenDetails(item)}
                 >

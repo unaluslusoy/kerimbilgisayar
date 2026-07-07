@@ -20,6 +20,7 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
+    "googleapis": "^173.0.0",
     "i18next": "^26.3.4",
     "i18next-browser-languagedetector": "^8.2.1",
     "i18next-http-backend": "^4.0.0",
