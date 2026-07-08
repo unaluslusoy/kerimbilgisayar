@@ -394,7 +394,23 @@ async function startServer() {
 
   app.use(cors({
     origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      if (!origin) return cb(null, true);
+
+      let appOrigin = '';
+      if (process.env.APP_URL) {
+        try {
+          appOrigin = new URL(process.env.APP_URL).origin;
+        } catch {}
+      }
+
+      if (
+        allowedOrigins.includes(origin) ||
+        origin === 'https://kerimbilgisayar.com' ||
+        origin === 'http://kerimbilgisayar.com' ||
+        (appOrigin && origin === appOrigin)
+      ) {
+        return cb(null, true);
+      }
       cb(new Error('CORS: izinsiz origin'));
     },
     credentials: true,
