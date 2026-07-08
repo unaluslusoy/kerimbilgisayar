@@ -266,7 +266,7 @@ export default function ServiceManager() {
                     <span className="font-mono text-xs font-bold text-gray-400">{ticket.ticketNumber}</span>
                     <div className="flex items-center gap-2">
                       {ticket.status === 'musteri_onaji_bekliyor' && (
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" title="Müşteri onayı bekleniyor" />
+                        <span title="Müşteri onayı bekleniyor"><AlertCircle className="w-3.5 h-3.5 text-amber-500" /></span>
                       )}
                       <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-bold", STATUS_COLORS[ticket.status || 'yeni'])}>
                         {STATUS_LABELS[ticket.status || 'yeni']}

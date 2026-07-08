@@ -1,3 +1,24 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// GLOBAL PROCESS GUARDS — sistem çökse bile nedeni görünür kalsın
+// ═══════════════════════════════════════════════════════════════════════════
+process.on('uncaughtException', (err) => {
+  console.error('\n💥 [FATAL] uncaughtException:', err);
+  console.error('Stack:', err.stack);
+  // Prod'da graceful exit; dev'de proces canlı kalsın ki hata terminale yazılsın
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('\n💥 [FATAL] unhandledRejection:', reason);
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+});
+
+console.log('┌─────────────────────────────────────────────');
+console.log('│ 🚀 Kerim Bilgisayar Server — boot başlıyor');
+console.log('│ Node:', process.version, '| PID:', process.pid);
+console.log('│ CWD :', process.cwd());
+console.log('│ ENV :', process.env.NODE_ENV || 'development');
+console.log('└─────────────────────────────────────────────');
+
 import express from 'express';
 import path from 'path';
 import { db } from './src/db/index';
@@ -6,6 +27,10 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
+import bcrypt from 'bcryptjs';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 
 const rootDir = process.cwd();
 import { 
@@ -47,10 +72,15 @@ import {
   translations,
   pageBlocks,
   mediaFolders,
-  serviceCategories
+  serviceCategories,
+  sales,
+  saleItems,
+  stockMovements,
+  serializedItems
 } from './src/db/schema';
 
 import { eq, desc, and, sql, asc, like } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/mysql-core';
 import crypto from 'crypto';
 import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
 
@@ -89,8 +119,39 @@ function generateSlug(text: string): string {
     .replace(/-+$/, '');
 }
 
+// SSRF koruması: özel/loopback/link-local IP ve http(s) dışı şemaları reddet
+function assertSafeRemoteUrl(rawUrl: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error('Geçersiz URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Yalnızca http/https destekleniyor');
+  }
+  const host = parsed.hostname.toLowerCase();
+  const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'metadata.google.internal'];
+  if (blockedHosts.includes(host)) throw new Error('Bu adrese erişim engellendi');
+  // IPv4 özel/loopback/link-local aralıkları
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [parseInt(m[1]), parseInt(m[2])];
+    const isPrivate =
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168);
+    if (isPrivate) throw new Error('Özel ağ adreslerine erişim engellendi');
+  }
+  return parsed;
+}
+
 async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | null): Promise<string> {
   if (!/^https?:\/\//i.test(sourceUrl)) return sourceUrl;
+
+  assertSafeRemoteUrl(sourceUrl);
 
   const existing = await db.select().from(mediaLibrary).where(eq(mediaLibrary.description, `remote:${sourceUrl}`)).limit(1);
   if (existing.length > 0) return existing[0].fileUrl;
@@ -163,6 +224,22 @@ function generateToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// ─── ŞİFRE GÜVENLİĞİ ──────────────────────────────────────────────
+const SALT_ROUNDS = 12;
+async function hashPassword(raw: string): Promise<string> {
+  return bcrypt.hash(raw, SALT_ROUNDS);
+}
+// Bcrypt hash'i düz metinden ayırt eder ($2a/$2b/$2y ön eki)
+function isBcryptHash(value?: string | null): boolean {
+  return !!value && /^\$2[aby]\$/.test(value);
+}
+// Geriye dönük uyumlu doğrulama: hash varsa bcrypt, (eski) düz metinse doğrudan karşılaştır
+async function verifyPassword(raw: string, stored?: string | null): Promise<boolean> {
+  if (!stored) return false;
+  if (isBcryptHash(stored)) return bcrypt.compare(raw, stored);
+  return raw === stored; // eski düz-metin kayıtlar için tek seferlik geçiş
+}
+
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -175,6 +252,18 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
   }
   (req as any).adminUser = session;
   next();
+}
+
+// Rol tabanlı yetkilendirme — requireAdmin'den SONRA zincirlenir.
+// Örn: app.post('/api/admin/users', requireAdmin, requireRole('superadmin','tenant_admin'), handler)
+function requireRole(...roles: string[]) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const session = (req as any).adminUser;
+    if (!session || !roles.includes(session.role)) {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+    }
+    next();
+  };
 }
 
 function requireCustomer(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -225,13 +314,112 @@ async function requireApiKey(req: express.Request, res: express.Response, next: 
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// DB WARM-UP — startup'ta gerçek bağlantı testi
+// ═══════════════════════════════════════════════════════════════════════════
+let dbHealthy = false;
+let dbLastError: string | null = null;
+
+async function warmUpDatabase() {
+  const t0 = Date.now();
+  try {
+    // Drizzle üzerinden basit ping
+    await db.execute(sql`SELECT 1 as ping`);
+    dbHealthy = true;
+    dbLastError = null;
+    console.log(`✓ DB bağlantısı OK (${Date.now() - t0}ms)`);
+  } catch (err: any) {
+    dbHealthy = false;
+    dbLastError = err?.message || String(err);
+    console.error(`✗ DB bağlantısı BAŞARISIZ: ${dbLastError}`);
+    console.error('   → .env dosyasında DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME var mı?');
+    console.error('   → MySQL servisi çalışıyor mu? (XAMPP Control Panel → MySQL: Start)');
+  }
+}
+
+// DB'yi arka planda tekrar dene (fail olsa bile server ayakta kalsın)
+async function keepDbAlive() {
+  await warmUpDatabase();
+  setInterval(async () => {
+    try {
+      await db.execute(sql`SELECT 1`);
+      if (!dbHealthy) console.log('✓ DB bağlantısı geri geldi');
+      dbHealthy = true;
+      dbLastError = null;
+    } catch (err: any) {
+      if (dbHealthy) console.warn('⚠ DB bağlantısı düştü:', err?.message);
+      dbHealthy = false;
+      dbLastError = err?.message || String(err);
+    }
+  }, 30_000).unref();
+}
+
 async function startServer() {
+  console.log('[boot] startServer başladı');
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   const requestCounters = new Map<string, { count: number; startedAt: number }>();
   const autoBlockedIps = new Map<string, number>();
 
-  app.use(express.json());
+  app.use(express.json({ limit: '2mb' }));
+
+  // ─── HEALTH ENDPOINTS — middleware'lerden ÖNCE mount et ki her zaman erişilebilsin
+  app.get('/api/health', (_req, res) => {
+    res.status(dbHealthy ? 200 : 503).json({
+      status: dbHealthy ? 'ok' : 'degraded',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      db: dbHealthy ? 'up' : 'down',
+      dbError: dbLastError,
+      pid: process.pid,
+      node: process.version,
+    });
+  });
+  app.get('/api/ping', (_req, res) => res.type('text').send('pong'));
+
+  // DB'yi arka planda ısıt (blocking değil)
+  keepDbAlive().catch(err => console.error('[boot] DB warm-up error:', err));
+
+  // --- SECURITY MIDDLEWARE ---
+  const isDev = process.env.NODE_ENV !== 'production';
+  console.log(`[boot] mode: ${isDev ? 'DEVELOPMENT' : 'PRODUCTION'} | port: ${PORT}`);
+
+  app.use(helmet({
+    contentSecurityPolicy: false,       // CSP frontend (Vite/React) tarafından yönetilir
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
+    .split(',').map(o => o.trim()).filter(Boolean);
+
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error('CORS: izinsiz origin'));
+    },
+    credentials: true,
+  }));
+
+  const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
+
+  // Dev mode: Vite middleware embed (SPA + HMR aynı port'ta)
+  let viteMiddleware: any = null;
+  if (isDev) {
+    console.log('[boot] Vite dev middleware yükleniyor...');
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'custom',
+      });
+      viteMiddleware = vite;
+      app.use(vite.middlewares);
+      console.log('✓ Vite middleware hazır');
+    } catch (err: any) {
+      console.error('✗ Vite middleware yüklenemedi:', err.message);
+      console.error('   → Build edilmiş dist/ kullanılacak (yoksa 500 dönecek)');
+    }
+  }
 
   const parseList = (value?: string) => (value || '')
     .split(/[\n,]/)
@@ -337,6 +525,11 @@ async function startServer() {
   });
   const upload = multer({ storage });
 
+  // Chrome DevTools JSON endpoint — CSP hatasını önler
+  app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
+    res.json([]);
+  });
+
   // --- HEALTH ---
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'API is running' });
@@ -358,12 +551,12 @@ async function startServer() {
       // Search services
       const servicesResults = await db.select({
         id: services.id,
-        title: services.title,
-        slug: services.slug,
-        shortDesc: services.shortDescription,
+        title: services.name,
+        slug: sql<string>`CAST(${services.id} AS CHAR)`,
+        shortDesc: services.description,
         type: sql<string>`'service'`
       }).from(services)
-        .where(like(services.title, searchTerm))
+        .where(like(services.name, searchTerm))
         .limit(5);
 
       // Search blog posts
@@ -376,7 +569,7 @@ async function startServer() {
       }).from(blogPosts)
         .where(
           and(
-            eq(blogPosts.status, 'published'),
+            eq(blogPosts.status, 'yayinlandi'),
             like(blogPosts.title, searchTerm)
           )
         )
@@ -392,7 +585,7 @@ async function startServer() {
       }).from(pages)
         .where(
           and(
-            eq(pages.status, 'published'),
+            eq(pages.status, 'yayinlandi'),
             like(pages.title, searchTerm)
           )
         )
@@ -569,7 +762,12 @@ async function startServer() {
       if (pageResult.length === 0) return res.status(404).json({ error: 'Sayfa bulunamadı' });
       if (pageResult[0].status !== 'yayinlandi') return res.status(404).json({ error: 'Sayfa bulunamadı' });
       
-      const blocks = await db.select().from(pageBlocks).where(eq(pageBlocks.pageId, pageResult[0].id)).orderBy(asc(pageBlocks.displayOrder));
+      const blocks = await db.select().from(pageBlocks).where(
+        and(
+          eq(pageBlocks.ownerType, 'page'),
+          eq(pageBlocks.ownerId, pageResult[0].id)
+        )
+      ).orderBy(asc(pageBlocks.sortOrder));
       res.json(blocks);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -599,7 +797,7 @@ async function startServer() {
   // CUSTOMER API
   // ============================================================
 
-  app.post('/api/customer/register', async (req, res) => {
+  app.post('/api/customer/register', loginLimiter, async (req, res) => {
     try {
       const { firstName, lastName, email, phone, password } = req.body;
       if (!firstName || !email || !password) {
@@ -610,7 +808,7 @@ async function startServer() {
       if (existing.length > 0) {
         // If a user with this email exists but has no password (e.g. from lead form)
         if (!existing[0].passwordHash) {
-          await db.update(users).set({ passwordHash: password, firstName, lastName, phone }).where(eq(users.id, existing[0].id));
+          await db.update(users).set({ passwordHash: await hashPassword(password), firstName, lastName, phone }).where(eq(users.id, existing[0].id));
           return res.json({ success: true });
         }
         return res.status(400).json({ error: 'Bu e-posta zaten kullanımda' });
@@ -619,7 +817,7 @@ async function startServer() {
       await db.insert(users).values({
         tenantId: 1,
         firstName, lastName, email, phone,
-        passwordHash: password,
+        passwordHash: await hashPassword(password),
         roleType: 'customer',
         isActive: true,
       });
@@ -630,7 +828,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/customer/login', async (req, res) => {
+  app.post('/api/customer/login', loginLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
       const userRes = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -639,8 +837,8 @@ async function startServer() {
       
       const u = userRes[0];
       if (u.roleType !== 'customer') return res.status(403).json({ error: 'Bu alana sadece müşteriler girebilir' });
-      
-      if (u.passwordHash !== password) return res.status(401).json({ error: 'Şifre hatalı' });
+
+      if (!(await verifyPassword(password, u.passwordHash))) return res.status(401).json({ error: 'Kullanıcı bulunamadı veya şifre hatalı' });
 
       const token = generateToken();
       const sessionData = { userId: u.id, email: u.email, name: `${u.firstName} ${u.lastName}`, role: 'customer' };
@@ -956,7 +1154,7 @@ async function startServer() {
   // ADMIN AUTH
   // ============================================================
 
-  app.post('/api/admin/login', async (req, res) => {
+  app.post('/api/admin/login', loginLimiter, async (req, res) => {
     try {
       if (!(await verifyTurnstile(req))) return res.status(400).json({ error: 'Captcha doğrulaması başarısız' });
       const { email, password } = req.body;
@@ -980,9 +1178,7 @@ async function startServer() {
         return res.status(403).json({ error: 'Bu hesabın panel erişimi yok' });
       }
 
-      // Simple password check (plain text for demo — in production use bcrypt)
-      // Accept 'admin123' as default password if no hash stored, OR compare stored hash
-      const isValid = u.passwordHash === password || (!u.passwordHash && password === 'admin123');
+      const isValid = await verifyPassword(password, u.passwordHash);
       if (!isValid) {
         return res.status(401).json({ error: 'E-posta veya şifre hatalı' });
       }
@@ -1128,7 +1324,7 @@ async function startServer() {
   // ADMIN API (i18n TRANSLATIONS)
   // ============================================================
   
-  app.get('/api/admin/languages', async (req, res) => {
+  app.get('/api/admin/languages', requireAdmin, async (req, res) => {
     try {
       const allLangs = await db.select().from(languages);
       res.json(allLangs);
@@ -1137,7 +1333,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/languages', async (req, res) => {
+  app.post('/api/admin/languages', requireAdmin, async (req, res) => {
     try {
       const { code, name, isDefault, isActive } = req.body;
       const result = await db.insert(languages).values({ code, name, isDefault, isActive });
@@ -1147,7 +1343,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/admin/translations', async (req, res) => {
+  app.get('/api/admin/translations', requireAdmin, async (req, res) => {
     try {
       const allTrans = await db.select().from(translations);
       res.json(allTrans);
@@ -1156,7 +1352,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/translations', async (req, res) => {
+  app.post('/api/admin/translations', requireAdmin, async (req, res) => {
     try {
       const { langCode, translations: updates } = req.body; // updates: Record<string, string>
       
@@ -1436,9 +1632,14 @@ async function startServer() {
       const items = await db.select({
         id: stockItems.id,
         sku: stockItems.sku,
+        barcode: stockItems.barcode,
         name: stockItems.name,
         description: stockItems.description,
         brand: stockItems.brand,
+        model: stockItems.model,
+        unit: stockItems.unit,
+        vatRate: stockItems.vatRate,
+        imageUrl: stockItems.imageUrl,
         costPrice: stockItems.costPrice,
         sellingPrice: stockItems.sellingPrice,
         currentStock: stockItems.currentStock,
@@ -1457,18 +1658,23 @@ async function startServer() {
 
   app.post('/api/admin/stock', requireAdmin, async (req, res) => {
     try {
-      const { sku, name, description, brand, costPrice, sellingPrice, currentStock, minStockLevel, categoryId } = req.body;
+      const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId } = req.body;
       await db.insert(stockItems).values({
         tenantId: 1,
         sku: sku || `SKU-${Date.now()}`,
+        barcode: barcode || `869${Math.floor(Math.random() * 10000000000)}`,
         name,
-        description,
-        brand,
-        costPrice: costPrice?.toString(),
-        sellingPrice: sellingPrice?.toString(),
+        description: description || null,
+        brand: brand || null,
+        model: model || null,
+        unit: unit || 'adet',
+        vatRate: parseInt(vatRate) || 20,
+        imageUrl: imageUrl || null,
+        costPrice: costPrice?.toString() || '0.00',
+        sellingPrice: sellingPrice?.toString() || '0.00',
         currentStock: parseInt(currentStock) || 0,
         minStockLevel: parseInt(minStockLevel) || 5,
-        categoryId: categoryId || null,
+        categoryId: categoryId ? parseInt(categoryId) : null,
       });
       res.json({ success: true });
     } catch (e: any) {
@@ -1478,12 +1684,22 @@ async function startServer() {
 
   app.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
     try {
-      const { adjustment, name, minStockLevel, sellingPrice, costPrice } = req.body;
+      const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (brand !== undefined) updateData.brand = brand;
+      if (model !== undefined) updateData.model = model;
+      if (unit !== undefined) updateData.unit = unit;
+      if (vatRate !== undefined) updateData.vatRate = parseInt(vatRate);
+      if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+      if (categoryId !== undefined) updateData.categoryId = categoryId ? parseInt(categoryId) : null;
       if (minStockLevel !== undefined) updateData.minStockLevel = parseInt(minStockLevel);
       if (sellingPrice !== undefined) updateData.sellingPrice = sellingPrice.toString();
       if (costPrice !== undefined) updateData.costPrice = costPrice.toString();
+      if (barcode !== undefined) updateData.barcode = barcode;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      
       if (adjustment !== undefined) {
         const [current] = await db.select({ stock: stockItems.currentStock }).from(stockItems).where(eq(stockItems.id, parseInt(req.params.id)));
         updateData.currentStock = Math.max(0, (current?.stock || 0) + parseInt(adjustment));
@@ -1495,12 +1711,152 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/admin/stock/:id', requireAdmin, async (req, res) => {
+  // Toplu CSV içe aktarma
+  app.post('/api/admin/stock/import-csv', requireAdmin, upload.single('file'), async (req, res) => {
     try {
-      await db.update(stockItems).set({ isActive: false }).where(eq(stockItems.id, parseInt(req.params.id)));
-      res.json({ success: true });
+      if (!req.file) return res.status(400).json({ error: 'Dosya yüklenemedi' });
+      const csvData = fs.readFileSync(req.file.path, 'utf8');
+      const Papa = await import('papaparse').then(m => (m as any).default || m);
+      const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
+      
+      let imported = 0;
+      let updated = 0;
+
+      for (const row of parsed.data as any[]) {
+        const { name, sku, barcode, brand, model, unit, vatRate, costPrice, sellingPrice, currentStock, minStockLevel, description, imageUrl, category } = row;
+        if (!name) continue;
+
+        let catId = null;
+        if (category) {
+          const [existingCat] = await db.select({ id: inventoryCategories.id }).from(inventoryCategories).where(eq(inventoryCategories.name, category)).limit(1);
+          if (existingCat) {
+            catId = existingCat.id;
+          } else {
+            await db.insert(inventoryCategories).values({ tenantId: 1, name: category });
+            const [insertedCat] = await db.select({ id: inventoryCategories.id }).from(inventoryCategories).where(eq(inventoryCategories.name, category)).limit(1);
+            catId = insertedCat?.id || null;
+          }
+        }
+
+        const matchedSku = sku ? await db.select().from(stockItems).where(eq(stockItems.sku, sku)).limit(1) : [];
+        if (matchedSku.length > 0) {
+          const updateObj: any = {};
+          if (name) updateObj.name = name;
+          if (barcode) updateObj.barcode = barcode;
+          if (brand !== undefined) updateObj.brand = brand;
+          if (model !== undefined) updateObj.model = model;
+          if (unit) updateObj.unit = unit;
+          if (vatRate) updateObj.vatRate = parseInt(vatRate);
+          if (costPrice) updateObj.costPrice = costPrice;
+          if (sellingPrice) updateObj.sellingPrice = sellingPrice;
+          if (currentStock) updateObj.currentStock = parseInt(currentStock);
+          if (minStockLevel) updateObj.minStockLevel = parseInt(minStockLevel);
+          if (description !== undefined) updateObj.description = description;
+          if (imageUrl !== undefined) updateObj.imageUrl = imageUrl;
+          if (catId) updateObj.categoryId = catId;
+
+          await db.update(stockItems).set(updateObj).where(eq(stockItems.id, matchedSku[0].id));
+          updated++;
+        } else {
+          await db.insert(stockItems).values({
+            tenantId: 1,
+            sku: sku || `SKU-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+            barcode: barcode || `869${Math.floor(Math.random() * 10000000000)}`,
+            name,
+            brand: brand || null,
+            model: model || null,
+            unit: unit || 'adet',
+            vatRate: parseInt(vatRate) || 20,
+            costPrice: costPrice || '0.00',
+            sellingPrice: sellingPrice || '0.00',
+            currentStock: parseInt(currentStock) || 0,
+            minStockLevel: parseInt(minStockLevel) || 5,
+            description: description || null,
+            imageUrl: imageUrl || null,
+            categoryId: catId,
+          });
+          imported++;
+        }
+      }
+
+      fs.unlinkSync(req.file.path);
+      res.json({ success: true, imported, updated });
     } catch (e: any) {
+      console.error(e);
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Toplu Excel dışa aktarma
+  app.get('/api/admin/stock/export-excel', requireAdmin, async (req, res) => {
+    try {
+      const items = await db.select({
+        id: stockItems.id,
+        sku: stockItems.sku,
+        barcode: stockItems.barcode,
+        name: stockItems.name,
+        brand: stockItems.brand,
+        model: stockItems.model,
+        unit: stockItems.unit,
+        vatRate: stockItems.vatRate,
+        costPrice: stockItems.costPrice,
+        sellingPrice: stockItems.sellingPrice,
+        currentStock: stockItems.currentStock,
+        minStockLevel: stockItems.minStockLevel,
+        description: stockItems.description,
+        imageUrl: stockItems.imageUrl,
+        categoryName: inventoryCategories.name,
+      }).from(stockItems)
+        .leftJoin(inventoryCategories, eq(stockItems.categoryId, inventoryCategories.id))
+        .where(eq(stockItems.isActive, true))
+        .orderBy(desc(stockItems.createdAt));
+
+      const ExcelJS = await import('exceljs').then(m => (m as any).default || m);
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Stok Listesi');
+
+      worksheet.columns = [
+        { header: 'ID', key: 'id', width: 10 },
+        { header: 'Ürün Kodu (SKU)', key: 'sku', width: 20 },
+        { header: 'Barkod', key: 'barcode', width: 20 },
+        { header: 'Ürün Adı', key: 'name', width: 35 },
+        { header: 'Marka', key: 'brand', width: 15 },
+        { header: 'Model', key: 'model', width: 15 },
+        { header: 'Kategori', key: 'categoryName', width: 20 },
+        { header: 'Birim', key: 'unit', width: 10 },
+        { header: 'KDV Oranı (%)', key: 'vatRate', width: 15 },
+        { header: 'Maliyet Fiyatı', key: 'costPrice', width: 15 },
+        { header: 'Satış Fiyatı', key: 'sellingPrice', width: 15 },
+        { header: 'Mevcut Stok', key: 'currentStock', width: 15 },
+        { header: 'Kritik Stok Sınırı', key: 'minStockLevel', width: 15 },
+        { header: 'Açıklama', key: 'description', width: 30 },
+      ];
+
+      items.forEach(item => {
+        worksheet.addRow({
+          ...item,
+          costPrice: item.costPrice ? parseFloat(item.costPrice) : 0,
+          sellingPrice: item.sellingPrice ? parseFloat(item.sellingPrice) : 0,
+        });
+      });
+
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=stok_listesi.xlsx');
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (e: any) {
+      console.error(e);
+      if (!res.headersSent) {
+        res.status(500).json({ error: e.message });
+      }
     }
   });
 
@@ -1519,8 +1875,27 @@ async function startServer() {
 
   app.post('/api/admin/inventory-categories', requireAdmin, async (req, res) => {
     try {
-      const { name, description } = req.body;
-      await db.insert(inventoryCategories).values({ tenantId: 1, name, description });
+      const { name, description, parentId } = req.body;
+      await db.insert(inventoryCategories).values({
+        tenantId: 1,
+        name,
+        description,
+        parentId: parentId ? parseInt(parentId) : null,
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/admin/inventory-categories/:id', requireAdmin, async (req, res) => {
+    try {
+      const { name, description, parentId } = req.body;
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (parentId !== undefined) updateData.parentId = parentId ? parseInt(parentId) : null;
+      await db.update(inventoryCategories).set(updateData).where(eq(inventoryCategories.id, parseInt(req.params.id)));
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -1531,6 +1906,177 @@ async function startServer() {
     try {
       await db.delete(inventoryCategories).where(eq(inventoryCategories.id, parseInt(req.params.id)));
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // ADMIN API — SALES & POS SYSTEM
+  // ============================================================
+
+  app.get('/api/admin/sales', requireAdmin, async (req, res) => {
+    try {
+      const customerUsers = alias(users, 'customer_users');
+      const salespersonUsers = alias(users, 'salesperson_users');
+
+      const results = await db.select({
+        id: sales.id,
+        receiptNumber: sales.receiptNumber,
+        totalAmount: sales.totalAmount,
+        taxAmount: sales.taxAmount,
+        discountAmount: sales.discountAmount,
+        paymentType: sales.paymentType,
+        status: sales.status,
+        notes: sales.notes,
+        createdAt: sales.createdAt,
+        customerName: sql<string>`CONCAT(${customerUsers.firstName}, ' ', COALESCE(${customerUsers.lastName}, ''))`,
+        salespersonName: sql<string>`CONCAT(${salespersonUsers.firstName}, ' ', COALESCE(${salespersonUsers.lastName}, ''))`
+      }).from(sales)
+        .leftJoin(customerUsers, eq(sales.customerId, customerUsers.id))
+        .leftJoin(salespersonUsers, eq(sales.salespersonId, salespersonUsers.id))
+        .orderBy(desc(sales.createdAt));
+      res.json(results);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/sales', requireAdmin, async (req, res) => {
+    try {
+      const { customerId, paymentType, discountAmount, notes, items: saleProducts } = req.body;
+      if (!saleProducts || !Array.isArray(saleProducts) || saleProducts.length === 0) {
+        return res.status(400).json({ error: 'Sepet boş veya geçersiz ürün listesi' });
+      }
+
+      const salespersonId = (req as any).adminUser.userId;
+      const receiptNumber = `POS-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+      let calculatedTotal = 0;
+      let calculatedTax = 0;
+
+      for (const item of saleProducts) {
+        const qty = parseInt(item.quantity) || 1;
+        const price = parseFloat(item.unitPrice) || 0;
+        const vatRate = parseInt(item.vatRate) || 20;
+        const subtotal = price * qty;
+        calculatedTotal += subtotal;
+        calculatedTax += subtotal * (vatRate / (100 + vatRate));
+      }
+
+      const finalDiscount = parseFloat(discountAmount) || 0;
+      const finalTotal = Math.max(0, calculatedTotal - finalDiscount);
+
+      // Tüm satış işlemini atomik bir transaction içinde yürüt: herhangi bir
+      // adım hata verirse tamamı geri alınır (kısmi yazım önlenir).
+      const saleId = await db.transaction(async (tx) => {
+        const [insertedSale] = await tx.insert(sales).values({
+          tenantId: 1,
+          customerId: customerId ? parseInt(customerId) : null,
+          salespersonId,
+          receiptNumber,
+          totalAmount: finalTotal.toFixed(2),
+          taxAmount: calculatedTax.toFixed(2),
+          discountAmount: finalDiscount.toFixed(2),
+          paymentType,
+          status: 'odendi',
+          notes: notes || null,
+        });
+        const newSaleId = (insertedSale as any).insertId;
+
+        for (const item of saleProducts) {
+          const qty = parseInt(item.quantity) || 1;
+          const price = parseFloat(item.unitPrice) || 0;
+          const vatRate = parseInt(item.vatRate) || 20;
+          const totalPrice = price * qty;
+
+          await tx.insert(saleItems).values({
+            tenantId: 1,
+            saleId: newSaleId,
+            stockItemId: parseInt(item.stockItemId),
+            serializedItemId: item.serializedItemId ? parseInt(item.serializedItemId) : null,
+            quantity: qty,
+            unitPrice: price.toFixed(2),
+            vatRate,
+            totalPrice: totalPrice.toFixed(2),
+          });
+
+          // Atomik stok düşümü (yarış koşulunu önler)
+          await tx.update(stockItems)
+            .set({ currentStock: sql`GREATEST(0, ${stockItems.currentStock} - ${qty})` })
+            .where(eq(stockItems.id, parseInt(item.stockItemId)));
+
+          await tx.insert(stockMovements).values({
+            tenantId: 1,
+            stockItemId: parseInt(item.stockItemId),
+            serializedItemId: item.serializedItemId ? parseInt(item.serializedItemId) : null,
+            fromWarehouseId: null,
+            toWarehouseId: null,
+            quantity: qty,
+            type: 'cikis',
+            reason: 'POS Satış',
+            referenceId: newSaleId,
+            createdById: salespersonId,
+          });
+
+          if (item.serializedItemId) {
+            await tx.update(serializedItems).set({ status: 'satildi' }).where(eq(serializedItems.id, parseInt(item.serializedItemId)));
+          }
+        }
+        return newSaleId;
+      });
+
+      res.json({ success: true, saleId, receiptNumber });
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/sales/:id', requireAdmin, async (req, res) => {
+    try {
+      const saleId = parseInt(req.params.id);
+      const customerUsers = alias(users, 'customer_users');
+      const salespersonUsers = alias(users, 'salesperson_users');
+
+      const [sale] = await db.select({
+        id: sales.id,
+        receiptNumber: sales.receiptNumber,
+        totalAmount: sales.totalAmount,
+        taxAmount: sales.taxAmount,
+        discountAmount: sales.discountAmount,
+        paymentType: sales.paymentType,
+        status: sales.status,
+        notes: sales.notes,
+        createdAt: sales.createdAt,
+        customerName: sql<string>`CONCAT(${customerUsers.firstName}, ' ', COALESCE(${customerUsers.lastName}, ''))`,
+        customerPhone: customerUsers.phone,
+        customerEmail: customerUsers.email,
+        salespersonName: sql<string>`CONCAT(${salespersonUsers.firstName}, ' ', COALESCE(${salespersonUsers.lastName}, ''))`
+      }).from(sales)
+        .leftJoin(customerUsers, eq(sales.customerId, customerUsers.id))
+        .leftJoin(salespersonUsers, eq(sales.salespersonId, salespersonUsers.id))
+        .where(eq(sales.id, saleId))
+        .limit(1);
+
+      if (!sale) return res.status(404).json({ error: 'Satış kaydı bulunamadı' });
+
+      const itemsList = await db.select({
+        id: saleItems.id,
+        quantity: saleItems.quantity,
+        unitPrice: saleItems.unitPrice,
+        vatRate: saleItems.vatRate,
+        totalPrice: saleItems.totalPrice,
+        productName: stockItems.name,
+        sku: stockItems.sku,
+        barcode: stockItems.barcode,
+        serialNumber: serializedItems.serialNumber
+      }).from(saleItems)
+        .leftJoin(stockItems, eq(saleItems.stockItemId, stockItems.id))
+        .leftJoin(serializedItems, eq(saleItems.serializedItemId, serializedItems.id))
+        .where(eq(saleItems.saleId, saleId));
+
+      res.json({ sale, items: itemsList });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1996,14 +2542,14 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/users', requireAdmin, async (req, res) => {
+  app.post('/api/admin/users', requireAdmin, requireRole('superadmin', 'tenant_admin'), async (req, res) => {
     try {
       const { firstName, lastName, email, phone, roleType, password } = req.body;
       await db.insert(users).values({
         tenantId: 1,
         firstName, lastName, email, phone,
         roleType: roleType || 'staff',
-        passwordHash: password || 'admin123',
+        passwordHash: await hashPassword(password || crypto.randomBytes(9).toString('base64url')),
         isActive: true,
       });
       res.json({ success: true });
@@ -2012,7 +2558,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  app.patch('/api/admin/users/:id', requireAdmin, requireRole('superadmin', 'tenant_admin'), async (req, res) => {
     try {
       const { isActive, roleType } = req.body;
       const updateData: any = {};
@@ -2099,7 +2645,7 @@ async function startServer() {
         email,
         phone: phone || null,
         roleType: 'customer',
-        passwordHash: password || 'musteri123',
+        passwordHash: await hashPassword(password || crypto.randomBytes(9).toString('base64url')),
         isActive: true,
       });
       const userId = (insertedUser[0] as any).insertId;
@@ -3269,379 +3815,229 @@ async function startServer() {
         try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
       }
       if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
-      
       const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
       oauth2Client.setCredentials(settings.tokens);
-      
       const response = await oauth2Client.request({ url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}/reviews` });
-      const reviews = (response.data as any).reviews || [];
-      res.json(reviews);
+      res.json((response.data as any).reviews || []);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
   });
 
-  app.put('/api/admin/plugins/google-business/reviews/reply', requireAdmin, async (req, res) => {
-    try {
-      const { reviewName, comment } = req.body;
-      
-      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
-      let settings = gmbPlugin[0]?.settings as any || {};
-      if (typeof settings === 'string') {
-        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
-      }
-      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
-      
-      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
-      oauth2Client.setCredentials(settings.tokens);
-      
-      const response = await oauth2Client.request({ 
-        url: `https://mybusiness.googleapis.com/v4/${reviewName}/reply`,
-        method: 'PUT',
-        data: { comment }
-      });
-      
-      res.json(response.data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
 
+  // ─── GMB Helpers ─────────────────────────────────────────────────────────────
+  const getGMBSettings = async () => {
+    const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
+    let s = gmbPlugin[0]?.settings as any || {};
+    if (typeof s === 'string') { try { s = JSON.parse(s); } catch (_) { s = {}; } }
+    return s;
+  };
+
+  const createGMBClient = (s: any) => {
+    const c = new google.auth.OAuth2(s.clientId, s.clientSecret);
+    c.setCredentials(s.tokens);
+    c.on('tokens', async (t: any) => {
+      try { await db.update(plugins).set({ settings: { ...s, tokens: { ...s.tokens, ...t } } }).where(eq(plugins.pluginId, 'google-business')); } catch (_) {}
+    });
+    return c;
+  };
+
+  // GET /info
   app.get('/api/admin/plugins/google-business/info', requireAdmin, async (req, res) => {
     try {
-      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
-      let settings = gmbPlugin[0]?.settings as any || {};
-      if (typeof settings === 'string') {
-        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
-      }
-      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
-      
-      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
-      oauth2Client.setCredentials(settings.tokens);
-      
-      const response = await oauth2Client.request({ 
-        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${settings.selectedLocation}?readMask=title,profile,primaryPhone` 
-      });
-      res.json(response.data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const r = await createGMBClient(s).request({ url: `https://mybusinessbusinessinformation.googleapis.com/v1/${s.selectedLocation}?readMask=name,title,primaryPhone,profile` });
+      res.json(r.data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // PATCH /info
   app.patch('/api/admin/plugins/google-business/info', requireAdmin, async (req, res) => {
     try {
-      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
-      let settings = gmbPlugin[0]?.settings as any || {};
-      if (typeof settings === 'string') {
-        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
-      }
-      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
-      
-      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
-      oauth2Client.setCredentials(settings.tokens);
-      
-      const response = await oauth2Client.request({ 
-        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${settings.selectedLocation}?updateMask=profile,primaryPhone`,
-        method: 'PATCH',
-        data: req.body
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const { primaryPhone, profile } = req.body;
+      const mask: string[] = [];
+      if (primaryPhone !== undefined) mask.push('primaryPhone');
+      if (profile !== undefined) mask.push('profile');
+      const r = await createGMBClient(s).request({
+        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${s.selectedLocation}?updateMask=${mask.join(',')}`,
+        method: 'PATCH', data: req.body
       });
-      res.json(response.data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
+      res.json(r.data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // GET /media
   app.get('/api/admin/plugins/google-business/media', requireAdmin, async (req, res) => {
     try {
-      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
-      let settings = gmbPlugin[0]?.settings as any || {};
-      if (typeof settings === 'string') {
-        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
-      }
-      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
-      
-      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
-      oauth2Client.setCredentials(settings.tokens);
-      
-      const response = await oauth2Client.request({ 
-        url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}/media` 
-      });
-      const mediaItems = (response.data as any).mediaItems || [];
-      res.json(mediaItems);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const r = await createGMBClient(s).request({ url: `https://mybusiness.googleapis.com/v4/${s.selectedLocation}/media` });
+      res.json((r.data as any).mediaItems || []);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // POST /media (URL ile yukle)
+  app.post('/api/admin/plugins/google-business/media', requireAdmin, async (req, res) => {
+    try {
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const { sourceUrl, category } = req.body;
+      const r = await createGMBClient(s).request({
+        url: `https://mybusiness.googleapis.com/v4/${s.selectedLocation}/media`,
+        method: 'POST',
+        data: { mediaFormat: 'PHOTO', locationAssociation: { category: category || 'ADDITIONAL' }, sourceUrl }
+      });
+      res.json(r.data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // DELETE /media
+  app.delete('/api/admin/plugins/google-business/media', requireAdmin, async (req, res) => {
+    try {
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const { mediaName } = req.body;
+      await createGMBClient(s).request({ url: `https://mybusiness.googleapis.com/v4/${mediaName}`, method: 'DELETE' });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /insights (30/60/90 gun)
   app.post('/api/admin/plugins/google-business/insights', requireAdmin, async (req, res) => {
     try {
-      const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
-      let settings = gmbPlugin[0]?.settings as any || {};
-      if (typeof settings === 'string') {
-        try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const client = createGMBClient(s);
+      const days = parseInt(req.body?.days) || 90;
+      const parts = s.selectedLocation.split('/');
+      const locPath = parts.length >= 2 ? `locations/${parts[parts.length - 1]}` : s.selectedLocation;
+      const end = new Date(); const start = new Date(); start.setDate(start.getDate() - days);
+      const fd = (d: Date) => ({ year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() });
+      const { year: sy, month: sm, day: sd } = fd(start);
+      const { year: ey, month: em, day: ed } = fd(end);
+      const metricsMap: Record<string, string> = {
+        BUSINESS_IMPRESSIONS_DESKTOP_MAPS: 'VIEWS_MAPS', BUSINESS_IMPRESSIONS_MOBILE_MAPS: 'VIEWS_MAPS',
+        BUSINESS_IMPRESSIONS_DESKTOP_SEARCH: 'VIEWS_SEARCH', BUSINESS_IMPRESSIONS_MOBILE_SEARCH: 'VIEWS_SEARCH',
+        WEBSITE_CLICKS: 'ACTIONS_WEBSITE', CALL_CLICKS: 'ACTIONS_PHONE',
+        BUSINESS_DIRECTION_REQUESTS: 'ACTIONS_DRIVING_DIRECTIONS'
+      };
+      const totals: Record<string, number> = {};
+      for (const [nm, om] of Object.entries(metricsMap)) {
+        try {
+          const url = `https://businessprofileperformance.googleapis.com/v1/${locPath}:fetchMultiDailyMetricsTimeSeries?dailyMetrics=${nm}&dailyRange.startDate.year=${sy}&dailyRange.startDate.month=${sm}&dailyRange.startDate.day=${sd}&dailyRange.endDate.year=${ey}&dailyRange.endDate.month=${em}&dailyRange.endDate.day=${ed}`;
+          const rv = await client.request({ url });
+          const series = (rv.data as any).multiDailyMetricTimeSeries?.[0]?.dailyMetricTimeSeries?.[0]?.timeSeries?.datedValues || [];
+          const sum = series.reduce((a: number, d: any) => a + (parseInt(d.value) || 0), 0);
+          totals[om] = (totals[om] || 0) + sum;
+        } catch (_) {}
       }
-      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
-      
-      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
-      oauth2Client.setCredentials(settings.tokens);
-      
-      const endTime = new Date();
-      const startTime = new Date();
-      startTime.setMonth(startTime.getMonth() - 6);
-
-      const response = await oauth2Client.request({ 
-        url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}:reportInsights`,
-        method: 'POST',
-        data: {
-          locationNames: [settings.selectedLocation],
-          basicRequest: {
-            metricRequests: [
-              { metric: "QUERIES_DIRECT" },
-              { metric: "QUERIES_INDIRECT" },
-              { metric: "VIEWS_MAPS" },
-              { metric: "VIEWS_SEARCH" },
-              { metric: "ACTIONS_WEBSITE" },
-              { metric: "ACTIONS_PHONE" },
-              { metric: "ACTIONS_DRIVING_DIRECTIONS" }
-            ],
-            timeRange: {
-              startTime: startTime.toISOString(),
-              endTime: endTime.toISOString()
-            }
-          }
-        }
-      });
-      res.json(response.data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
+      res.json({ locationMetrics: [{ metricValues: Object.entries(totals).map(([metric, value]) => ({ metric, totalValue: { value } })) }] });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-
-  // ============================================================
-  // EXTERNAL API (Secured via API Key)
-  // ============================================================
-  
-  app.post('/api/external/tickets', requireApiKey, async (req, res) => {
+  // PUT /reviews/reply
+  app.put('/api/admin/plugins/google-business/reviews/reply', requireAdmin, async (req, res) => {
     try {
-      const { title, description, customerId, deviceType } = req.body;
-      if (!title || !description || !customerId) {
-        return res.status(400).json({ error: 'Eksik bilgi: title, description, customerId zorunludur' });
-      }
-
-      // Normally we would generate a unique ticket ID like 'SRV-1234'
-      const ticketId = 'SRV-' + Math.floor(Math.random() * 10000);
-
-      const [insertResult] = await db.insert(tickets).values({
-        tenantId: 1,
-        userId: customerId,
-        ticketNumber: ticketId,
-        type: 'diger',
-        subject: title,
-        description: title + '\n' + description + '\n\nCihaz: ' + (deviceType || 'Bilinmiyor'),
-        status: 'yeni',
-        assignedTo: null,
-      });
-
-      // Trigger Webhook
-      triggerWebhook('ticket.created', {
-        ticketId,
-        title,
-        customerId,
-        deviceType
-      });
-
-      res.json({ success: true, ticketId, message: 'Servis kaydı API üzerinden oluşturuldu' });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const { reviewName, comment } = req.body;
+      const r = await createGMBClient(s).request({ url: `https://mybusiness.googleapis.com/v4/${reviewName}/reply`, method: 'PUT', data: { comment } });
+      res.json(r.data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // ============================================================
-  // SEO & SITEMAP API
-  // ============================================================
-  
-  app.get('/sitemap.xml', async (req, res) => {
+  // DELETE /reviews/reply
+  app.delete('/api/admin/plugins/google-business/reviews/reply', requireAdmin, async (req, res) => {
     try {
-      const allSettings = await db.select().from(settings);
-      const settingsMap: Record<string, string> = {};
-      allSettings.forEach(s => {
-        if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
-      });
-      const baseUrl = (settingsMap.sitemapBaseUrl || settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com').replace(/\/$/, '');
-      const defaultChangefreq = settingsMap.sitemapDefaultChangefreq || 'weekly';
-      const extraUrls = (settingsMap.sitemapExtraUrls || '')
-        .split('\n')
-        .map(url => url.trim())
-        .filter(Boolean);
-      
-      // Fetch dynamic pages
-      const allPages = await db.select().from(pages).where(eq(pages.status, 'yayinlandi'));
-      const allServices = await db.select().from(services);
-      const allBlogPosts = await db.select().from(blogPosts).where(eq(blogPosts.status, 'published'));
-      
-      let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${baseUrl}/</loc>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/hakkimizda</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/iletisim</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/hizmetler</loc>
-    <changefreq>${defaultChangefreq}</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/blog</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>`;
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const { reviewName } = req.body;
+      await createGMBClient(s).request({ url: `https://mybusiness.googleapis.com/v4/${reviewName}/reply`, method: 'DELETE' });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
 
-      allPages.forEach(p => {
-        xml += `
-  <url>
-    <loc>${baseUrl}/sayfa/${p.slug}</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>`;
+  // PATCH /posts (duzenle)
+  app.patch('/api/admin/plugins/google-business/posts', requireAdmin, async (req, res) => {
+    try {
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const { postName, summary, callToAction, topicType, event: evt, offer } = req.body;
+      const r = await createGMBClient(s).request({
+        url: `https://mybusiness.googleapis.com/v4/${postName}?updateMask=summary,callToAction,topicType,event,offer`,
+        method: 'PATCH', data: { summary, callToAction, topicType, languageCode: 'tr', ...(evt && { event: evt }), ...(offer && { offer }) }
       });
+      res.json(r.data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
 
-      allServices.forEach(s => {
-        xml += `
-  <url>
-    <loc>${baseUrl}/hizmetler/${s.slug || s.id}</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>`;
-      });
+  // DELETE /posts
+  app.delete('/api/admin/plugins/google-business/posts', requireAdmin, async (req, res) => {
+    try {
+      const s = await getGMBSettings();
+      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      const { postName } = req.body;
+      await createGMBClient(s).request({ url: `https://mybusiness.googleapis.com/v4/${postName}`, method: 'DELETE' });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
 
-      allBlogPosts.forEach(b => {
-        xml += `
-  <url>
-    <loc>${baseUrl}/blog/${b.slug}</loc>
-    <lastmod>${b.updatedAt ? new Date(b.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>`;
-      });
 
-      extraUrls.forEach(url => {
-        const loc = url.startsWith('http') ? url : `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
-        xml += `
-  <url>
-    <loc>${loc}</loc>
-    <changefreq>${defaultChangefreq}</changefreq>
-    <priority>0.6</priority>
-  </url>`;
-      });
+  // SPA catch-all — API ve uploads dışındaki her route index.html döner
+  app.use(async (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return next();
+    const indexPath = isDev
+      ? path.join(rootDir, 'index.html')
+      : path.join(rootDir, 'dist', 'index.html');
 
-      xml += `\n</urlset>`;
-      
-      res.header('Content-Type', 'application/xml');
-      res.send(xml);
-    } catch (e: any) {
-      res.status(500).send(e.message);
+    if (!fs.existsSync(indexPath)) {
+      console.error('[SPA] index.html not found:', indexPath, '| isDev:', isDev, '| rootDir:', rootDir);
+      return res.status(500).send('index.html bulunamadı: ' + indexPath);
+    }
+
+    try {
+      let html = fs.readFileSync(indexPath, 'utf-8');
+      // Dev: Vite'ın HMR client'ını inject etmesi ve module'ları transform etmesi için
+      if (isDev && viteMiddleware) {
+        html = await viteMiddleware.transformIndexHtml(req.originalUrl, html);
+      }
+      res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+    } catch (err: any) {
+      if (isDev && viteMiddleware) viteMiddleware.ssrFixStacktrace?.(err);
+      console.error('[SPA] transform error:', err.message);
+      if (!res.headersSent) res.status(500).send('index.html gönderilemedi: ' + err.message);
     }
   });
 
-  app.get('/robots.txt', async (req, res) => {
-    const allSettings = await db.select().from(settings);
-    const settingsMap: Record<string, string> = {};
-    allSettings.forEach(s => {
-      if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
-    });
-    const baseUrl = (settingsMap.sitemapBaseUrl || settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com').replace(/\/$/, '');
-    const robotsContent = settingsMap.robotsTxt || `User-agent: *
-Allow: /
-Disallow: /admin/
-Disallow: /api/
-Disallow: /musteri/
-Disallow: /login
-
-Sitemap: ${baseUrl}/sitemap.xml`;
-    
-    res.header('Content-Type', 'text/plain');
-    res.send(robotsContent);
+  const server = app.listen(PORT, () => {
+    console.log(`✅ Server running on http://localhost:${PORT}`);
   });
 
-  // ============================================================
-  // VITE DEV VEYA PROD SERVE
-
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath, {
-      index: false,
-      setHeaders: (res, filePath) => {
-        if (filePath.includes(path.join('dist', 'assets')) || filePath.includes('/assets/')) {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        } else {
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-        }
-      }
-    }));
-    app.get('*', async (req, res) => {
-      try {
-        const htmlPath = path.join(distPath, 'index.html');
-        let html = await fs.promises.readFile(htmlPath, 'utf8');
-        const allSettings = await db.select().from(settings);
-        const settingsMap: Record<string, string> = {};
-        allSettings.forEach(s => {
-          if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
-        });
-        const googleAnalyticsId = (settingsMap.googleAnalyticsId || '').trim();
-        const searchConsoleCode = (
-          settingsMap.googleSearchConsoleCode
-          || settingsMap.googleSiteVerification
-          || settingsMap.googleSearchConsoleVerification
-          || settingsMap.googleVerificationCode
-          || settingsMap.searchConsoleCode
-          || ''
-        ).trim();
-        const googleSiteVerification = searchConsoleCode.match(/content=["']([^"']+)["']/i)?.[1] || searchConsoleCode;
-        const safeGoogleAnalyticsId = googleAnalyticsId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const escapeHtml = (value: string) => value
-          .replace(/&/g, '&amp;')
-          .replace(/"/g, '&quot;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-        const headTags = [
-          googleSiteVerification ? `<meta name="google-site-verification" content="${escapeHtml(googleSiteVerification)}">` : '',
-          googleAnalyticsId ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(googleAnalyticsId)}"></script>` : '',
-          googleAnalyticsId ? `<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${safeGoogleAnalyticsId}');</script>` : '',
-        ].filter(Boolean).join('\n    ');
-
-        if (headTags) {
-          html = html.replace('</head>', `    ${headTags}\n  </head>`);
-        }
-        res.type('html').send(html);
-      } catch (e) {
-        console.error('Failed to render index.html with dynamic head tags:', e);
-        res.sendFile(path.join(distPath, 'index.html'));
-      }
-    });
-  }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ Port ${PORT} zaten kullanımda.`);
+      console.error(`   Çözüm (PowerShell):`);
+      console.error(`   Get-NetTCPConnection -LocalPort ${PORT} -State Listen | %{ Stop-Process -Id $_.OwningProcess -Force }\n`);
+      process.exit(1);
+    }
+    throw err;
   });
+
+  // Graceful shutdown — HMR/nodemon restart'larda port'u serbest bırak
+  const shutdown = (sig: string) => {
+    console.log(`\n${sig} alındı, server kapatılıyor...`);
+    server.close(() => {
+      console.log('✓ Server temiz şekilde kapandı');
+      process.exit(0);
+    });
+    // 5 saniye içinde kapanmazsa zorla
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-startServer();
+startServer().catch(console.error);

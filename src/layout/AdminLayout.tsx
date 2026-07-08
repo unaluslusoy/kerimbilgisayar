@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Wrench, Users, Box, MessageSquare, Settings, LogOut,
-  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3
+  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState, useEffect } from 'react';
@@ -33,6 +33,7 @@ export default function AdminLayout() {
     { name: 'Başlangıç', path: '/admin', icon: LayoutDashboard },
     { name: 'Servis Kayıtları', path: '/admin/servis', icon: Wrench },
     { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
+    { name: 'POS Satış (POS)', path: '/admin/satis-pos', icon: Store },
     { name: 'Hizmetlerimiz', path: '/admin/hizmetler', icon: Wrench },
     { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri', icon: Tag },
     { name: 'Kullanıcılar', path: '/admin/kullanicilar', icon: Users },
@@ -63,9 +64,10 @@ export default function AdminLayout() {
   if (isGoogleBusinessActive) {
     navItems = navItems.concat([
       { name: 'Google İşletme', separator: true },
+      { name: 'Genel Bakış', path: '/admin/google', icon: LayoutGrid as any },
       { name: 'Yayınlar (Posts)', path: '/admin/google/posts', icon: Megaphone as any },
       { name: 'Yorumlar', path: '/admin/google/reviews', icon: MessageSquareQuote as any },
-      { name: 'İşletme Bilgileri', path: '/admin/google/info', icon: Store as any },
+      { name: 'İşletme & Medya', path: '/admin/google/info', icon: Store as any },
       { name: 'İstatistikler', path: '/admin/google/insights', icon: BarChart3 as any },
     ] as any);
   }
@@ -114,8 +116,9 @@ export default function AdminLayout() {
                     </li>
                   );
                 }
+                const exactPaths = ['/admin', '/admin/google'];
                 const isActive = location.pathname === item.path ||
-                  (item.path !== '/admin' && location.pathname.startsWith(item.path));
+                  (!exactPaths.includes(item.path) && location.pathname.startsWith(item.path));
                 return (
                   <li key={item.path} className="relative group">
                     {isActive && (
@@ -164,7 +167,7 @@ export default function AdminLayout() {
 
           {/* Dynamic Page Content */}
           <main className="flex-1 p-4 sm:p-5 lg:p-6 bg-[#f0f0f1] text-[#3c434a]">
-            <Outlet />
+                        <Outlet />
           </main>
         </div>
       </div>

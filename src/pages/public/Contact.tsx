@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Breadcrumb from '../../components/Breadcrumb';
 import { Mail, MapPin, Phone, Send, CheckCircle, AlertCircle, Loader2, Headset, ShoppingCart, HelpCircle, PlaySquare, Printer, Building, FileText, Landmark, Building2, Facebook, Twitter, Instagram, Linkedin, Youtube, ArrowRight, X, ChevronRight } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
 import { submitContactForm } from '../../lib/api';
@@ -59,11 +60,7 @@ export default function Contact() {
       {/* Breadcrumb & Title */}
       <div className="pt-[140px] pb-8 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-sm text-gray-500 mb-6 flex items-center gap-2 font-medium">
-            <Link to="/" className="hover:text-primary transition-colors">{t('common.home', 'Anasayfa')}</Link>
-            <span>&gt;</span>
-            <span className="text-gray-900">{t('contact.title', 'İletişim')}</span>
-          </div>
+          <Breadcrumb className="mb-6" items={[{ label: t('common.home', 'Anasayfa'), href: '/' }, { label: t('contact.title', 'İletişim') }]} />
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
             {t('contact.title', 'İletişim')}
           </h1>

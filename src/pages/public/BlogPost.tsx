@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Breadcrumb from '../../components/Breadcrumb';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Calendar, User, ArrowLeft, Share2, Facebook, Twitter, Linkedin, Clock, List } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -74,13 +75,7 @@ export default function BlogPost() {
       {/* Page Header */}
       <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-sm text-gray-500 mb-6 flex items-center gap-2 font-medium">
-            <Link to="/" className="hover:text-primary transition-colors">Anasayfa</Link>
-            <span>&gt;</span>
-            <Link to="/blog" className="hover:text-primary transition-colors">Medya & Blog</Link>
-            <span>&gt;</span>
-            <span className="text-gray-900">{post.title}</span>
-          </div>
+          <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Medya & Blog', href: '/blog' }, { label: post.title }]} />
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
             {post.title}
           </h1>

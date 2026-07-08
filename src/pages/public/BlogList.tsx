@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import Breadcrumb from '../../components/Breadcrumb';
 import { Link } from 'react-router-dom';
 import { Calendar, ChevronRight, Tag, Search, TrendingUp, X, Clock } from 'lucide-react';
 import { fetchBlogPosts } from '../../lib/api';
@@ -83,11 +84,7 @@ export default function BlogList() {
       {/* Page Header */}
       <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-sm text-gray-500 mb-6 flex items-center gap-2 font-medium">
-            <Link to="/" className="hover:text-primary transition-colors">Anasayfa</Link>
-            <span>&gt;</span>
-            <span className="text-gray-900">Medya & Blog</span>
-          </div>
+          <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Medya & Blog' }]} />
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
             Teknoloji &amp; Bilişim Güncesi
           </h1>

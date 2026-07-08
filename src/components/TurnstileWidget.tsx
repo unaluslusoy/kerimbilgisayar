@@ -21,7 +21,7 @@ export default function TurnstileWidget({ siteKey, enabled, onVerify }: Turnstil
   const hasBypassedRef = useRef(false);
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if ((import.meta as any).env.DEV) {
       if (!hasBypassedRef.current) {
         hasBypassedRef.current = true;
         onVerify('dev-dummy-token');
@@ -59,8 +59,8 @@ export default function TurnstileWidget({ siteKey, enabled, onVerify }: Turnstil
     };
   }, [enabled, onVerify, siteKey]);
 
-  if (import.meta.env.DEV) return null;
+  if ((import.meta as any).env.DEV) return null;
   if (!enabled || !siteKey) return null;
 
-  return <div ref={containerRef} className="cf-turnstile" />;
+  return <div ref={containerRef} className="cf-turnstile" data-sitekey={siteKey} />;
 }

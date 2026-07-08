@@ -1,26 +1,51 @@
-import { useState, useEffect } from 'react';
-import { Box, Plus, Search, AlertTriangle, X, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
-import { fetchAdminStock, createStockItem, updateStockItem, deleteStockItem, fetchInventoryCategories, createInventoryCategory, deleteInventoryCategory } from '../../lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { 
+  Plus, Search, AlertTriangle, X, TrendingUp, TrendingDown, 
+  Trash2, Barcode, Printer, Upload, Download, Layers, Eye, RefreshCw, FileText
+} from 'lucide-react';
+import { 
+  fetchAdminStock, createStockItem, updateStockItem, deleteStockItem, 
+  fetchInventoryCategories, createInventoryCategory, deleteInventoryCategory,
+  updateInventoryCategory
+} from '../../lib/api';
 
 export default function AdminStock() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [adjustingId, setAdjustingId] = useState<number | null>(null);
   const [adjustAmount, setAdjustAmount] = useState('');
 
   const [activeTab, setActiveTab] = useState<'items' | 'categories'>('items');
   const [categories, setCategories] = useState<any[]>([]);
-  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
+  const [newCategory, setNewCategory] = useState({ name: '', description: '', parentId: '' });
+  const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'critical' | 'ok'>('all');
 
+  // Barcode Printer State
+  const [printItem, setPrintItem] = useState<any | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
+
+  // Barcode Scanner State
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [scanBuffer, setScanBuffer] = useState('');
+  const scannerInputRef = useRef<HTMLInputElement>(null);
+
+  // CSV Import State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any | null>(null);
+
   const [newItem, setNewItem] = useState({
-    sku: '', name: '', brand: '', description: '',
-    currentStock: '', minStockLevel: '5',
-    costPrice: '', sellingPrice: '',
+    sku: '', barcode: '', name: '', brand: '', model: '', 
+    unit: 'adet', vatRate: '20', imageUrl: '', description: '',
+    currentStock: '', minStockLevel: '5', costPrice: '', sellingPrice: '',
+    categoryId: ''
   });
 
   const load = async () => {
@@ -31,19 +56,93 @@ export default function AdminStock() {
       ]);
       setItems(itemData);
       setCategories(catData);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    load(); 
+  }, []);
+
+  // Auto-focus scanner input when modal is open
+  useEffect(() => {
+    if (showScannerModal && scannerInputRef.current) {
+      scannerInputRef.current.focus();
+    }
+  }, [showScannerModal]);
+
+  const handleScannerKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const barcodeValue = scanBuffer.trim();
+      if (barcodeValue) {
+        // Find product with this barcode
+        const matched = items.find(i => i.barcode === barcodeValue || i.sku === barcodeValue);
+        if (matched) {
+          setShowScannerModal(false);
+          setScanBuffer('');
+          // Trigger quick stock edit or details modal
+          setAdjustingId(matched.id);
+        } else {
+          alert(`Barkod/SKU bulunamadı: ${barcodeValue}`);
+          setScanBuffer('');
+        }
+      }
+    }
+  };
+
+  const handleImportCSV = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const formData = new FormData();
+      formData.append('file', importFile);
+
+      const res = await fetch('/api/admin/stock/import-csv', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'İçe aktarma başarısız.');
+
+      setImportResult({
+        success: true,
+        imported: data.imported,
+        updated: data.updated
+      });
+      setImportFile(null);
+      await load();
+    } catch (e: any) {
+      setImportResult({ success: false, error: e.message });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Helper to build category tree label
+  const getCategoryPath = (catId: number): string => {
+    const cat = categories.find(c => c.id === catId);
+    if (!cat) return '';
+    if (cat.parentId) {
+      return `${getCategoryPath(cat.parentId)} > ${cat.name}`;
+    }
+    return cat.name;
+  };
 
   const filtered = items.filter(i => {
     const matchSearch = !search ||
       i.name?.toLowerCase().includes(search.toLowerCase()) ||
       i.sku?.toLowerCase().includes(search.toLowerCase()) ||
-      i.brand?.toLowerCase().includes(search.toLowerCase());
-    const matchCategory = !categoryFilter || i.categoryId === parseInt(categoryFilter) ||
-      categories.find(c => c.id === i.categoryId)?.name === categoryFilter;
+      i.barcode?.toLowerCase().includes(search.toLowerCase()) ||
+      i.brand?.toLowerCase().includes(search.toLowerCase()) ||
+      i.model?.toLowerCase().includes(search.toLowerCase());
+    const matchCategory = !categoryFilter || i.categoryId === parseInt(categoryFilter);
     const matchStatus = statusFilter === 'all' ||
       (statusFilter === 'critical' && (i.currentStock || 0) <= (i.minStockLevel || 0)) ||
       (statusFilter === 'ok' && (i.currentStock || 0) > (i.minStockLevel || 0));
@@ -60,10 +159,32 @@ export default function AdminStock() {
     try {
       await createStockItem(newItem);
       setShowModal(false);
-      setNewItem({ sku: '', name: '', brand: '', description: '', currentStock: '', minStockLevel: '5', costPrice: '', sellingPrice: '' });
+      setNewItem({
+        sku: '', barcode: '', name: '', brand: '', model: '', 
+        unit: 'adet', vatRate: '20', imageUrl: '', description: '',
+        currentStock: '', minStockLevel: '5', costPrice: '', sellingPrice: '',
+        categoryId: ''
+      });
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
-    finally { setSaving(false); }
+    } catch (e: any) { 
+      alert('Hata: ' + e.message); 
+    } finally { 
+      setSaving(false); 
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!editingItem || !editingItem.name) return;
+    setSaving(true);
+    try {
+      await updateStockItem(editingItem.id, editingItem);
+      setEditingItem(null);
+      await load();
+    } catch (e: any) { 
+      alert('Hata: ' + e.message); 
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   const handleAdjust = async (id: number, direction: number) => {
@@ -73,34 +194,65 @@ export default function AdminStock() {
       setAdjustingId(null);
       setAdjustAmount('');
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
+    } catch (e: any) { 
+      alert('Hata: ' + e.message); 
+    }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Bu stok kalemini pasif etmek istediğinizden emin misiniz?')) return;
+    if (!confirm('Bu ürünü silmek istediğinizden emin misiniz?')) return;
     try {
       await deleteStockItem(id);
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
+    } catch (e: any) { 
+      alert('Hata: ' + e.message); 
+    }
   };
 
   const handleCreateCategory = async () => {
     if (!newCategory.name) return;
     setSaving(true);
     try {
-      await createInventoryCategory(newCategory);
-      setNewCategory({ name: '', description: '' });
+      await createInventoryCategory({
+        name: newCategory.name,
+        description: newCategory.description,
+        parentId: newCategory.parentId ? parseInt(newCategory.parentId) : undefined
+      });
+      setNewCategory({ name: '', description: '', parentId: '' });
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
-    finally { setSaving(false); }
+    } catch (e: any) { 
+      alert('Hata: ' + e.message); 
+    } finally { 
+      setSaving(false); 
+    }
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!editingCategory || !editingCategory.name) return;
+    setSaving(true);
+    try {
+      await updateInventoryCategory(editingCategory.id, {
+        name: editingCategory.name,
+        description: editingCategory.description,
+        parentId: editingCategory.parentId ? parseInt(editingCategory.parentId) : null
+      });
+      setEditingCategory(null);
+      await load();
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeleteCategory = async (id: number) => {
-    if (!confirm('Bu kategoriyi silmek istediğinizden emin misiniz? (Bağlı stoklar etkilenebilir)')) return;
+    if (!confirm('Bu kategoriyi silmek istediğinizden emin misiniz? (Bağlı ürünlerin kategorisi sıfırlanacaktır)')) return;
     try {
       await deleteInventoryCategory(id);
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
+    } catch (e: any) { 
+      alert('Hata: ' + e.message); 
+    }
   };
 
   const getStatusLabel = (item: any) => {
@@ -108,35 +260,114 @@ export default function AdminStock() {
     const min = item.minStockLevel || 0;
     if (stock === 0) return { label: 'Tükendi', cls: 'bg-red-100 text-red-700' };
     if (stock <= min) return { label: 'Kritik', cls: 'bg-red-100 text-red-700' };
-    if (stock <= min * 2) return { label: 'Azalıyor', cls: 'bg-orange-100 text-orange-700' };
-    return { label: 'Yeterli', cls: 'bg-blue-100 text-secondary' };
+    if (stock <= min * 2) return { label: 'Azalıyor', cls: 'bg-amber-100 text-amber-700' };
+    return { label: 'Yeterli', cls: 'bg-emerald-100 text-emerald-800' };
+  };
+
+  const handlePrintBarcode = () => {
+    const printContent = printRef.current?.innerHTML;
+    if (printContent) {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+      
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(`
+          <html>
+            <head>
+              <title>Barkod Yazdır - ${printItem.name}</title>
+              <style>
+                body { margin: 0; padding: 20px; font-family: monospace; display: flex; justify-content: center; align-items: center; }
+                .label { border: 1px dashed #ccc; padding: 20px; text-align: center; width: 60mm; height: 40mm; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+                .title { font-size: 11px; font-weight: bold; margin-bottom: 5px; word-break: break-all; max-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+                .barcode-visual { height: 12mm; display: flex; align-items: center; justify-content: center; margin: 10px 0; border-top: 1px solid #000; border-bottom: 1px solid #000; letter-spacing: 4px; font-weight: bold; }
+                .price { font-size: 14px; font-weight: bold; margin-top: 5px; }
+                .barcode-text { font-size: 10px; font-family: monospace; }
+                @media print {
+                  body { padding: 0; }
+                  .label { border: none; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="label">
+                <div class="title">${printItem.name}</div>
+                <div class="barcode-visual">||| | || ||| || | |||</div>
+                <div>
+                  <div class="barcode-text">${printItem.barcode}</div>
+                  <div class="price">Fiyat: ₺${parseFloat(printItem.sellingPrice || '0').toLocaleString('tr-TR')}</div>
+                </div>
+              </div>
+              <script>
+                window.onload = function() {
+                  window.print();
+                  setTimeout(function() { window.frameElement.remove(); }, 100);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+        doc.close();
+      }
+    }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Stok ve Depo Yönetimi</h1>
-          <p className="text-sm text-gray-500 mt-1">Donanım ve yedek parçaların güncel stok durumu.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+            <Layers className="w-7 h-7 text-primary" /> Stok ve Envanter Yönetimi
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">Ürünlerinizi, barkodlarınızı, kategorilerinizi ve depo hareketlerinizi yönetin.</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-theme shadow-sm transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" /> Yeni Parça Ekle
-        </button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setShowScannerModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-white cursor-pointer"
+          >
+            <Barcode className="w-4 h-4 mr-2 text-primary" /> Barkod Oku
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-white cursor-pointer"
+          >
+            <Upload className="w-4 h-4 mr-2 text-amber-600" /> CSV Yükle
+          </button>
+          <a
+            href="/api/admin/stock/export-excel"
+            className="inline-flex items-center px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-white"
+          >
+            <Download className="w-4 h-4 mr-2 text-emerald-600" /> Excel İndir
+          </a>
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-xl shadow-sm transition-all duration-200 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Yeni Ürün Ekle
+          </button>
+        </div>
       </div>
 
+      {/* Tabs */}
       <div className="flex gap-4 border-b border-gray-200">
         <button
           onClick={() => setActiveTab('items')}
-          className={`pb-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'items' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          className={`pb-3 text-sm font-semibold transition-all border-b-2 px-2 cursor-pointer ${activeTab === 'items' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
         >
           Stok Kalemleri
         </button>
         <button
           onClick={() => setActiveTab('categories')}
-          className={`pb-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'categories' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          className={`pb-3 text-sm font-semibold transition-all border-b-2 px-2 cursor-pointer ${activeTab === 'categories' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
         >
           Kategori Yönetimi
         </button>
@@ -144,237 +375,496 @@ export default function AdminStock() {
 
       {activeTab === 'items' ? (
         <>
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-white p-5 rounded-theme border border-gray-200 shadow-sm">
-          <p className="text-sm text-gray-500 font-medium mb-1">Toplam Çeşit</p>
-          <p className="text-2xl font-bold text-gray-900">{totalItems}</p>
-        </div>
-        <div className="bg-white p-5 rounded-theme border border-gray-200 shadow-sm">
-          <p className="text-sm text-gray-500 font-medium mb-1">Toplam Stok Adedi</p>
-          <p className="text-2xl font-bold text-gray-900">{totalQty.toLocaleString('tr-TR')}</p>
-        </div>
-        <div className={`p-5 rounded-theme border shadow-sm ${criticalCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
-          <p className={`text-sm font-medium mb-1 flex items-center gap-1.5 ${criticalCount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
-            {criticalCount > 0 && <AlertTriangle className="w-4 h-4" />} Kritik Stok
-          </p>
-          <p className="text-2xl font-bold text-gray-900">{criticalCount} Parça</p>
-        </div>
-      </div>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+              <p className="text-sm text-gray-500 font-medium mb-1">Toplam Çeşit</p>
+              <p className="text-3xl font-bold text-gray-900">{totalItems} <span className="text-sm font-normal text-gray-400">kalem</span></p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+              <p className="text-sm text-gray-500 font-medium mb-1">Toplam Stok Adedi</p>
+              <p className="text-3xl font-bold text-gray-900">{totalQty.toLocaleString('tr-TR')} <span className="text-sm font-normal text-gray-400">adet</span></p>
+            </div>
+            <div className={`p-5 rounded-2xl border shadow-sm transition-all hover:shadow-md ${criticalCount > 0 ? 'bg-red-50/50 border-red-200' : 'bg-white border-gray-200'}`}>
+              <p className={`text-sm font-semibold mb-1 flex items-center gap-1.5 ${criticalCount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                {criticalCount > 0 && <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />} Kritik Stok
+              </p>
+              <p className="text-3xl font-bold text-gray-900">{criticalCount} <span className="text-sm font-normal text-gray-400">ürün</span></p>
+            </div>
+          </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-theme border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-48 max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Parça adı, SKU veya marka..."
-              value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-theme text-sm focus:ring-2 focus:ring-primary"
-            />
-          </div>
-          {categories.length > 0 && (
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="border border-gray-200 rounded-theme px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-primary bg-gray-50"
-            >
-              <option value="">Tüm Kategoriler</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          )}
-          <div className="flex gap-1.5">
-            {(['all', 'critical', 'ok'] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1.5 rounded-theme text-xs font-semibold transition-colors ${
-                  statusFilter === s
-                    ? s === 'critical' ? 'bg-red-600 text-white' : s === 'ok' ? 'bg-green-600 text-white' : 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {s === 'all' ? `Tümü (${items.length})` : s === 'critical' ? `Kritik (${items.filter(i => (i.currentStock || 0) <= (i.minStockLevel || 0)).length})` : `Yeterli (${items.filter(i => (i.currentStock || 0) > (i.minStockLevel || 0)).length})`}
-              </button>
-            ))}
-          </div>
-        </div>
+          {/* Filtering and Table */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+                <div className="relative w-full max-w-xs">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Ad, SKU, Barkod, Marka, Model..."
+                    value={search} 
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  />
+                </div>
+                {categories.length > 0 && (
+                  <select
+                    value={categoryFilter}
+                    onChange={e => setCategoryFilter(e.target.value)}
+                    className="border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-primary bg-white outline-none"
+                  >
+                    <option value="">Tüm Kategoriler</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>{getCategoryPath(c.id)}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
+                {(['all', 'critical', 'ok'] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setStatusFilter(s)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      statusFilter === s
+                        ? s === 'critical' ? 'bg-red-600 text-white shadow-sm' : s === 'ok' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-900 text-white shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
+                    }`}
+                  >
+                    {s === 'all' ? `Tümü (${items.length})` : s === 'critical' ? `Kritik (${items.filter(i => (i.currentStock || 0) <= (i.minStockLevel || 0)).length})` : `Yeterli (${items.filter(i => (i.currentStock || 0) > (i.minStockLevel || 0)).length})`}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="w-8 h-8 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-5 py-3.5 font-semibold">SKU</th>
-                  <th className="px-5 py-3.5 font-semibold">Ürün Adı</th>
-                  <th className="px-5 py-3.5 font-semibold">Kategori / Marka</th>
-                  <th className="px-5 py-3.5 font-semibold text-center">Mevcut / Min</th>
-                  <th className="px-5 py-3.5 font-semibold">Durum</th>
-                  <th className="px-5 py-3.5 font-semibold text-center">Stok İşlemi</th>
-                  <th className="px-5 py-3.5 font-semibold text-center">Sil</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-10 text-gray-400 font-medium">Stok kalemi bulunamadı</td></tr>
-                ) : filtered.map(item => {
-                  const st = getStatusLabel(item);
-                  const isAdjusting = adjustingId === item.id;
-                  return (
-                  <tr key={item.id} className="hover:bg-gray-50/50">
-                      <td className="px-5 py-3.5 font-mono text-xs text-gray-500">{item.sku}</td>
-                      <td className="px-5 py-3.5 font-medium text-gray-900">
-                        {item.name}
-                        {item.sellingPrice && <span className="ml-2 text-xs text-gray-400">₺{parseFloat(item.sellingPrice).toLocaleString('tr-TR')}</span>}
-                      </td>
-                      <td className="px-5 py-3.5 text-gray-500 text-xs">{item.categoryName || '—'} {item.brand && `/ ${item.brand}`}</td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className={item.currentStock <= item.minStockLevel ? 'text-red-600 font-bold' : 'text-gray-900 font-semibold'}>{item.currentStock}</span>
-                        <span className="text-gray-400 text-xs"> / {item.minStockLevel}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-md ${st.cls}`}>{st.label}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-center gap-2">
-                          {isAdjusting ? (
-                            <div className="flex items-center gap-1.5">
-                              <input type="number" min="1" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)}
-                                className="w-14 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:ring-primary" placeholder="1" />
-                              <button onClick={() => handleAdjust(item.id, 1)} className="p-1.5 bg-blue-100 text-secondary hover:bg-green-200 rounded text-xs font-bold"><TrendingUp className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => handleAdjust(item.id, -1)} className="p-1.5 bg-red-100 text-red-600 hover:bg-red-200 rounded text-xs font-bold"><TrendingDown className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => { setAdjustingId(null); setAdjustAmount(''); }} className="p-1.5 bg-gray-100 text-gray-500 hover:bg-gray-200 rounded"><X className="w-3.5 h-3.5" /></button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setAdjustingId(item.id)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-theme font-medium transition-colors">
-                              Düzenle
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-theme transition-colors"
-                          title="Pasife Al"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-48 gap-3">
+                <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                <span className="text-sm text-gray-500 font-medium">Stok verileri yükleniyor...</span>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-gray-500 uppercase bg-gray-50/70 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-4 font-semibold">Görsel / Barkod</th>
+                      <th className="px-6 py-4 font-semibold">SKU / Model</th>
+                      <th className="px-6 py-4 font-semibold">Ürün Adı</th>
+                      <th className="px-6 py-4 font-semibold">Kategori / Marka</th>
+                      <th className="px-6 py-4 font-semibold text-center">Mevcut / Kritik</th>
+                      <th className="px-6 py-4 font-semibold">Durum</th>
+                      <th className="px-6 py-4 font-semibold text-center">Stok Güncelle</th>
+                      <th className="px-6 py-4 font-semibold text-center">İşlemler</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-16 text-gray-400 font-medium bg-gray-50/30">
+                          Stok kalemi bulunamadı.
+                        </td>
+                      </tr>
+                    ) : filtered.map(item => {
+                      const st = getStatusLabel(item);
+                      const isAdjusting = adjustingId === item.id;
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50/40 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg border animate-fade-in" />
+                              ) : (
+                                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center border text-gray-400">
+                                  <FileText className="w-5 h-5" />
+                                </div>
+                              )}
+                              <div className="flex flex-col">
+                                <span className="font-mono text-xs text-gray-500 flex items-center gap-1">
+                                  <Barcode className="w-3.5 h-3.5 text-gray-400" /> {item.barcode || '—'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-mono text-xs font-semibold text-gray-800 bg-gray-100 px-2 py-0.5 rounded w-max">{item.sku}</span>
+                              <span className="text-xs text-gray-400 mt-1">{item.model || 'Model yok'}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-semibold text-gray-900">{item.name}</div>
+                            <div className="text-xs text-gray-400">{item.unit || 'adet'}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-700">{item.categoryId ? getCategoryPath(item.categoryId) : '—'}</div>
+                            <div className="text-xs text-gray-400">{item.brand || 'Markasız'}</div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="font-bold text-gray-900">{item.currentStock ?? 0}</div>
+                            <div className="text-[11px] text-gray-400">min: {item.minStockLevel ?? 0}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${st.cls}`}>{st.label}</span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {isAdjusting ? (
+                              <div className="flex items-center justify-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  autoFocus
+                                  value={adjustAmount}
+                                  onChange={e => setAdjustAmount(e.target.value)}
+                                  placeholder="Adet"
+                                  className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-xs text-center outline-none focus:ring-1 focus:ring-primary"
+                                />
+                                <button
+                                  onClick={() => handleAdjust(item.id, 1)}
+                                  title="Stok girişi"
+                                  className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg cursor-pointer"
+                                >
+                                  <TrendingUp className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleAdjust(item.id, -1)}
+                                  title="Stok çıkışı"
+                                  className="p-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg cursor-pointer"
+                                >
+                                  <TrendingDown className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => { setAdjustingId(null); setAdjustAmount(''); }}
+                                  className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg cursor-pointer"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setAdjustingId(item.id); setAdjustAmount(''); }}
+                                className="text-xs font-semibold text-primary hover:text-secondary px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                              >
+                                Giriş / Çıkış
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => setEditingItem({ ...item, categoryId: item.categoryId || '' })}
+                                title="Düzenle"
+                                className="p-1.5 text-gray-500 hover:text-primary hover:bg-primary/10 rounded-lg cursor-pointer"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setPrintItem(item)}
+                                title="Barkod Yazdır"
+                                className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer"
+                              >
+                                <Printer className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                title="Sil"
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
         </>
       ) : (
-        <div className="space-y-6">
-          <div className="bg-white p-5 rounded-theme border border-gray-200 shadow-sm flex flex-col sm:flex-row items-end gap-4">
-            <div className="flex-1 w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kategori Adı</label>
-              <input type="text" value={newCategory.name} onChange={e => setNewCategory({ ...newCategory, name: e.target.value })} className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" placeholder="Örn: Ağ Ürünleri" />
+        /* ===================== KATEGORİ YÖNETİMİ ===================== */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Yeni / Düzenle kategori formu */}
+          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm h-max">
+            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Plus className="w-4 h-4 text-primary" /> {editingCategory ? 'Kategoriyi Düzenle' : 'Yeni Kategori'}
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Kategori Adı *</label>
+                <input
+                  type="text"
+                  value={editingCategory ? editingCategory.name : newCategory.name}
+                  onChange={e => editingCategory
+                    ? setEditingCategory({ ...editingCategory, name: e.target.value })
+                    : setNewCategory({ ...newCategory, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="Örn: Ekran Kartları"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Üst Kategori</label>
+                <select
+                  value={editingCategory ? (editingCategory.parentId || '') : newCategory.parentId}
+                  onChange={e => editingCategory
+                    ? setEditingCategory({ ...editingCategory, parentId: e.target.value })
+                    : setNewCategory({ ...newCategory, parentId: e.target.value })}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary outline-none"
+                >
+                  <option value="">Ana Kategori (yok)</option>
+                  {categories.filter(c => !editingCategory || c.id !== editingCategory.id).map(c => (
+                    <option key={c.id} value={c.id}>{getCategoryPath(c.id)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Açıklama</label>
+                <textarea
+                  rows={2}
+                  value={editingCategory ? (editingCategory.description || '') : newCategory.description}
+                  onChange={e => editingCategory
+                    ? setEditingCategory({ ...editingCategory, description: e.target.value })
+                    : setNewCategory({ ...newCategory, description: e.target.value })}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none resize-none"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                {editingCategory && (
+                  <button
+                    onClick={() => setEditingCategory(null)}
+                    className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer"
+                  >
+                    İptal
+                  </button>
+                )}
+                <button
+                  onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
+                  disabled={saving || (editingCategory ? !editingCategory.name : !newCategory.name)}
+                  className="flex-1 bg-primary hover:bg-secondary text-white py-2 rounded-xl font-semibold disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {saving && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  {editingCategory ? 'Güncelle' : 'Ekle'}
+                </button>
+              </div>
             </div>
-            <div className="flex-1 w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama (Opsiyonel)</label>
-              <input type="text" value={newCategory.description} onChange={e => setNewCategory({ ...newCategory, description: e.target.value })} className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" placeholder="Kategori açıklaması" />
-            </div>
-            <button disabled={saving} onClick={handleCreateCategory} className="px-4 py-2 bg-primary text-white rounded-theme text-sm font-medium hover:bg-secondary transition-colors w-full sm:w-auto h-[38px] flex items-center justify-center">
-              Ekle
-            </button>
           </div>
-          
-          <div className="bg-white rounded-theme border border-gray-200 shadow-sm overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-5 py-3.5 font-semibold">Kategori Adı</th>
-                  <th className="px-5 py-3.5 font-semibold">Açıklama</th>
-                  <th className="px-5 py-3.5 font-semibold text-center w-24">Sil</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {categories.length === 0 ? (
-                  <tr><td colSpan={3} className="text-center py-10 text-gray-400 font-medium">Kategori bulunamadı</td></tr>
-                ) : categories.map(cat => (
-                  <tr key={cat.id} className="hover:bg-gray-50">
-                    <td className="px-5 py-3.5 font-medium text-gray-900">{cat.name}</td>
-                    <td className="px-5 py-3.5 text-gray-500">{cat.description || '—'}</td>
-                    <td className="px-5 py-3.5 text-center">
-                      <button onClick={() => handleDeleteCategory(cat.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Sil"><Trash2 className="w-4 h-4" /></button>
-                    </td>
-                  </tr>
+
+          {/* Kategori listesi */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900">Kategoriler ({categories.length})</h3>
+            </div>
+            {categories.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 text-sm">Henüz kategori eklenmedi.</div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {categories.map(cat => (
+                  <li key={cat.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/40">
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">{getCategoryPath(cat.id)}</p>
+                      {cat.description && <p className="text-xs text-gray-400 mt-0.5">{cat.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setEditingCategory({ ...cat, parentId: cat.parentId || '' })}
+                        className="p-1.5 text-gray-500 hover:text-primary hover:bg-primary/10 rounded-lg cursor-pointer"
+                        title="Düzenle"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(cat.id)}
+                        className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                        title="Sil"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            )}
           </div>
         </div>
       )}
 
-      {/* Modal */}
-      {showModal && (
+      {/* ===================== YENİ / DÜZENLE ÜRÜN MODALI ===================== */}
+      {(showModal || editingItem) && (() => {
+        const isEdit = !!editingItem;
+        const data: any = isEdit ? editingItem : newItem;
+        const setField = (field: string, value: any) => isEdit
+          ? setEditingItem({ ...editingItem, [field]: value })
+          : setNewItem({ ...newItem, [field]: value });
+        const close = () => isEdit ? setEditingItem(null) : setShowModal(false);
+        return (
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50 sticky top-0">
+                <h2 className="text-base font-bold text-gray-900">{isEdit ? 'Ürünü Düzenle' : 'Yeni Ürün Ekle'}</h2>
+                <button onClick={close} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
+              </div>
+              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Ürün Adı *</label>
+                  <input type="text" value={data.name || ''} onChange={e => setField('name', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">SKU</label>
+                  <input type="text" value={data.sku || ''} onChange={e => setField('sku', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Barkod</label>
+                  <input type="text" value={data.barcode || ''} onChange={e => setField('barcode', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Marka</label>
+                  <input type="text" value={data.brand || ''} onChange={e => setField('brand', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Model</label>
+                  <input type="text" value={data.model || ''} onChange={e => setField('model', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Kategori</label>
+                  <select value={data.categoryId || ''} onChange={e => setField('categoryId', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary outline-none">
+                    <option value="">Kategorisiz</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{getCategoryPath(c.id)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Birim</label>
+                  <input type="text" value={data.unit || ''} onChange={e => setField('unit', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="adet" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">KDV (%)</label>
+                  <input type="number" value={data.vatRate ?? ''} onChange={e => setField('vatRate', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Alış Fiyatı (₺)</label>
+                  <input type="number" step="0.01" value={data.costPrice ?? ''} onChange={e => setField('costPrice', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Satış Fiyatı (₺)</label>
+                  <input type="number" step="0.01" value={data.sellingPrice ?? ''} onChange={e => setField('sellingPrice', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                {!isEdit && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Başlangıç Stok</label>
+                    <input type="number" value={data.currentStock ?? ''} onChange={e => setField('currentStock', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Kritik Stok Seviyesi</label>
+                  <input type="number" value={data.minStockLevel ?? ''} onChange={e => setField('minStockLevel', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Görsel URL</label>
+                  <input type="text" value={data.imageUrl || ''} onChange={e => setField('imageUrl', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="/uploads/..." />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Açıklama</label>
+                  <textarea rows={2} value={data.description || ''} onChange={e => setField('description', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none resize-none" />
+                </div>
+              </div>
+              <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50/50 sticky bottom-0">
+                <button onClick={close} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer">İptal</button>
+                <button
+                  onClick={isEdit ? handleUpdate : handleCreate}
+                  disabled={saving || !data.name}
+                  className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-semibold disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {saving && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  {isEdit ? 'Değişiklikleri Kaydet' : 'Ürünü Kaydet'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===================== BARKOD OKUYUCU MODALI ===================== */}
+      {showScannerModal && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-theme shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">Yeni Stok Kalemi</h2>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-theme"><X className="w-5 h-5 text-gray-500" /></button>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><Barcode className="w-5 h-5 text-primary" /> Barkod Oku</h2>
+              <button onClick={() => { setShowScannerModal(false); setScanBuffer(''); }} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ürün Adı *</label>
-                <input type="text" value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" placeholder="Örn: Samsung 1TB NVMe SSD" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-                  <input type="text" value={newItem.sku} onChange={e => setNewItem({ ...newItem, sku: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" placeholder="SKU-001" />
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-gray-500">Barkodu okutun veya SKU girip Enter'a basın. Eşleşen ürünün stok giriş/çıkış alanı otomatik açılır.</p>
+              <input
+                ref={scannerInputRef}
+                type="text"
+                value={scanBuffer}
+                onChange={e => setScanBuffer(e.target.value)}
+                onKeyDown={handleScannerKeyDown}
+                placeholder="Barkod / SKU..."
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-primary outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== CSV İÇE AKTARMA MODALI ===================== */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><Upload className="w-5 h-5 text-amber-600" /> CSV ile Toplu Yükle</h2>
+              <button onClick={() => { setShowImportModal(false); setImportResult(null); setImportFile(null); }} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={e => setImportFile(e.target.files?.[0] || null)}
+                className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary/10 file:text-primary file:font-semibold hover:file:bg-primary/20 cursor-pointer"
+              />
+              {importResult && (
+                <div className={`text-xs font-semibold p-3 rounded-lg ${importResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  {importResult.success
+                    ? `Tamamlandı: ${importResult.imported || 0} yeni, ${importResult.updated || 0} güncellendi.`
+                    : `Hata: ${importResult.error}`}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Marka</label>
-                  <input type="text" value={newItem.brand} onChange={e => setNewItem({ ...newItem, brand: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" placeholder="Samsung" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Mevcut Adet</label>
-                  <input type="number" value={newItem.currentStock} onChange={e => setNewItem({ ...newItem, currentStock: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" placeholder="0" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Min. Stok</label>
-                  <input type="number" value={newItem.minStockLevel} onChange={e => setNewItem({ ...newItem, minStockLevel: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" placeholder="5" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Maliyet (₺)</label>
-                  <input type="number" value={newItem.costPrice} onChange={e => setNewItem({ ...newItem, costPrice: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Satış Fiyatı (₺)</label>
-                  <input type="number" value={newItem.sellingPrice} onChange={e => setNewItem({ ...newItem, sellingPrice: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary" />
-                </div>
+              )}
+            </div>
+            <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50/50">
+              <button onClick={() => { setShowImportModal(false); setImportResult(null); setImportFile(null); }} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer">Kapat</button>
+              <button
+                onClick={handleImportCSV}
+                disabled={importing || !importFile}
+                className="flex-1 bg-primary hover:bg-secondary text-white py-2 rounded-xl font-semibold disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {importing && <RefreshCw className="w-4 h-4 animate-spin" />}
+                İçe Aktar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== BARKOD YAZDIR MODALI ===================== */}
+      {printItem && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><Printer className="w-5 h-5 text-primary" /> Barkod Etiketi</h2>
+              <button onClick={() => setPrintItem(null)} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
+            </div>
+            <div className="p-5">
+              <div ref={printRef} className="border border-dashed border-gray-300 rounded-xl p-5 text-center">
+                <div className="font-bold text-sm mb-2 line-clamp-2">{printItem.name}</div>
+                <div className="border-y border-black py-2 my-2 tracking-[4px] font-bold">||| | || ||| || | |||</div>
+                <div className="text-xs font-mono">{printItem.barcode || '—'}</div>
+                <div className="text-sm font-bold mt-1">Fiyat: ₺{parseFloat(printItem.sellingPrice || '0').toLocaleString('tr-TR')}</div>
               </div>
             </div>
-            <div className="flex gap-3 p-6 border-t border-gray-100">
-              <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-theme font-semibold hover:bg-gray-50">İptal</button>
-              <button onClick={handleCreate} disabled={saving || !newItem.name}
-                className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-theme font-semibold disabled:opacity-50 flex items-center justify-center">
-                {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>}
-                Ekle
+            <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50/50">
+              <button onClick={() => setPrintItem(null)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer">Kapat</button>
+              <button onClick={handlePrintBarcode} className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 cursor-pointer">
+                <Printer className="w-4 h-4" /> Yazdır
               </button>
             </div>
           </div>

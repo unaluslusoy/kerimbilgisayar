@@ -5,7 +5,7 @@ import { users, tenants } from './src/db/schema';
 import { eq } from 'drizzle-orm';
 
 async function createAdmin() {
-  const conn = await mysql.createConnection('mysql://todestek_kerim:39RdaT38tx5rBH7sTvXs@45.43.152.5:3306/todestek_kerim?connectTimeout=10000');
+  const conn = await mysql.createConnection('mysql://root:@127.0.0.1:3306/todestek_kerim?connectTimeout=10000');
   const db = drizzle(conn, { schema, mode: 'default' });
 
   // Get tenant

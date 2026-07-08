@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import Breadcrumb from '../../components/Breadcrumb';
 import { HelpCircle, ChevronDown, Search, X } from 'lucide-react';
 import { fetchFAQ } from '../../lib/api';
 import { Link } from 'react-router-dom';
@@ -61,11 +62,7 @@ export default function FAQ() {
       {/* Page Header */}
       <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-sm text-gray-500 mb-6 flex items-center gap-2 font-medium">
-            <Link to="/" className="hover:text-primary transition-colors">Anasayfa</Link>
-            <span>&gt;</span>
-            <span className="text-gray-900">Sıkça Sorulan Sorular</span>
-          </div>
+          <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Sıkça Sorulan Sorular' }]} />
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
             Sıkça Sorulan Sorular
           </h1>

@@ -9,6 +9,8 @@ import {
   boolean,
   date,
   json,
+  index,
+  uniqueIndex,
 } from 'drizzle-orm/mysql-core';
 
 // --- SAAS MULTI-TENANCY & BILLING ---
@@ -101,7 +103,10 @@ export const users = mysqlTable('users', {
   lastLoginAt: timestamp('last_login_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  roleIdx: index('idx_users_role').on(t.roleType),
+  tenantIdx: index('idx_users_tenant').on(t.tenantId),
+}));
 
 export const customers = mysqlTable('customers', {
   id: int('id').autoincrement().primaryKey(),
@@ -115,7 +120,10 @@ export const customers = mysqlTable('customers', {
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  userIdx: index('idx_customers_user').on(t.userId),
+  companyIdx: index('idx_customers_company').on(t.companyId),
+}));
 
 export const customerSubscriptions = mysqlTable('customer_subscriptions', {
   id: int('id').autoincrement().primaryKey(),
@@ -234,13 +242,28 @@ export const tickets = mysqlTable('tickets', {
   subject: varchar('subject', { length: 255 }).notNull(),
   description: text('description').notNull(),
   priority: mysqlEnum('priority', ['dusuk', 'normal', 'yuksek', 'acil']).default('normal'),
-  status: mysqlEnum('status', ['yeni', 'isleme_alindi', 'parca_bekliyor', 'musteri_onaji_bekliyor', 'cozuldu', 'kapatildi', 'iptal']).default('yeni'),
+  status: mysqlEnum('status', ['yeni', 'isleme_alindi', 'parca_bekliyor', 'musteri_onaji_bekliyor', 'cozuldu', 'kapatildi', 'iptal', 'teslim_edildi']).default('yeni'),
   assignedTo: int('assigned_to').references(() => users.id),
   cost: decimal('cost', { precision: 10, scale: 2 }).default('0.00'),
+  laborCost: decimal('labor_cost', { precision: 10, scale: 2 }).default('0.00'),
+  accessories: text('accessories'),
+  isUnderWarranty: boolean('is_under_warranty').default(false),
+  warrantyNote: text('warranty_note'),
+  estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),
+  estimatedDueAt: timestamp('estimated_due_at'),
+  completedAt: timestamp('completed_at'),
+  deliveredAt: timestamp('delivered_at'),
+  customerSignature: text('customer_signature'),
+  deliverySignature: text('delivery_signature'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
   resolvedAt: timestamp('resolved_at'),
-});
+}, (t) => ({
+  ticketNumberIdx: uniqueIndex('idx_tickets_number').on(t.ticketNumber),
+  userIdx: index('idx_tickets_user').on(t.userId),
+  statusIdx: index('idx_tickets_status').on(t.status),
+  deviceIdx: index('idx_tickets_device').on(t.deviceId),
+}));
 
 export const ticketMessages = mysqlTable('ticket_messages', {
   id: int('id').autoincrement().primaryKey(),
@@ -269,6 +292,7 @@ export const ticketAttachments = mysqlTable('ticket_attachments', {
 export const inventoryCategories = mysqlTable('inventory_categories', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
+  parentId: int('parent_id'),
   name: varchar('name', { length: 100 }).notNull(),
   description: text('description'),
 });
@@ -278,9 +302,14 @@ export const stockItems = mysqlTable('stock_items', {
   tenantId: int('tenant_id').references(() => tenants.id),
   categoryId: int('category_id').references(() => inventoryCategories.id),
   sku: varchar('sku', { length: 100 }).notNull(),
+  barcode: varchar('barcode', { length: 100 }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   brand: varchar('brand', { length: 100 }),
+  model: varchar('model', { length: 100 }),
+  unit: varchar('unit', { length: 50 }).default('adet'),
+  vatRate: int('vat_rate').default(20),
+  imageUrl: varchar('image_url', { length: 500 }),
   costPrice: decimal('cost_price', { precision: 10, scale: 2 }),
   sellingPrice: decimal('selling_price', { precision: 10, scale: 2 }),
   currentStock: int('current_stock').default(0),
@@ -288,7 +317,11 @@ export const stockItems = mysqlTable('stock_items', {
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  skuIdx: index('idx_stock_sku').on(t.sku),
+  barcodeIdx: index('idx_stock_barcode').on(t.barcode),
+  categoryIdx: index('idx_stock_category').on(t.categoryId),
+}));
 
 export const ticketParts = mysqlTable('ticket_parts', {
   id: int('id').autoincrement().primaryKey(),
@@ -364,7 +397,10 @@ export const pages = mysqlTable('pages', {
   isSystem: boolean('is_system').default(false), // e.g. Home, About Us, Term that shouldn't be deleted completely
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  slugIdx: index('idx_pages_slug').on(t.slug),
+  statusIdx: index('idx_pages_status').on(t.status),
+}));
 
 export const blogPosts = mysqlTable('blog_posts', {
   id: int('id').autoincrement().primaryKey(),
@@ -384,7 +420,10 @@ export const blogPosts = mysqlTable('blog_posts', {
   focusKeyword: varchar('focus_keyword', { length: 100 }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  slugIdx: index('idx_blog_slug').on(t.slug),
+  statusIdx: index('idx_blog_status').on(t.status),
+}));
 
 export const faqCategories = mysqlTable('faq_categories', {
   id: int('id').autoincrement().primaryKey(),
@@ -443,7 +482,9 @@ export const settings = mysqlTable('settings', {
   value: text('value'),
   group: varchar('group', { length: 100 }), // e.g. 'general', 'smtp', 'payment'
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  keyIdx: index('idx_settings_key').on(t.key),
+}));
 
 export const auditLogs = mysqlTable('audit_logs', {
   id: int('id').autoincrement().primaryKey(),
@@ -507,7 +548,10 @@ export const termRelationships = mysqlTable('term_relationships', {
   objectId: int('object_id').notNull(), // e.g. blog_post.id
   objectType: varchar('object_type', { length: 50 }).notNull(), // 'blog_post', 'page'
   termId: int('term_id').references(() => terms.id).notNull(),
-});
+}, (t) => ({
+  objectIdx: index('idx_termrel_object').on(t.objectType, t.objectId),
+  termIdx: index('idx_termrel_term').on(t.termId),
+}));
 
 // --- CMS: MENUS & NAVIGATION ---
 
@@ -531,7 +575,9 @@ export const menuItems = mysqlTable('menu_items', {
   icon: varchar('icon', { length: 50 }),
   cssClass: varchar('css_class', { length: 255 }),
   megaMenu: json('mega_menu'),
-});
+}, (t) => ({
+  menuIdx: index('idx_menuitems_menu').on(t.menuId),
+}));
 
 // --- CMS: FORMS ---
 
@@ -580,7 +626,9 @@ export const apiKeys = mysqlTable('api_keys', {
   prefix: varchar('prefix', { length: 10 }).notNull(), // 'kb_' etc to identify key easily
   lastUsedAt: timestamp('last_used_at'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (t) => ({
+  keyHashIdx: index('idx_apikeys_hash').on(t.keyHash),
+}));
 
 export const webhooks = mysqlTable('webhooks', {
   id: int('id').autoincrement().primaryKey(),
@@ -636,7 +684,9 @@ export const translations = mysqlTable('translations', {
   value: text('value'), // e.g. 'Yükleniyor...'
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  langIdx: index('idx_translations_lang').on(t.langCode),
+}));
 
 export const themePresets = mysqlTable('theme_presets', {
   id: int('id').autoincrement().primaryKey(),
@@ -678,8 +728,84 @@ export const pageBlocks = mysqlTable('page_blocks', {
   responsiveOverrides: json('responsive_overrides'), // tablet/mobile specific settings
   sortOrder: int('sort_order').default(0),
   isVisible: boolean('is_visible').default(true),
-  visibilityRules: json('visibility_rules'), // e.g. { "device": ["desktop"] }
+  visibilityRule: json('visibility_rule'), // conditions to show/hide this block
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+}, (t) => ({
+  ownerIdx: index('idx_pageblocks_owner').on(t.ownerType, t.ownerId),
+}));
+
+// --- DEPO & STOk HAREKETLERİ ---
+
+export const warehouses = mysqlTable('warehouses', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 50 }),
+  address: text('address'),
+  isDefault: boolean('is_default').default(false),
+  isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
+export const serializedItems = mysqlTable('serialized_items', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  stockItemId: int('stock_item_id').references(() => stockItems.id),
+  serialNumber: varchar('serial_number', { length: 255 }).notNull(),
+  status: mysqlEnum('status', ['stokta', 'satildi', 'iade', 'servis']).default('stokta'),
+  warehouseId: int('warehouse_id').references(() => warehouses.id),
+  purchasePrice: decimal('purchase_price', { precision: 12, scale: 2 }),
+  purchasedAt: timestamp('purchased_at'),
+  soldAt: timestamp('sold_at'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+export const stockMovements = mysqlTable('stock_movements', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  stockItemId: int('stock_item_id').references(() => stockItems.id),
+  serializedItemId: int('serialized_item_id').references(() => serializedItems.id),
+  fromWarehouseId: int('from_warehouse_id').references(() => warehouses.id),
+  toWarehouseId: int('to_warehouse_id').references(() => warehouses.id),
+  quantity: int('quantity').notNull().default(0),
+  type: mysqlEnum('type', ['giris', 'cikis', 'transfer', 'iade', 'fire']).notNull(),
+  reason: varchar('reason', { length: 255 }),
+  referenceId: int('reference_id'),
+  createdById: int('created_by_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// --- SATIŞ & POS ---
+
+export const sales = mysqlTable('sales', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  customerId: int('customer_id').references(() => customers.id),
+  salespersonId: int('salesperson_id').references(() => users.id),
+  receiptNumber: varchar('receipt_number', { length: 100 }).notNull().unique(),
+  totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
+  taxAmount: decimal('tax_amount', { precision: 12, scale: 2 }).default('0.00'),
+  discountAmount: decimal('discount_amount', { precision: 12, scale: 2 }).default('0.00'),
+  paymentType: mysqlEnum('payment_type', ['nakit', 'kredi_karti', 'havale', 'cari']).notNull(),
+  status: mysqlEnum('status', ['odendi', 'beklemede', 'iptal', 'iade']).default('odendi'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+export const saleItems = mysqlTable('sale_items', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  saleId: int('sale_id').references(() => sales.id),
+  stockItemId: int('stock_item_id').references(() => stockItems.id),
+  serializedItemId: int('serialized_item_id').references(() => serializedItems.id),
+  quantity: int('quantity').notNull().default(1),
+  unitPrice: decimal('unit_price', { precision: 12, scale: 2 }).notNull(),
+  vatRate: int('vat_rate').default(20),
+  totalPrice: decimal('total_price', { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});

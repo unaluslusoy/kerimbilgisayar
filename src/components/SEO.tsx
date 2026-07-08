@@ -14,11 +14,20 @@ interface SEOProps {
 export default function SEO({ title, description, type = 'website', name = 'Kerim Bilgisayar', image, url, schema }: SEOProps) {
   const fullTitle = `${title} | ${name}`;
   
+  let canonicalUrl = url;
+  if (!canonicalUrl && typeof window !== 'undefined') {
+    canonicalUrl = window.location.href.split('?')[0];
+  }
+  if (canonicalUrl && canonicalUrl.endsWith('/') && canonicalUrl.split('/').length > 4) {
+    canonicalUrl = canonicalUrl.slice(0, -1);
+  }
+
   return (
     <Helmet>
       {/* Standard metadata tags */}
       <title>{fullTitle}</title>
       <meta name="description" content={description} />
+      {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
       
       {/* OpenGraph tags */}
       <meta property="og:type" content={type} />

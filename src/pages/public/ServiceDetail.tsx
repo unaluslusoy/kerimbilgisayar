@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Breadcrumb from '../../components/Breadcrumb';
 import { useParams, Link } from 'react-router-dom';
 import { fetchService, fetchServices } from '../../lib/api';
 import { MousePointerClick, ArrowLeft, CheckCircle2, ChevronRight, Activity, Zap, ShieldCheck } from 'lucide-react';
@@ -70,13 +71,7 @@ export default function ServiceDetail() {
       {/* Page Header */}
       <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-sm text-gray-500 mb-6 flex items-center gap-2 font-medium">
-            <Link to="/" className="hover:text-primary transition-colors">Anasayfa</Link>
-            <span>&gt;</span>
-            <Link to="/hizmetler" className="hover:text-primary transition-colors">Çözümlerimiz</Link>
-            <span>&gt;</span>
-            <span className="text-gray-900">{service.name}</span>
-          </div>
+          <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Çözümlerimiz', href: '/hizmetler' }, { label: service.name }]} />
           <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
             {service.name}
           </h1>

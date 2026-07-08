@@ -443,13 +443,17 @@ export async function fetchInventoryCategories() {
   return adminRequest('/api/admin/inventory-categories');
 }
 
-export async function createInventoryCategory(data: { name: string; description?: string }) {
+export async function createInventoryCategory(data: { name: string; description?: string; parentId?: number }) {
   return adminRequest('/api/admin/inventory-categories', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export async function deleteInventoryCategory(id: number) {
+export const deleteInventoryCategory = async (id: number) => {
   return adminRequest(`/api/admin/inventory-categories/${id}`, { method: 'DELETE' });
-}
+};
+
+export const updateInventoryCategory = async (id: number, data: any) => {
+  return adminRequest(`/api/admin/inventory-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+};
 
 
 
@@ -469,4 +473,19 @@ export async function createTicketMessage(data: { ticketId: number; message: str
 // ============================================================
 export async function convertLeadToTicket(id: number) {
   return adminRequest(`/api/admin/leads/${id}/convert`, { method: 'POST' });
+}
+
+// ============================================================
+// SALES & POS SYSTEM
+// ============================================================
+export async function fetchAdminSales() {
+  return adminRequest('/api/admin/sales');
+}
+
+export async function createAdminSale(data: any) {
+  return adminRequest('/api/admin/sales', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function fetchAdminSaleDetails(id: number) {
+  return adminRequest(`/api/admin/sales/${id}`);
 }

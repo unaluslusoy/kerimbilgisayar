@@ -20,6 +20,7 @@ const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
 const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'));
 const AdminSubscriptionPlans = lazy(() => import('./pages/admin/AdminSubscriptionPlans'));
 const AdminStock = lazy(() => import('./pages/admin/AdminStock'));
+const AdminPos = lazy(() => import('./pages/admin/AdminPos'));
 const AdminMessages = lazy(() => import('./pages/admin/AdminMessages'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AdminBlog = lazy(() => import('./pages/admin/AdminBlog'));
@@ -62,6 +63,7 @@ const AdminLiveCustomizer = lazy(() => import('./pages/admin/AdminLiveCustomizer
 const AdminLayouts = lazy(() => import('./pages/admin/AdminLayouts'));
 const AdminLayoutBuilder = lazy(() => import('./pages/admin/AdminLayoutBuilder'));
 
+const AdminGoogleDashboard = lazy(() => import('./pages/admin/google/AdminGoogleDashboard'));
 const AdminGooglePosts = lazy(() => import('./pages/admin/google/AdminGooglePosts'));
 const AdminGoogleReviews = lazy(() => import('./pages/admin/google/AdminGoogleReviews'));
 const AdminGoogleInfo = lazy(() => import('./pages/admin/google/AdminGoogleInfo'));
@@ -166,6 +168,7 @@ function AppContent() {
             <Route path="musteriler" element={<AdminCustomers />} />
             <Route path="abonelik-paketleri" element={<AdminSubscriptionPlans />} />
             <Route path="stok" element={<AdminStock />} />
+            <Route path="satis-pos" element={<AdminPos />} />
             <Route path="mesajlar" element={<AdminMessages />} />
             <Route path="ayarlar" element={<AdminSettings />} />
             <Route path="profilim" element={<AdminProfile />} />
@@ -192,6 +195,7 @@ function AppContent() {
             <Route path="hizmetler" element={<AdminServices />} />
             
             {/* Google Business Routes */}
+            <Route path="google" element={<AdminGoogleDashboard />} />
             <Route path="google/posts" element={<AdminGooglePosts />} />
             <Route path="google/reviews" element={<AdminGoogleReviews />} />
             <Route path="google/info" element={<AdminGoogleInfo />} />
@@ -219,11 +223,10 @@ export default function App() {
       <AuthProvider>
         <CustomerAuthProvider>
           <SettingsProvider>
-            <AppContent />
+                        <AppContent />
           </SettingsProvider>
         </CustomerAuthProvider>
       </AuthProvider>
     </Router>
   );
 }
-
