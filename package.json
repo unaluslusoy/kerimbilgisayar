@@ -11,7 +11,7 @@
     "dev:api": "tsx server.ts",
     "dev:web": "vite",
     "dev:split": "concurrently -k -n API,WEB -c blue,magenta \"npm:dev:api\" \"wait-on http://127.0.0.1:3000/api/ping && npm:dev:web\"",
-    "build": "vite build && mkdir -p dist/uploads && cp -a uploads/. dist/uploads/ && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && mkdir -p uploads dist/uploads && (cp -a uploads/. dist/uploads/ 2>/dev/null || true) && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
