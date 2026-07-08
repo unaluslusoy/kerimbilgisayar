@@ -9,13 +9,23 @@ import { defineConfig } from 'vite';
  *   2) SPLIT (opsiyonel)    → `npm run dev:split` = Express (3000) + Vite (5173) ayrı
  * Aşağıdaki `server` config sadece SPLIT modda çalışır.
  */
+import http from 'node:http';
+
 const API_TARGET = process.env.API_TARGET || 'http://127.0.0.1:3000';
+
+const agent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 1000,
+  maxSockets: 100,
+  maxFreeSockets: 10,
+});
 
 const proxyCommon = {
   target: API_TARGET,
   changeOrigin: true,
   timeout: 10_000,
   proxyTimeout: 10_000,
+  agent,
   configure: (proxy: any) => {
     proxy.on('error', (err: any, req: any, res: any) => {
       const msg = `[proxy] ${req?.method} ${req?.url} → ${API_TARGET} — ${err?.code || err?.message}`;
