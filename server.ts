@@ -623,6 +623,20 @@ async function startServer() {
     }
   });
 
+  app.get('/api/debug/logs', (req, res) => {
+    import('child_process').then(({ exec }) => {
+      exec('pm2 logs kerimbilgisayar --lines 100 --nostream', (err, stdout, stderr) => {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        if (err) {
+          return res.send(`ERROR: ${err.message}\n\nSTDERR:\n${stderr}\n\nSTDOUT:\n${stdout}`);
+        }
+        res.send(`STDOUT:\n${stdout}\n\nSTDERR:\n${stderr}`);
+      });
+    }).catch(e => {
+      res.status(500).send(e.message);
+    });
+  });
+
   app.get('/api/public/settings', async (req, res) => {
     try {
       const allSettings = await db.select().from(settings);
