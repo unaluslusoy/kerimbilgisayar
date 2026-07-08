@@ -442,23 +442,29 @@ async function startServer() {
   };
 
   const verifyTurnstile = async (req: express.Request) => {
-    if (process.env.NODE_ENV !== 'production') return true;
-    const settingsMap = await readSettingsMap();
-    if (settingsMap.captchaEnabled !== 'true') return true;
-    const secret = settingsMap.turnstileSecretKey?.trim();
-    const token = (req.body?.turnstileToken || req.body?.['cf-turnstile-response'] || '').trim();
-    if (!secret || !token) return false;
+    try {
+      if (process.env.NODE_ENV !== 'production') return true;
+      const settingsMap = await readSettingsMap();
+      if (settingsMap.captchaEnabled !== 'true') return true;
+      const secret = settingsMap.turnstileSecretKey?.trim();
+      const token = (req.body?.turnstileToken || req.body?.['cf-turnstile-response'] || '').trim();
+      if (!secret || !token) return false;
 
-    const formData = new URLSearchParams();
-    formData.set('secret', secret);
-    formData.set('response', token);
-    formData.set('remoteip', getClientIp(req));
-    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await response.json().catch(() => ({}));
-    return Boolean(data?.success);
+      const formData = new URLSearchParams();
+      formData.set('secret', secret);
+      formData.set('response', token);
+      formData.set('remoteip', getClientIp(req));
+      const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json().catch(() => ({}));
+      return Boolean(data?.success);
+    } catch (err: any) {
+      console.error('[captcha] Turnstile verification failed:', err.message || err);
+      // Fallback: server-side network/DNS errors should fail-open to avoid locking users out
+      return true;
+    }
   };
 
   app.use(async (req, res, next) => {
