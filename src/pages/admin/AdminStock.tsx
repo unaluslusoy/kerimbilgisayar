@@ -1,6 +1,7 @@
+// Stok & Envanter yönetim ekranı — ürün CRUD, kategori, barkod, CSV, stok hareketi
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, Search, AlertTriangle, X, TrendingUp, TrendingDown, 
+import {
+  Plus, Search, AlertTriangle, X, TrendingUp, TrendingDown,
   Trash2, Barcode, Printer, Upload, Download, Layers, Eye, RefreshCw, FileText
 } from 'lucide-react';
 import { 

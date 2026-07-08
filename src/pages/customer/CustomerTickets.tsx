@@ -10,13 +10,13 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: React.Ele
   yeni: { label: 'Servise Alındı', color: 'bg-blue-100 text-blue-800', icon: Package },
   isleme_alindi: { label: 'İşlemde', color: 'bg-yellow-100 text-yellow-800', icon: Wrench },
   parca_bekliyor: { label: 'Parça Bekleniyor', color: 'bg-orange-100 text-orange-800', icon: Clock },
-  musteri_onaji_bekliyor: { label: 'Onay Bekleniyor', color: 'bg-red-100 text-red-800', icon: AlertCircle },
+  musteri_onayi_bekliyor: { label: 'Onay Bekleniyor', color: 'bg-red-100 text-red-800', icon: AlertCircle },
   cozuldu: { label: 'Çözüldü', color: 'bg-green-100 text-green-800', icon: CheckCircle },
   kapatildi: { label: 'Teslim Edildi', color: 'bg-gray-100 text-gray-700', icon: CheckCircle },
   iptal: { label: 'İptal', color: 'bg-gray-100 text-gray-500', icon: AlertCircle },
 };
 
-const STEPS = ['yeni', 'isleme_alindi', 'parca_bekliyor', 'musteri_onaji_bekliyor', 'cozuldu', 'kapatildi'];
+const STEPS = ['yeni', 'isleme_alindi', 'parca_bekliyor', 'musteri_onayi_bekliyor', 'cozuldu', 'kapatildi'];
 
 function SkeletonRow() {
   return (
@@ -223,7 +223,7 @@ export default function CustomerTickets() {
               <div
                 key={ticket.id}
                 className={`bg-white rounded-xl border transition-all duration-200 ${
-                  ticket.status === 'musteri_onaji_bekliyor'
+                  ticket.status === 'musteri_onayi_bekliyor'
                     ? 'border-red-200 ring-1 ring-red-100'
                     : 'border-gray-100'
                 }`}

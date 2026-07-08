@@ -7,7 +7,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: React.Ele
   yeni: { label: 'Servise Alındı', color: 'bg-blue-100 text-blue-800', icon: Package },
   isleme_alindi: { label: 'İşlemde', color: 'bg-yellow-100 text-yellow-800', icon: Wrench },
   parca_bekliyor: { label: 'Parça Bekleniyor', color: 'bg-orange-100 text-orange-800', icon: Clock },
-  musteri_onaji_bekliyor: { label: 'Onay Bekleniyor', color: 'bg-red-100 text-red-800', icon: AlertCircle },
+  musteri_onayi_bekliyor: { label: 'Onay Bekleniyor', color: 'bg-red-100 text-red-800', icon: AlertCircle },
   cozuldu: { label: 'Çözüldü', color: 'bg-green-100 text-green-800', icon: CheckCircle },
   kapatildi: { label: 'Teslim Edildi', color: 'bg-gray-100 text-gray-800', icon: CheckCircle },
   iptal: { label: 'İptal', color: 'bg-gray-100 text-gray-500', icon: AlertCircle },
@@ -62,7 +62,7 @@ export default function CustomerDashboard() {
 
   const activeTickets = tickets.filter(t => !['cozuldu', 'kapatildi', 'iptal'].includes(t.status));
   const completedTickets = tickets.filter(t => ['cozuldu', 'kapatildi'].includes(t.status));
-  const awaitingApproval = tickets.filter(t => t.status === 'musteri_onaji_bekliyor');
+  const awaitingApproval = tickets.filter(t => t.status === 'musteri_onayi_bekliyor');
   const recentTickets = tickets.slice(0, 5);
 
   const stats = [

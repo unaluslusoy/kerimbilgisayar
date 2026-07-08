@@ -175,7 +175,7 @@ export default function AdminPos() {
         items: cart.map(c => ({
           stockItemId: c.id,
           quantity: c.quantity,
-          unitPrice: parseFloat(c.sellingPrice).toFixed(2),
+          unitPrice: (parseFloat(c.sellingPrice) || 0).toFixed(2),
           vatRate: c.vatRate
         }))
       };
@@ -288,15 +288,16 @@ export default function AdminPos() {
     }
   };
 
+  const [detailLoading, setDetailLoading] = useState(false);
   const showSaleDetails = async (saleId: number) => {
-    setLoading(true);
+    setDetailLoading(true);
     try {
       const details = await fetchAdminSaleDetails(saleId);
       setDetailSale(details);
     } catch (e: any) {
       alert('Satış detayları çekilemedi: ' + e.message);
     } finally {
-      setLoading(false);
+      setDetailLoading(false);
     }
   };
 

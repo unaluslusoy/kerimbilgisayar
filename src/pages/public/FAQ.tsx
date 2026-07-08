@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
+import SafeHtml from '../../components/SafeHtml';
 import { HelpCircle, ChevronDown, Search, X } from 'lucide-react';
 import { fetchFAQ } from '../../lib/api';
 import { Link } from 'react-router-dom';
@@ -155,9 +156,9 @@ export default function FAQ() {
                         }`}
                       >
                         <div className="px-6 pb-5 border-t border-gray-100">
-                          <div
+                          <SafeHtml
                             className="text-gray-600 leading-relaxed pt-4 prose max-w-none"
-                            dangerouslySetInnerHTML={{ __html: q.answer }}
+                            html={q.answer}
                           />
                         </div>
                       </div>

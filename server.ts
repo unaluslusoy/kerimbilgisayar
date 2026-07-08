@@ -28,6 +28,7 @@ import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -216,12 +217,33 @@ async function ensureCustomerRowsFromUsers(): Promise<number> {
   return migrated;
 }
 
-// Simple in-memory token store (for demo; in production use a proper session/JWT)
-const activeSessions: Map<string, { userId: number; email: string; name: string; role: string }> = new Map();
-const customerSessions: Map<string, { userId: number; email: string; name: string; role: string }> = new Map();
+// ─── JWT OTURUM YÖNETİMİ ──────────────────────────────────────────
+// Stateless: sunucu restart'ında oturumlar düşmez, cluster/çoklu-process güvenli.
+interface SessionPayload { userId: number; email: string; name: string; role: string }
 
-function generateToken(): string {
-  return crypto.randomBytes(32).toString('hex');
+const JWT_SECRET: string = process.env.JWT_SECRET || '';
+if (!JWT_SECRET) {
+  console.warn('⚠ JWT_SECRET tanımlı değil! .env dosyasına güçlü bir JWT_SECRET ekleyin.');
+  console.warn('   Geçici (güvensiz) bir anahtar kullanılıyor — PRODUCTION için mutlaka ayarlayın.');
+}
+// Boşsa dahi sabit bir fallback kullan (restart'ta token'lar geçersiz olmasın diye
+// makine adına dayalı deterministik bir değer). Prod'da JWT_SECRET zorunludur.
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || crypto.createHash('sha256').update('kerimbilgisayar-fallback-' + (process.env.DATABASE_NAME || 'db')).digest('hex');
+const ADMIN_TOKEN_TTL = '8h';
+const CUSTOMER_TOKEN_TTL = '30d';
+
+function signToken(payload: SessionPayload, scope: 'admin' | 'customer', ttl: string): string {
+  return jwt.sign({ ...payload, scope }, EFFECTIVE_JWT_SECRET, { expiresIn: ttl } as jwt.SignOptions);
+}
+
+function verifyToken(token: string, scope: 'admin' | 'customer'): SessionPayload | null {
+  try {
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as any;
+    if (decoded.scope !== scope) return null;
+    return { userId: decoded.userId, email: decoded.email, name: decoded.name, role: decoded.role };
+  } catch {
+    return null;
+  }
 }
 
 // ─── ŞİFRE GÜVENLİĞİ ──────────────────────────────────────────────
@@ -246,7 +268,7 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
     return res.status(401).json({ error: 'Yetkilendirme gerekli' });
   }
   const token = authHeader.slice(7);
-  const session = activeSessions.get(token);
+  const session = verifyToken(token, 'admin');
   if (!session) {
     return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token' });
   }
@@ -272,7 +294,7 @@ function requireCustomer(req: express.Request, res: express.Response, next: expr
     return res.status(401).json({ error: 'Yetkilendirme gerekli' });
   }
   const token = authHeader.slice(7);
-  const session = customerSessions.get(token);
+  const session = verifyToken(token, 'customer');
   if (!session) {
     return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token' });
   }
@@ -384,8 +406,28 @@ async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
   console.log(`[boot] mode: ${isDev ? 'DEVELOPMENT' : 'PRODUCTION'} | port: ${PORT}`);
 
+  // CSP: dev'de kapalı (Vite HMR inline/eval gerektirir).
+  // Prod'da REPORT-ONLY modda — hiçbir şeyi ENGELLEMEZ, sadece ihlalleri raporlar.
+  // Politika oturunca reportOnly:false yaparak zorlayıcı moda geçebilirsiniz.
+  const cspConfig = isDev
+    ? false as const
+    : {
+        useDefaults: true,
+        reportOnly: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://challenges.cloudflare.com'],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'", 'https://www.google-analytics.com'],
+          frameSrc: ["'self'", 'https://challenges.cloudflare.com', 'https://www.google.com'],
+          objectSrc: ["'none'"],
+        },
+      };
+
   app.use(helmet({
-    contentSecurityPolicy: false,       // CSP frontend (Vite/React) tarafından yönetilir
+    contentSecurityPolicy: cspConfig,
     crossOriginEmbedderPolicy: false,
   }));
 
@@ -862,9 +904,8 @@ async function startServer() {
 
       if (!(await verifyPassword(password, u.passwordHash))) return res.status(401).json({ error: 'Kullanıcı bulunamadı veya şifre hatalı' });
 
-      const token = generateToken();
       const sessionData = { userId: u.id, email: u.email, name: `${u.firstName} ${u.lastName}`, role: 'customer' };
-      customerSessions.set(token, sessionData);
+      const token = signToken(sessionData, 'customer', CUSTOMER_TOKEN_TTL);
 
       await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, u.id));
 
@@ -875,8 +916,7 @@ async function startServer() {
   });
 
   app.post('/api/customer/logout', requireCustomer, (req, res) => {
-    const token = req.headers.authorization?.slice(7);
-    if (token) customerSessions.delete(token);
+    // Stateless JWT: sunucu tarafı geçersiz kılma yok; istemci token'ı siler.
     res.json({ success: true });
   });
 
@@ -1089,7 +1129,7 @@ async function startServer() {
         'yeni': 'pending',
         'isleme_alindi': 'diagnosing',
         'parca_bekliyor': 'waiting_parts',
-        'musteri_onaji_bekliyor': 'waiting_parts',
+        'musteri_onayi_bekliyor': 'waiting_parts',
         'cozuldu': 'ready',
         'kapatildi': 'delivered',
         'iptal': 'delivered'
@@ -1205,14 +1245,13 @@ async function startServer() {
         return res.status(401).json({ error: 'E-posta veya şifre hatalı' });
       }
 
-      const token = generateToken();
       const sessionData = {
         userId: u.id,
         email: u.email,
         name: `${u.firstName} ${u.lastName}`,
         role: u.roleType || 'staff'
       };
-      activeSessions.set(token, sessionData);
+      const token = signToken(sessionData, 'admin', ADMIN_TOKEN_TTL);
 
       // Update last login
       await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, u.id));
@@ -1224,8 +1263,7 @@ async function startServer() {
   });
 
   app.post('/api/admin/logout', requireAdmin, (req, res) => {
-    const token = req.headers.authorization?.slice(7);
-    if (token) activeSessions.delete(token);
+    // Stateless JWT: sunucu tarafı geçersiz kılma yok; istemci token'ı siler.
     res.json({ success: true });
   });
 
@@ -1549,7 +1587,7 @@ async function startServer() {
               'yeni': 'Yeni',
               'isleme_alindi': 'İşleme Alındı',
               'parca_bekliyor': 'Parça Bekleniyor',
-              'musteri_onaji_bekliyor': 'Onay Bekleniyor',
+              'musteri_onayi_bekliyor': 'Onay Bekleniyor',
               'cozuldu': 'Çözüldü / Onarıldı',
               'kapatildi': 'Kapatıldı / Teslim Edildi',
               'iptal': 'İptal Edildi'
@@ -1600,7 +1638,7 @@ async function startServer() {
         'yeni': 'Yeni',
         'isleme_alindi': 'İşlemde',
         'parca_bekliyor': 'Parça Bekleniyor',
-        'musteri_onaji_bekliyor': 'Onay Bekleniyor',
+        'musteri_onayi_bekliyor': 'Onay Bekleniyor',
         'cozuldu': 'Çözüldü',
         'kapatildi': 'Kapatıldı',
         'iptal': 'İptal'
@@ -3707,22 +3745,30 @@ async function startServer() {
         return res.status(400).json({ error: 'Client ID veya Secret eksik' });
       }
       
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-      const host = req.headers['x-forwarded-host'] || req.get('host');
-      const redirectUri = `${protocol}://${host}/api/admin/plugins/google-business/oauth/callback`;
-      const oauth2Client = new google.auth.OAuth2(
-        settings.clientId,
-        settings.clientSecret,
-        redirectUri
-      );
+      // Use APP_URL env var (most reliable behind proxies), fallback to headers
+      let origin = '';
+      if (process.env.APP_URL) {
+        try { origin = new URL(process.env.APP_URL).origin; } catch {}
+      }
+      if (!origin) {
+        const proto = (req.headers['x-forwarded-proto'] as string || req.protocol).split(',')[0].trim();
+        const host = (req.headers['x-forwarded-host'] as string || req.get('host') || '').split(',')[0].trim();
+        origin = `${proto}://${host}`;
+      }
+      const redirectUri = `${origin}/api/admin/plugins/google-business/oauth/callback`;
       
+      // Save redirectUri to DB so callback can use the exact same value
+      const mergedSettings = { ...settings, oauthRedirectUri: redirectUri };
+      await db.update(plugins).set({ settings: mergedSettings }).where(eq(plugins.pluginId, 'google-business'));
+      
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret, redirectUri);
       const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: ['https://www.googleapis.com/auth/business.manage'],
         prompt: 'consent'
       });
       
-      res.json({ url });
+      res.json({ url, redirectUri });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -3730,21 +3776,30 @@ async function startServer() {
 
   app.get('/api/admin/plugins/google-business/oauth/callback', async (req, res) => {
     try {
-      const { code } = req.query;
+      const { code, error: oauthError } = req.query;
+      if (oauthError) {
+        console.error('[GMB OAuth] Google returned error:', oauthError);
+        return res.redirect(`/admin/eklentiler?oauth=error&reason=${encodeURIComponent(String(oauthError))}`);
+      }
+      if (!code) {
+        return res.redirect('/admin/eklentiler?oauth=error&reason=no_code');
+      }
+      
       const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
       let settings = gmbPlugin[0]?.settings as any || {};
       if (typeof settings === 'string') {
         try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
       }
       
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-      const host = req.headers['x-forwarded-host'] || req.get('host');
-      const redirectUri = `${protocol}://${host}/api/admin/plugins/google-business/oauth/callback`;
-      const oauth2Client = new google.auth.OAuth2(
-        settings.clientId,
-        settings.clientSecret,
-        redirectUri
-      );
+      // Use the exact same redirectUri that was used when generating the auth URL
+      const redirectUri = settings.oauthRedirectUri || (() => {
+        const proto = (req.headers['x-forwarded-proto'] as string || req.protocol).split(',')[0].trim();
+        const host = (req.headers['x-forwarded-host'] as string || req.get('host') || '').split(',')[0].trim();
+        return `${proto}://${host}/api/admin/plugins/google-business/oauth/callback`;
+      })();
+      
+      console.log('[GMB OAuth] Using redirectUri:', redirectUri);
+      const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret, redirectUri);
       
       const { tokens } = await oauth2Client.getToken(code as string);
       const newSettings = { ...settings, tokens };
@@ -3752,8 +3807,9 @@ async function startServer() {
       await db.update(plugins).set({ settings: newSettings, isActive: true }).where(eq(plugins.pluginId, 'google-business'));
       res.redirect('/admin/eklentiler?oauth=success');
     } catch (e: any) {
-      console.error(e);
-      res.redirect('/admin/eklentiler?oauth=error');
+      console.error('[GMB OAuth] callback error:', e?.message || e);
+      const reason = encodeURIComponent(e?.message || 'unknown');
+      res.redirect(`/admin/eklentiler?oauth=error&reason=${reason}`);
     }
   });
 
@@ -3879,13 +3935,11 @@ async function startServer() {
     try {
       const s = await getGMBSettings();
       if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
-      const { primaryPhone, profile } = req.body;
-      const mask: string[] = [];
-      if (primaryPhone !== undefined) mask.push('primaryPhone');
-      if (profile !== undefined) mask.push('profile');
+      const { updateMask, ...body } = req.body;
+      const mask = updateMask || 'title,primaryPhone,profile.description';
       const r = await createGMBClient(s).request({
-        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${s.selectedLocation}?updateMask=${mask.join(',')}`,
-        method: 'PATCH', data: req.body
+        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${s.selectedLocation}?updateMask=${mask}`,
+        method: 'PATCH', data: body
       });
       res.json(r.data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -3901,7 +3955,7 @@ async function startServer() {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // POST /media (URL ile yukle)
+  // POST /media
   app.post('/api/admin/plugins/google-business/media', requireAdmin, async (req, res) => {
     try {
       const s = await getGMBSettings();
@@ -3909,8 +3963,7 @@ async function startServer() {
       const { sourceUrl, category } = req.body;
       const r = await createGMBClient(s).request({
         url: `https://mybusiness.googleapis.com/v4/${s.selectedLocation}/media`,
-        method: 'POST',
-        data: { mediaFormat: 'PHOTO', locationAssociation: { category: category || 'ADDITIONAL' }, sourceUrl }
+        method: 'POST', data: { mediaFormat: 'PHOTO', sourceUrl, locationAssociation: { category: category || 'ADDITIONAL' } }
       });
       res.json(r.data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -3927,36 +3980,53 @@ async function startServer() {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // POST /insights (30/60/90 gun)
+  // POST /insights
   app.post('/api/admin/plugins/google-business/insights', requireAdmin, async (req, res) => {
     try {
       const s = await getGMBSettings();
       if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
-      const client = createGMBClient(s);
-      const days = parseInt(req.body?.days) || 90;
+      const days = Number(req.body?.days) || 90;
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      const fmt = (d: Date) => ({ year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() });
+      // Extract locations/{id} from accounts/{x}/locations/{id}
       const parts = s.selectedLocation.split('/');
-      const locPath = parts.length >= 2 ? `locations/${parts[parts.length - 1]}` : s.selectedLocation;
-      const end = new Date(); const start = new Date(); start.setDate(start.getDate() - days);
-      const fd = (d: Date) => ({ year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() });
-      const { year: sy, month: sm, day: sd } = fd(start);
-      const { year: ey, month: em, day: ed } = fd(end);
-      const metricsMap: Record<string, string> = {
-        BUSINESS_IMPRESSIONS_DESKTOP_MAPS: 'VIEWS_MAPS', BUSINESS_IMPRESSIONS_MOBILE_MAPS: 'VIEWS_MAPS',
-        BUSINESS_IMPRESSIONS_DESKTOP_SEARCH: 'VIEWS_SEARCH', BUSINESS_IMPRESSIONS_MOBILE_SEARCH: 'VIEWS_SEARCH',
-        WEBSITE_CLICKS: 'ACTIONS_WEBSITE', CALL_CLICKS: 'ACTIONS_PHONE',
-        BUSINESS_DIRECTION_REQUESTS: 'ACTIONS_DRIVING_DIRECTIONS'
+      const locationId = parts.length >= 2 ? parts.slice(-2).join('/') : s.selectedLocation;
+      const metricNames = ['BUSINESS_IMPRESSIONS_DESKTOP_MAPS','BUSINESS_IMPRESSIONS_DESKTOP_SEARCH','BUSINESS_IMPRESSIONS_MOBILE_MAPS','BUSINESS_IMPRESSIONS_MOBILE_SEARCH','BUSINESS_DIRECTION_REQUESTS','CALL_CLICKS','WEBSITE_CLICKS'];
+      const r = await createGMBClient(s).request({
+        url: `https://businessprofileperformance.googleapis.com/v1/${locationId}:fetchMultiDailyMetricsTimeSeries`,
+        method: 'GET',
+        params: {
+          'dailyMetrics': metricNames,
+          'dailyRange.start_date.year': fmt(startDate).year,
+          'dailyRange.start_date.month': fmt(startDate).month,
+          'dailyRange.start_date.day': fmt(startDate).day,
+          'dailyRange.end_date.year': fmt(endDate).year,
+          'dailyRange.end_date.month': fmt(endDate).month,
+          'dailyRange.end_date.day': fmt(endDate).day,
+        }
+      });
+      // Map new API metric names to old names for frontend compatibility
+      const nameMap: Record<string,string> = {
+        'BUSINESS_IMPRESSIONS_DESKTOP_MAPS': 'VIEWS_MAPS',
+        'BUSINESS_IMPRESSIONS_DESKTOP_SEARCH': 'VIEWS_SEARCH',
+        'BUSINESS_IMPRESSIONS_MOBILE_MAPS': 'VIEWS_MAPS',
+        'BUSINESS_IMPRESSIONS_MOBILE_SEARCH': 'VIEWS_SEARCH',
+        'BUSINESS_DIRECTION_REQUESTS': 'ACTIONS_DRIVING_DIRECTIONS',
+        'CALL_CLICKS': 'ACTIONS_PHONE',
+        'WEBSITE_CLICKS': 'ACTIONS_WEBSITE',
       };
+      const series = (r.data as any).multiDailyMetricTimeSeries || [];
       const totals: Record<string, number> = {};
-      for (const [nm, om] of Object.entries(metricsMap)) {
-        try {
-          const url = `https://businessprofileperformance.googleapis.com/v1/${locPath}:fetchMultiDailyMetricsTimeSeries?dailyMetrics=${nm}&dailyRange.startDate.year=${sy}&dailyRange.startDate.month=${sm}&dailyRange.startDate.day=${sd}&dailyRange.endDate.year=${ey}&dailyRange.endDate.month=${em}&dailyRange.endDate.day=${ed}`;
-          const rv = await client.request({ url });
-          const series = (rv.data as any).multiDailyMetricTimeSeries?.[0]?.dailyMetricTimeSeries?.[0]?.timeSeries?.datedValues || [];
-          const sum = series.reduce((a: number, d: any) => a + (parseInt(d.value) || 0), 0);
-          totals[om] = (totals[om] || 0) + sum;
-        } catch (_) {}
+      for (const item of series) {
+        const mapped = nameMap[item.dailyMetric] || item.dailyMetric;
+        const sum = (item.dailySubEntityData || item.timeSeries?.datedValues || [])
+          .reduce((acc: number, v: any) => acc + (v.value || 0), 0);
+        totals[mapped] = (totals[mapped] || 0) + sum;
       }
-      res.json({ locationMetrics: [{ metricValues: Object.entries(totals).map(([metric, value]) => ({ metric, totalValue: { value } })) }] });
+      const metricValues = Object.entries(totals).map(([metric, value]) => ({ metric, totalValue: { value } }));
+      res.json({ locationMetrics: [{ metricValues }] });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -4063,3 +4133,4 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
+  

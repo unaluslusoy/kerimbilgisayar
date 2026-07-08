@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
+import SafeHtml from '../../components/SafeHtml';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import { fetchPublicPage } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
@@ -67,9 +68,9 @@ export default function DynamicPage() {
 
       {/* Page Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div 
+        <SafeHtml
           className="prose prose-primary prose-lg max-w-none"
-          dangerouslySetInnerHTML={{ __html: page.content || '' }}
+          html={page.content}
         />
       </div>
     </div>

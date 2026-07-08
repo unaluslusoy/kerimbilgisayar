@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
+import SafeHtml from '../../components/SafeHtml';
 import { FileText, Cookie, Shield, Copyright, UserCheck, AlertCircle, Mail, HelpCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { fetchPage } from '../../lib/api';
@@ -117,7 +118,7 @@ export default function LegalPage({ type }: { type: 'kvkk' | 'cookies' | 'securi
               </div>
               <div className="prose prose-slate max-w-none prose-headings:text-gray-900 prose-headings:font-bold prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600">
                  {pageData?.content ? (
-                   <div dangerouslySetInnerHTML={{ __html: pageData.content }} />
+                   <SafeHtml html={pageData.content} />
                  ) : (
                    <p>İçerik henüz eklenmedi.</p>
                  )}

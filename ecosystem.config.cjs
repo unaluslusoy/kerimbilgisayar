@@ -23,6 +23,8 @@ module.exports = {
         DATABASE_URL: process.env.DATABASE_URL,
         GEMINI_API_KEY: process.env.GEMINI_API_KEY,
         APP_URL: process.env.APP_URL,
+        JWT_SECRET: process.env.JWT_SECRET,
+        ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
       },
     },
   ],

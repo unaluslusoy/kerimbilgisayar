@@ -8,9 +8,10 @@ const STATUS_COLORS: Record<string, string> = {
   'yeni': 'bg-blue-100 text-blue-700',
   'isleme_alindi': 'bg-purple-100 text-purple-700',
   'parca_bekliyor': 'bg-orange-100 text-orange-700',
-  'musteri_onaji_bekliyor': 'bg-amber-100 text-amber-700',
+  'musteri_onayi_bekliyor': 'bg-amber-100 text-amber-700',
   'cozuldu': 'bg-green-100 text-green-700',
   'kapatildi': 'bg-gray-100 text-gray-500',
+  'teslim_edildi': 'bg-teal-100 text-teal-700',
   'iptal': 'bg-red-100 text-red-600',
 };
 
@@ -18,9 +19,10 @@ const STATUS_LABELS: Record<string, string> = {
   'yeni': 'Servise Alındı',
   'isleme_alindi': 'Arıza Tespiti',
   'parca_bekliyor': 'Parça Bekleniyor',
-  'musteri_onaji_bekliyor': 'Onay Bekleniyor',
+  'musteri_onayi_bekliyor': 'Onay Bekleniyor',
   'cozuldu': 'Çözüldü',
   'kapatildi': 'Kapatıldı',
+  'teslim_edildi': 'Teslim Edildi',
   'iptal': 'İptal',
 };
 
@@ -181,8 +183,9 @@ export default function ServiceManager() {
     { key: 'yeni', label: 'Servise Alındı' },
     { key: 'isleme_alindi', label: 'Arıza Tespiti' },
     { key: 'parca_bekliyor', label: 'Parça Bekl.' },
-    { key: 'musteri_onaji_bekliyor', label: 'Onay Bekl.' },
+    { key: 'musteri_onayi_bekliyor', label: 'Onay Bekl.' },
     { key: 'cozuldu', label: 'Çözüldü' },
+    { key: 'teslim_edildi', label: 'Teslim Edildi' },
     { key: 'kapatildi', label: 'Kapatıldı' },
   ];
 
@@ -259,13 +262,13 @@ export default function ServiceManager() {
                   className={cn(
                     "bg-white rounded-theme border shadow-sm hover:shadow-md transition-all flex flex-col p-5 cursor-pointer",
                     detailTicket?.id === ticket.id ? 'border-primary ring-1 ring-primary' : 'border-gray-200',
-                    ticket.status === 'musteri_onaji_bekliyor' && detailTicket?.id !== ticket.id ? 'border-amber-300' : ''
+                    ticket.status === 'musteri_onayi_bekliyor' && detailTicket?.id !== ticket.id ? 'border-amber-300' : ''
                   )}
                 >
                   <div className="flex justify-between items-start mb-3">
                     <span className="font-mono text-xs font-bold text-gray-400">{ticket.ticketNumber}</span>
                     <div className="flex items-center gap-2">
-                      {ticket.status === 'musteri_onaji_bekliyor' && (
+                      {ticket.status === 'musteri_onayi_bekliyor' && (
                         <span title="Müşteri onayı bekleniyor"><AlertCircle className="w-3.5 h-3.5 text-amber-500" /></span>
                       )}
                       <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-bold", STATUS_COLORS[ticket.status || 'yeni'])}>

@@ -41,7 +41,7 @@ export default function DeviceStatus() {
     'yeni': { label: 'Servise Alındı', icon: Package, color: 'text-blue-600', bg: 'bg-blue-100' },
     'isleme_alindi': { label: 'Arıza Tespiti', icon: Wrench, color: 'text-purple-600', bg: 'bg-purple-100' },
     'parca_bekliyor': { label: 'Parça Bekleniyor', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-100' },
-    'musteri_onaji_bekliyor': { label: 'Müşteri Onayı Bekleniyor', icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-100' },
+    'musteri_onayi_bekliyor': { label: 'Müşteri Onayı Bekleniyor', icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-100' },
     'cozuldu': { label: 'Çözüldü', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' },
     'kapatildi': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-500', bg: 'bg-gray-100' },
     'iptal': { label: 'İptal Edildi', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-100' },
