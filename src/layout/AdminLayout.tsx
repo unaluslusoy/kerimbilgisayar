@@ -172,7 +172,7 @@ export default function AdminLayout() {
 
           {/* Footer Version Info */}
           <footer className="py-4 text-center text-xs text-gray-400 bg-[#f0f0f1] shrink-0">
-            Kerim Bilgisayar Yönetim Paneli • <span className="font-semibold text-gray-500">v1.1.2</span>
+            Kerim Bilgisayar Yönetim Paneli • <span className="font-semibold text-gray-500">v1.2.0</span>
           </footer>
         </div>
       </div>
