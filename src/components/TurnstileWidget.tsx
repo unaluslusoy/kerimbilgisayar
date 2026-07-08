@@ -62,5 +62,9 @@ export default function TurnstileWidget({ siteKey, enabled, onVerify }: Turnstil
   if ((import.meta as any).env.DEV) return null;
   if (!enabled || !siteKey) return null;
 
-  return <div ref={containerRef} className="cf-turnstile" data-sitekey={siteKey} />;
+  return (
+    <div className="flex justify-center w-full my-4">
+      <div ref={containerRef} className="cf-turnstile" data-sitekey={siteKey} />
+    </div>
+  );
 }

@@ -41,17 +41,16 @@ export default function AdminLogin() {
       <div className="absolute top-0 left-1/2 -ml-[400px] w-[800px] h-[800px] bg-green-900/20 rounded-full blur-3xl opacity-50 mix-blend-screen pointer-events-none"></div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="flex justify-center">
-          <div className="bg-primary p-3 rounded-theme shadow-lg shadow-green-600/20">
-            <Monitor className="w-10 h-10 text-white" />
-          </div>
+        <div className="flex flex-col items-center">
+          <img 
+            src="/assets/images/kerim-logo-beyaz.svg" 
+            alt="Kerim Bilgisayar" 
+            className="h-16 w-auto object-contain mb-4"
+          />
+          <p className="text-center text-sm text-gray-400">
+            Yetkili Yönetim Paneli Girişi
+          </p>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-          Kerim Bilgisayar
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-400">
-          Yetkili Yönetim Paneli Girişi
-        </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
