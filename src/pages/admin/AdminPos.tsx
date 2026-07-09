@@ -7,8 +7,10 @@ import {
   fetchAdminStock, fetchAdminCustomers, createAdminCustomer, 
   createAdminSale, fetchAdminSales, fetchAdminSaleDetails 
 } from '../../lib/api';
+import { useToast } from '../../context/ToastContext';
 
 export default function AdminPos() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'pos' | 'history'>('pos');
   const [stock, setStock] = useState<any[]>([]);
   const [customersList, setCustomersList] = useState<any[]>([]);
@@ -76,7 +78,7 @@ export default function AdminPos() {
     if (item) {
       addToCart(item);
     } else {
-      alert(`Barkod/SKU bulunamadı: ${barcode}`);
+      toast.warning(`Barkod/SKU bulunamadı: ${barcode}`);
     }
     setBarcodeInput('');
     if (barcodeInputRef.current) barcodeInputRef.current.focus();
@@ -86,7 +88,7 @@ export default function AdminPos() {
     const existing = cart.find(c => c.id === item.id);
     if (existing) {
       if (existing.quantity >= item.currentStock) {
-        alert(`Mevcut stok sınırına ulaşıldı: ${item.currentStock} adet.`);
+        toast.warning(`Mevcut stok sınırına ulaşıldı: ${item.currentStock} adet.`);
         return;
       }
       setCart(cart.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
@@ -104,7 +106,7 @@ export default function AdminPos() {
       return;
     }
     if (qty > item.currentStock) {
-      alert(`Mevcut stok sınırına ulaşıldı: ${item.currentStock} adet.`);
+      toast.warning(`Mevcut stok sınırına ulaşıldı: ${item.currentStock} adet.`);
       return;
     }
     setCart(cart.map(c => c.id === itemId ? { ...c, quantity: qty } : c));
@@ -156,8 +158,9 @@ export default function AdminPos() {
         const created = updated.find((c: any) => c.name === newCust.name);
         if (created) setSelectedCustomer(created);
       }
+      toast.success('Müşteri başarıyla eklendi.');
     } catch (e: any) {
-      alert('Müşteri ekleme hatası: ' + e.message);
+      toast.error('Müşteri ekleme hatası: ' + e.message);
     } finally {
       setSavingCustomer(false);
     }
@@ -166,7 +169,7 @@ export default function AdminPos() {
   const handleCompleteSale = async () => {
     if (cart.length === 0) return;
     if (paymentType === 'cari' && !selectedCustomer) {
-      alert('Cari satış (veresiye) yapabilmek için lütfen bir müşteri seçin.');
+      toast.warning('Cari satış (veresiye) yapabilmek için lütfen bir müşteri seçin.');
       return;
     }
 
@@ -192,9 +195,10 @@ export default function AdminPos() {
         setCompletedSaleDetails(fullDetails);
         clearCart();
         await loadData();
+        toast.success('Satış başarıyla tamamlandı!');
       }
     } catch (e: any) {
-      alert('Satış tamamlama hatası: ' + e.message);
+      toast.error('Satış tamamlama hatası: ' + e.message);
     } finally {
       setCompletingSale(false);
     }
@@ -300,7 +304,7 @@ export default function AdminPos() {
       const details = await fetchAdminSaleDetails(saleId);
       setDetailSale(details);
     } catch (e: any) {
-      alert('Satış detayları çekilemedi: ' + e.message);
+      toast.error('Satış detayları çekilemedi: ' + e.message);
     } finally {
       setDetailLoading(false);
     }

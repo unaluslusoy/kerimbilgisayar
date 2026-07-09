@@ -6,6 +6,7 @@ import Home from './pages/public/Home';
 import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { AuthProvider } from './context/AuthContext';
 import { CustomerAuthProvider } from './context/CustomerAuthContext';
+import { ToastProvider } from './context/ToastContext';
 
 // Lazy load layout components
 const AdminLayout = lazy(() => import('./layout/AdminLayout'));
@@ -223,7 +224,9 @@ export default function App() {
       <AuthProvider>
         <CustomerAuthProvider>
           <SettingsProvider>
-                        <AppContent />
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
           </SettingsProvider>
         </CustomerAuthProvider>
       </AuthProvider>
