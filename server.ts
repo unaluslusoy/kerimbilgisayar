@@ -872,18 +872,56 @@ async function startServer() {
       if (existing.length > 0) {
         // If a user with this email exists but has no password (e.g. from lead form)
         if (!existing[0].passwordHash) {
-          await db.update(users).set({ passwordHash: await hashPassword(password), firstName, lastName, phone }).where(eq(users.id, existing[0].id));
+          await db.transaction(async (tx) => {
+            await tx.update(users).set({ 
+              passwordHash: await hashPassword(password), 
+              firstName, 
+              lastName: lastName || '', 
+              phone: phone || null 
+            }).where(eq(users.id, existing[0].id));
+            
+            // Check if customer row exists
+            const existingCustomer = await tx.select().from(customers).where(eq(customers.userId, existing[0].id)).limit(1);
+            if (existingCustomer.length === 0) {
+              await tx.insert(customers).values({
+                tenantId: existing[0].tenantId || 1,
+                userId: existing[0].id,
+                companyId: existing[0].companyId || null,
+                accountCode: `MUS-${String(existing[0].id).padStart(5, '0')}`,
+                balance: '0.00',
+                creditLimit: '0.00',
+                notes: 'Müşteri kaydı esnasında otomatik oluşturuldu.',
+                isActive: true,
+              });
+            }
+          });
           return res.json({ success: true });
         }
         return res.status(400).json({ error: 'Bu e-posta zaten kullanımda' });
       }
 
-      await db.insert(users).values({
-        tenantId: 1,
-        firstName, lastName, email, phone,
-        passwordHash: await hashPassword(password),
-        roleType: 'customer',
-        isActive: true,
+      await db.transaction(async (tx) => {
+        const insertedUser = await tx.insert(users).values({
+          tenantId: 1,
+          firstName,
+          lastName: lastName || '',
+          email,
+          phone: phone || null,
+          passwordHash: await hashPassword(password),
+          roleType: 'customer',
+          isActive: true,
+        });
+        const userId = (insertedUser[0] as any).insertId;
+
+        await tx.insert(customers).values({
+          tenantId: 1,
+          userId,
+          accountCode: `MUS-${String(userId).padStart(5, '0')}`,
+          balance: '0.00',
+          creditLimit: '0.00',
+          notes: 'Müşteri kayıt esnasında otomatik oluşturuldu.',
+          isActive: true,
+        });
       });
 
       res.json({ success: true });
@@ -1485,61 +1523,90 @@ async function startServer() {
     try {
       const { subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost } = req.body;
       
-      // Create or find user
       let userId: number | null = null;
-      let userEmailForMail = customerEmail || '';
-
-      if (customerName && customerPhone) {
-        const nameParts = customerName.split(' ');
-        const existingUser = await db.select().from(users).where(eq(users.phone, customerPhone)).limit(1);
-        if (existingUser.length > 0) {
-          userId = existingUser[0].id;
-          if (!userEmailForMail && existingUser[0].email && !existingUser[0].email.includes('@noemail.local')) {
-            userEmailForMail = existingUser[0].email;
-          }
-          // If customer provided a new email, update it
-          if (customerEmail && existingUser[0].email.includes('@noemail.local')) {
-            await db.update(users).set({ email: customerEmail }).where(eq(users.id, userId));
-          }
-        } else {
-          const newUser = await db.insert(users).values({
-            tenantId: 1,
-            firstName: nameParts[0] || customerName,
-            lastName: nameParts.slice(1).join(' ') || '',
-            email: customerEmail || `${customerPhone}@noemail.local`,
-            phone: customerPhone,
-            roleType: 'customer'
-          });
-          userId = (newUser[0] as any).insertId;
-        }
-      }
-
-      // Create device if provided
       let deviceId: number | null = null;
-      if (deviceType) {
-        const newDevice = await db.insert(devices).values({
-          tenantId: 1,
-          userId: userId,
-          deviceType: deviceType,
-          brand: deviceBrand,
-          model: deviceModel,
-          name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType,
-        });
-        deviceId = (newDevice[0] as any).insertId;
-      }
-
+      let userEmailForMail = customerEmail || '';
       const ticketNumber = `SRV-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
-      await db.insert(tickets).values({
-        tenantId: 1,
-        ticketNumber,
-        userId: userId,
-        deviceId: deviceId,
-        type: type || 'ariza',
-        subject: subject || 'Teknik Servis Talebi',
-        description: description || '',
-        priority: priority || 'normal',
-        status: 'yeni',
-        cost: cost || '0.00'
+
+      await db.transaction(async (tx) => {
+        // Create or find user
+        if (customerName && customerPhone) {
+          const nameParts = customerName.split(' ');
+          const existingUser = await tx.select().from(users).where(eq(users.phone, customerPhone)).limit(1);
+          if (existingUser.length > 0) {
+            userId = existingUser[0].id;
+            if (!userEmailForMail && existingUser[0].email && !existingUser[0].email.includes('@noemail.local')) {
+              userEmailForMail = existingUser[0].email;
+            }
+            // If customer provided a new email, update it
+            if (customerEmail && existingUser[0].email.includes('@noemail.local')) {
+              await tx.update(users).set({ email: customerEmail }).where(eq(users.id, userId));
+            }
+            
+            // Ensure customer record exists
+            const existingCustomer = await tx.select().from(customers).where(eq(customers.userId, userId)).limit(1);
+            if (existingCustomer.length === 0) {
+              await tx.insert(customers).values({
+                tenantId: existingUser[0].tenantId || 1,
+                userId: userId,
+                companyId: existingUser[0].companyId || null,
+                accountCode: `MUS-${String(userId).padStart(5, '0')}`,
+                balance: '0.00',
+                creditLimit: '0.00',
+                notes: 'Teknik servis fişi oluşturulurken otomatik senkronize edildi.',
+                isActive: true,
+              });
+            }
+          } else {
+            const newUser = await tx.insert(users).values({
+              tenantId: 1,
+              firstName: nameParts[0] || customerName,
+              lastName: nameParts.slice(1).join(' ') || '',
+              email: customerEmail || `${customerPhone}@noemail.local`,
+              phone: customerPhone,
+              roleType: 'customer'
+            });
+            userId = (newUser[0] as any).insertId;
+
+            // Immediately create the corresponding customer record
+            await tx.insert(customers).values({
+              tenantId: 1,
+              userId: userId,
+              accountCode: `MUS-${String(userId).padStart(5, '0')}`,
+              balance: '0.00',
+              creditLimit: '0.00',
+              notes: 'Teknik servis fişi oluşturulurken otomatik eklendi.',
+              isActive: true,
+            });
+          }
+        }
+
+        // Create device if provided
+        if (deviceType) {
+          const newDevice = await tx.insert(devices).values({
+            tenantId: 1,
+            userId: userId,
+            deviceType: deviceType,
+            brand: deviceBrand,
+            model: deviceModel,
+            name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType,
+          });
+          deviceId = (newDevice[0] as any).insertId;
+        }
+
+        // Create ticket
+        await tx.insert(tickets).values({
+          tenantId: 1,
+          ticketNumber,
+          userId: userId,
+          deviceId: deviceId,
+          type: type || 'ariza',
+          subject: subject || 'Teknik Servis Talebi',
+          description: description || '',
+          priority: priority || 'normal',
+          status: 'yeni',
+          cost: cost || '0.00'
+        });
       });
 
       // Send initial email
@@ -1611,7 +1678,6 @@ async function startServer() {
 
   app.get('/api/admin/stats', requireAdmin, async (req, res) => {
     try {
-      await ensureCustomerRowsFromUsers();
       // Tickets count
       const allTickets = await db.select().from(tickets);
       const newTickets = allTickets.filter(t => t.status === 'yeni');
@@ -2605,13 +2671,34 @@ async function startServer() {
   app.post('/api/admin/users', requireAdmin, requireRole('superadmin', 'tenant_admin'), async (req, res) => {
     try {
       const { firstName, lastName, email, phone, roleType, password } = req.body;
-      await db.insert(users).values({
-        tenantId: 1,
-        firstName, lastName, email, phone,
-        roleType: roleType || 'staff',
-        passwordHash: await hashPassword(password || crypto.randomBytes(9).toString('base64url')),
-        isActive: true,
+      const targetRole = roleType || 'staff';
+      
+      await db.transaction(async (tx) => {
+        const insertedUser = await tx.insert(users).values({
+          tenantId: 1,
+          firstName,
+          lastName: lastName || '',
+          email,
+          phone: phone || null,
+          roleType: targetRole,
+          passwordHash: await hashPassword(password || crypto.randomBytes(9).toString('base64url')),
+          isActive: true,
+        });
+        
+        if (targetRole === 'customer') {
+          const userId = (insertedUser[0] as any).insertId;
+          await tx.insert(customers).values({
+            tenantId: 1,
+            userId,
+            accountCode: `MUS-${String(userId).padStart(5, '0')}`,
+            balance: '0.00',
+            creditLimit: '0.00',
+            notes: 'Yönetim panelinden kullanıcı olarak eklendi.',
+            isActive: true,
+          });
+        }
       });
+
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -2637,7 +2724,6 @@ async function startServer() {
 
   app.get('/api/admin/customers', requireAdmin, async (req, res) => {
     try {
-      await ensureCustomerRowsFromUsers();
       const allCustomers = await db.select({
         id: customers.userId,
         customerId: customers.id,
@@ -2680,45 +2766,50 @@ async function startServer() {
   app.post('/api/admin/customers', requireAdmin, async (req, res) => {
     try {
       const { firstName, lastName, email, phone, password, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes } = req.body;
-      let companyId: number | null = null;
+      
+      await db.transaction(async (tx) => {
+        let companyId: number | null = null;
 
-      if (companyName || taxId || taxOffice || address || sector) {
-        const insertedCompany = await db.insert(companies).values({
+        if (companyName || taxId || taxOffice || address || sector) {
+          const insertedCompany = await tx.insert(companies).values({
+            tenantId: 1,
+            name: companyName || `${firstName} ${lastName || ''}`.trim(),
+            taxId: taxId || null,
+            taxOffice: taxOffice || null,
+            address: address || null,
+            phone: phone || null,
+            email: email || null,
+            sector: sector || null,
+            type: 'customer',
+          });
+          companyId = (insertedCompany[0] as any).insertId;
+        }
+
+        const insertedUser = await tx.insert(users).values({
           tenantId: 1,
-          name: companyName || `${firstName} ${lastName || ''}`.trim(),
-          taxId: taxId || null,
-          taxOffice: taxOffice || null,
-          address: address || null,
+          companyId,
+          firstName,
+          lastName: lastName || '',
+          email,
           phone: phone || null,
-          email: email || null,
-          sector: sector || null,
-          type: 'customer',
+          roleType: 'customer',
+          passwordHash: await hashPassword(password || crypto.randomBytes(9).toString('base64url')),
+          isActive: true,
         });
-        companyId = (insertedCompany[0] as any).insertId;
-      }
+        const userId = (insertedUser[0] as any).insertId;
+        
+        await tx.insert(customers).values({
+          tenantId: 1,
+          userId,
+          companyId,
+          accountCode: accountCode || `MUS-${String(userId).padStart(5, '0')}`,
+          balance: balance?.toString() || '0.00',
+          creditLimit: creditLimit?.toString() || '0.00',
+          notes: notes || null,
+          isActive: true,
+        });
+      });
 
-      const insertedUser = await db.insert(users).values({
-        tenantId: 1,
-        companyId,
-        firstName,
-        lastName: lastName || '',
-        email,
-        phone: phone || null,
-        roleType: 'customer',
-        passwordHash: await hashPassword(password || crypto.randomBytes(9).toString('base64url')),
-        isActive: true,
-      });
-      const userId = (insertedUser[0] as any).insertId;
-      await db.insert(customers).values({
-        tenantId: 1,
-        userId,
-        companyId,
-        accountCode: accountCode || `MUS-${String(userId).padStart(5, '0')}`,
-        balance: balance?.toString() || '0.00',
-        creditLimit: creditLimit?.toString() || '0.00',
-        notes: notes || null,
-        isActive: true,
-      });
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
