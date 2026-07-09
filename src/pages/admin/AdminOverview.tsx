@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, Wrench, Users, Inbox, Printer, Package, CheckCircle2, MessageSquare, CalendarCheck, TrendingUp } from 'lucide-react';
-import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { fetchAdminStats, createBlogPost } from '../../lib/api';
 import { Link } from 'react-router-dom';
 import { cn, generateSlug } from '../../lib/utils';
@@ -13,6 +13,7 @@ const STATUS_COLORS_MAP: Record<string, string> = {
   'Çözüldü': '#6b7280',
   'Kapatıldı': '#374151',
   'İptal': '#ef4444',
+  'Teslim Edildi': '#14b8a6',
 };
 
 const TICKET_STATUS_LABELS: Record<string, string> = {
@@ -23,6 +24,7 @@ const TICKET_STATUS_LABELS: Record<string, string> = {
   'cozuldu': 'Çözüldü',
   'kapatildi': 'Kapatıldı',
   'iptal': 'İptal',
+  'teslim_edildi': 'Teslim Edildi',
 };
 
 const STATUS_COLORS_TICKET: Record<string, string> = {
@@ -33,6 +35,7 @@ const STATUS_COLORS_TICKET: Record<string, string> = {
   'cozuldu': 'bg-gray-100 text-gray-600',
   'kapatildi': 'bg-gray-100 text-gray-500',
   'iptal': 'bg-red-100 text-red-600',
+  'teslim_edildi': 'bg-teal-100 text-teal-700',
 };
 
 export default function AdminOverview() {
@@ -81,10 +84,13 @@ export default function AdminOverview() {
     );
   }
 
+  const totalRevVal = stats?.totalRevenue ? `₺${parseFloat(stats.totalRevenue).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}` : '₺0';
+
   const kpis = [
     { title: 'Toplam Servis Kaydı', value: stats?.ticketCount ?? '—', icon: Wrench, color: 'text-blue-600', bg: 'bg-blue-50', trend: 'Tüm kayıtlar', link: '/admin/servis' },
     { title: 'Yeni / Bekleyen', value: stats?.newLeads ?? '—', icon: Inbox, color: 'text-amber-600', bg: 'bg-amber-50', trend: 'İşlem bekliyor', link: '/admin/servis' },
     { title: 'Müşteri Sayısı', value: stats?.customerCount ?? '—', icon: Users, color: 'text-green-600', bg: 'bg-green-50', trend: 'Kayıtlı müşteri', link: '/admin/musteriler' },
+    { title: 'Toplam Ciro', value: totalRevVal, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: 'Başarılı satışlar', link: '/admin/pos' },
     { 
       title: 'Kritik Stok', 
       value: stats?.stockAlerts ?? 0, 
@@ -108,7 +114,7 @@ export default function AdminOverview() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
         {kpis.map((kpi, i) => (
           <Link key={i} to={kpi.link} className="bg-white p-4 rounded-theme border border-gray-200 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 block">
             <div className={`p-2 rounded-theme ${kpi.bg} w-fit mb-3`}>
@@ -116,10 +122,10 @@ export default function AdminOverview() {
             </div>
             <p className="text-xs text-gray-500 font-medium mb-0.5 leading-tight">{kpi.title}</p>
             <p className={`text-xl font-bold ${
-              (i === 3 && (stats?.stockAlerts ?? 0) > 0) ? 'text-red-600' : 'text-gray-900'
+              (i === 4 && (stats?.stockAlerts ?? 0) > 0) ? 'text-red-600' : 'text-gray-900'
             }`}>{kpi.value}</p>
             <p className={`text-[10px] mt-0.5 ${
-              (i === 3 && (stats?.stockAlerts ?? 0) > 0) ? 'text-red-500 font-semibold' : 'text-gray-400'
+              (i === 4 && (stats?.stockAlerts ?? 0) > 0) ? 'text-red-500 font-semibold' : 'text-gray-400'
             }`}>{kpi.trend}</p>
           </Link>
         ))}
@@ -291,6 +297,42 @@ export default function AdminOverview() {
           </div>
         </div>
       </div>
+
+      {/* Sales Trend Chart */}
+      {stats?.dailySales?.length > 0 && (
+        <div className="bg-white p-6 rounded-theme border border-gray-200 shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <h3 className="text-base font-bold text-gray-900">Son 7 Günlük Satış Trendi</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Günlük ciro ve başarılı satış adeti takibi.</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs font-semibold text-gray-500">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-emerald-500 rounded-full"></span> Ciro (₺)</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-amber-500 rounded-full"></span> Satış Adeti</span>
+            </div>
+          </div>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={stats.dailySales} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                <YAxis yAxisId="left" tickLine={false} axisLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  formatter={(value: any, name: string) => {
+                    if (name === 'amount') return [`₺${value.toLocaleString('tr-TR')}`, 'Ciro'];
+                    if (name === 'count') return [`${value} adet`, 'Satış Adeti'];
+                    return [value, name];
+                  }}
+                />
+                <Line yAxisId="left" type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} name="amount" />
+                <Line yAxisId="right" type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: '#f59e0b', r: 3 }} name="count" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

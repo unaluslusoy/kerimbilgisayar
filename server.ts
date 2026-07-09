@@ -1694,6 +1694,46 @@ async function startServer() {
       const allStock = await db.select().from(stockItems).where(eq(stockItems.isActive, true));
       const stockAlertCount = allStock.filter(s => (s.currentStock || 0) <= (s.minStockLevel || 0)).length;
 
+      // Sales and revenue stats
+      const allSales = await db.select().from(sales).where(eq(sales.status, 'odendi'));
+      const totalRevenue = allSales.reduce((sum, s) => sum + parseFloat(s.totalAmount || '0'), 0);
+      const salesCount = allSales.length;
+
+      // Son 7 günün günlük satış dağılımı
+      const dailyMap: Record<string, { date: string; amount: number; count: number }> = {};
+      const formatLocDate = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+
+      // Son 7 günü başlat
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = formatLocDate(d);
+        const label = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+        dailyMap[dateStr] = { date: label, amount: 0, count: 0 };
+      }
+
+      // Satışları günlere yerleştir
+      for (const s of allSales) {
+        if (s.createdAt) {
+          const dateStr = formatLocDate(new Date(s.createdAt));
+          if (dailyMap[dateStr]) {
+            dailyMap[dateStr].amount += parseFloat(s.totalAmount || '0');
+            dailyMap[dateStr].count += 1;
+          }
+        }
+      }
+
+      const dailySales = Object.keys(dailyMap).sort().map(k => ({
+        date: dailyMap[k].date,
+        amount: Math.round(dailyMap[k].amount),
+        count: dailyMap[k].count
+      }));
+
       // Status Distribution
       const statusCounts = allTickets.reduce((acc: any, t) => {
         acc[t.status] = (acc[t.status] || 0) + 1;
@@ -1707,7 +1747,8 @@ async function startServer() {
         'musteri_onayi_bekliyor': 'Onay Bekleniyor',
         'cozuldu': 'Çözüldü',
         'kapatildi': 'Kapatıldı',
-        'iptal': 'İptal'
+        'iptal': 'İptal',
+        'teslim_edildi': 'Teslim Edildi'
       };
 
       const statusDistribution = Object.keys(statusCounts).map(k => ({
@@ -1736,6 +1777,9 @@ async function startServer() {
         stockAlerts: stockAlertCount,
         pageCount: allPages.length,
         blogCount: allBlogs.length,
+        totalRevenue,
+        salesCount,
+        dailySales,
         statusDistribution,
         recentTickets: recentTickets.map(t => ({
           ...t,
