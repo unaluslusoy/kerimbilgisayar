@@ -139,15 +139,20 @@ export default function AdminPos() {
       const res = await createAdminCustomer(newCust);
       setShowAddCustModal(false);
       setNewCust({ name: '', phone: '', email: '', taxOffice: '', taxId: '', address: '' });
-      await loadData();
-      // Select newly created customer
+      
+      // Fetch fresh customer list immediately to avoid stale closure state
+      const updated = await fetchAdminCustomers();
+      setCustomersList(updated);
+      
+      // Refresh other lists in background
+      loadData();
+
+      // Select newly created customer using fresh list
       if (res.customerId) {
-        const fullCust = customersList.find(c => c.id === res.customerId) || { id: res.customerId, name: newCust.name };
-        setSelectedCustomer(fullCust);
+        const fullCust = updated.find((c: any) => c.customerId === res.customerId || c.id === res.customerId);
+        setSelectedCustomer(fullCust || { id: res.customerId, name: newCust.name });
       } else {
         // Fallback search
-        const updated = await fetchAdminCustomers();
-        setCustomersList(updated);
         const created = updated.find((c: any) => c.name === newCust.name);
         if (created) setSelectedCustomer(created);
       }
