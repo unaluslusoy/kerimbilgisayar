@@ -87,111 +87,7 @@ import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
 
 const uploadsDir = path.join(rootDir, 'uploads');
 
-function nullableDecimal(value: unknown): string | null {
-  if (value === undefined || value === null || value === '') return null;
-  const normalized = Number(value);
-  return Number.isFinite(normalized) ? normalized.toString() : null;
-}
-
-function nullableInt(value: unknown): number | null {
-  if (value === undefined || value === null || value === '') return null;
-  const normalized = parseInt(String(value), 10);
-  return Number.isFinite(normalized) ? normalized : null;
-}
-
-function generateSlug(text: string): string {
-  const mapping: Record<string, string> = {
-    'ç': 'c', 'Ç': 'c',
-    'ğ': 'g', 'Ğ': 'g',
-    'ı': 'i', 'I': 'i', 'İ': 'i',
-    'ö': 'o', 'Ö': 'o',
-    'ş': 's', 'Ş': 's',
-    'ü': 'u', 'Ü': 'u'
-  };
-  let str = text || '';
-  Object.keys(mapping).forEach(key => {
-    str = str.replace(new RegExp(key, 'g'), mapping[key]);
-  });
-  return str.toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w-]/g, '')
-    .replace(/--+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '');
-}
-
-// SSRF koruması: özel/loopback/link-local IP ve http(s) dışı şemaları reddet
-function assertSafeRemoteUrl(rawUrl: string): URL {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    throw new Error('Geçersiz URL');
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('Yalnızca http/https destekleniyor');
-  }
-  const host = parsed.hostname.toLowerCase();
-  const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'metadata.google.internal'];
-  if (blockedHosts.includes(host)) throw new Error('Bu adrese erişim engellendi');
-  // IPv4 özel/loopback/link-local aralıkları
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const [a, b] = [parseInt(m[1]), parseInt(m[2])];
-    const isPrivate =
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168);
-    if (isPrivate) throw new Error('Özel ağ adreslerine erişim engellendi');
-  }
-  return parsed;
-}
-
-async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | null): Promise<string> {
-  if (!/^https?:\/\//i.test(sourceUrl)) return sourceUrl;
-
-  assertSafeRemoteUrl(sourceUrl);
-
-  const existing = await db.select().from(mediaLibrary).where(eq(mediaLibrary.description, `remote:${sourceUrl}`)).limit(1);
-  if (existing.length > 0) return existing[0].fileUrl;
-
-  const response = await fetch(sourceUrl, { redirect: 'follow' });
-  if (!response.ok) throw new Error(`Görsel indirilemedi: ${response.status}`);
-
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.startsWith('image/')) throw new Error('URL bir görsel dosyası değil');
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length > 8 * 1024 * 1024) throw new Error('Görsel 8 MB sınırını aşıyor');
-
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  const parsedUrl = new URL(sourceUrl);
-  const originalName = path.basename(parsedUrl.pathname) || 'remote-image';
-  const safeBase = generateSlug(path.parse(originalName).name) || 'remote-image';
-  const fileName = `${Date.now()}-${safeBase}.webp`;
-  const filePath = path.join(uploadsDir, fileName);
-
-  await sharp(buffer).webp({ quality: 80 }).toFile(filePath);
-
-  const fileUrl = `/uploads/${fileName}`;
-  const title = path.parse(originalName).name || safeBase;
-  await db.insert(mediaLibrary).values({
-    tenantId: 1,
-    uploaderId: uploaderId || null,
-    folderId: null,
-    fileName,
-    fileUrl,
-    mimeType: 'image/webp',
-    fileSize: fs.statSync(filePath).size,
-    title,
-    altText: title,
-    description: `remote:${sourceUrl}`,
-  });
-
-  return fileUrl;
-}
+import { nullableDecimal, nullableInt, generateSlug, assertSafeRemoteUrl, saveRemoteImageToMedia } from './src/server/utils';
 
 async function ensureCustomerRowsFromUsers(): Promise<number> {
   const customerUsers = await db.select().from(users).where(eq(users.roleType, 'customer'));
@@ -217,124 +113,20 @@ async function ensureCustomerRowsFromUsers(): Promise<number> {
   return migrated;
 }
 
-// ─── JWT OTURUM YÖNETİMİ ──────────────────────────────────────────
-// Stateless: sunucu restart'ında oturumlar düşmez, cluster/çoklu-process güvenli.
-interface SessionPayload { userId: number; email: string; name: string; role: string }
-
-const JWT_SECRET: string = process.env.JWT_SECRET || '';
-if (!JWT_SECRET) {
-  console.warn('⚠ JWT_SECRET tanımlı değil! .env dosyasına güçlü bir JWT_SECRET ekleyin.');
-  console.warn('   Geçici (güvensiz) bir anahtar kullanılıyor — PRODUCTION için mutlaka ayarlayın.');
-}
-// Boşsa dahi sabit bir fallback kullan (restart'ta token'lar geçersiz olmasın diye
-// makine adına dayalı deterministik bir değer). Prod'da JWT_SECRET zorunludur.
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || crypto.createHash('sha256').update('kerimbilgisayar-fallback-' + (process.env.DATABASE_NAME || 'db')).digest('hex');
-const ADMIN_TOKEN_TTL = '8h';
-const CUSTOMER_TOKEN_TTL = '30d';
-
-function signToken(payload: SessionPayload, scope: 'admin' | 'customer', ttl: string): string {
-  return jwt.sign({ ...payload, scope }, EFFECTIVE_JWT_SECRET, { expiresIn: ttl } as jwt.SignOptions);
-}
-
-function verifyToken(token: string, scope: 'admin' | 'customer'): SessionPayload | null {
-  try {
-    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as any;
-    if (decoded.scope !== scope) return null;
-    return { userId: decoded.userId, email: decoded.email, name: decoded.name, role: decoded.role };
-  } catch {
-    return null;
-  }
-}
-
-// ─── ŞİFRE GÜVENLİĞİ ──────────────────────────────────────────────
-const SALT_ROUNDS = 12;
-async function hashPassword(raw: string): Promise<string> {
-  return bcrypt.hash(raw, SALT_ROUNDS);
-}
-// Bcrypt hash'i düz metinden ayırt eder ($2a/$2b/$2y ön eki)
-function isBcryptHash(value?: string | null): boolean {
-  return !!value && /^\$2[aby]\$/.test(value);
-}
-// Geriye dönük uyumlu doğrulama: hash varsa bcrypt, (eski) düz metinse doğrudan karşılaştır
-async function verifyPassword(raw: string, stored?: string | null): Promise<boolean> {
-  if (!stored) return false;
-  if (isBcryptHash(stored)) return bcrypt.compare(raw, stored);
-  return raw === stored; // eski düz-metin kayıtlar için tek seferlik geçiş
-}
-
-function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Yetkilendirme gerekli' });
-  }
-  const token = authHeader.slice(7);
-  const session = verifyToken(token, 'admin');
-  if (!session) {
-    return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token' });
-  }
-  (req as any).adminUser = session;
-  next();
-}
-
-// Rol tabanlı yetkilendirme — requireAdmin'den SONRA zincirlenir.
-// Örn: app.post('/api/admin/users', requireAdmin, requireRole('superadmin','tenant_admin'), handler)
-function requireRole(...roles: string[]) {
-  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const session = (req as any).adminUser;
-    if (!session || !roles.includes(session.role)) {
-      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
-    }
-    next();
-  };
-}
-
-function requireCustomer(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Yetkilendirme gerekli' });
-  }
-  const token = authHeader.slice(7);
-  const session = verifyToken(token, 'customer');
-  if (!session) {
-    return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token' });
-  }
-  (req as any).customerUser = session;
-  next();
-}
-
-async function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const authHeader = req.headers['x-api-key'] || req.headers.authorization;
-  let providedKey = '';
-
-  if (typeof authHeader === 'string') {
-    if (authHeader.startsWith('Bearer ')) {
-      providedKey = authHeader.substring(7);
-    } else {
-      providedKey = authHeader;
-    }
-  }
-
-  if (!providedKey || !providedKey.startsWith('kb_')) {
-    return res.status(401).json({ error: 'Geçersiz veya eksik API Key' });
-  }
-
-  try {
-    const keyHash = crypto.createHash('sha256').update(providedKey).digest('hex');
-    const matchedKey = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash)).limit(1);
-
-    if (matchedKey.length === 0) {
-      return res.status(401).json({ error: 'Yetkisiz API Key' });
-    }
-
-    // Update last used at in background
-    db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, matchedKey[0].id)).execute().catch(console.error);
-
-    (req as any).apiClient = matchedKey[0];
-    next();
-  } catch (err) {
-    res.status(500).json({ error: 'API Key doğrulama hatası' });
-  }
-}
+import {
+  signToken,
+  verifyToken,
+  hashPassword,
+  isBcryptHash,
+  verifyPassword,
+  requireAdmin,
+  requireRole,
+  requireCustomer,
+  requireApiKey,
+  loginLimiter,
+  ADMIN_TOKEN_TTL,
+  CUSTOMER_TOKEN_TTL
+} from './src/server/middleware';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DB WARM-UP — startup'ta gerçek bağlantı testi
@@ -458,7 +250,7 @@ async function startServer() {
     credentials: true,
   }));
 
-  const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
+
 
   // Dev mode: Vite middleware embed (SPA + HMR aynı port'ta)
   let viteMiddleware: any = null;
