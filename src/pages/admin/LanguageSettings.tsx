@@ -27,7 +27,7 @@ export default function LanguageSettings() {
   const [editTranslations, setEditTranslations] = useState<Record<string, Record<string, string>>>({});
   
   // Extract unique keys across all translations
-  const allKeys = Array.from(new Set(translations.map(t => t.key))).sort();
+  const allKeys: string[] = Array.from(new Set(translations.map(t => t.key))).sort() as string[];
 
   useEffect(() => {
     fetchData();

@@ -21,12 +21,12 @@ function clean(html?: string) {
   return DOMPurify.sanitize(html || '', { USE_PROFILES: { html: true } });
 }
 
-function BlockRenderer({ block }: { block: Block }) {
+function BlockRenderer({ block }: { block: Block; key?: React.Key }) {
   const p = block.props || {};
   switch (block.elementKey) {
     case 'heading': {
       const level = Math.min(Math.max(parseInt(p.level) || 2, 1), 6);
-      const Tag = (`h${level}`) as keyof JSX.IntrinsicElements;
+      const Tag = (`h${level}`) as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
       return <Tag className={p.className || 'text-2xl font-bold text-gray-900 my-4'}>{p.text || ''}</Tag>;
     }
     case 'text':

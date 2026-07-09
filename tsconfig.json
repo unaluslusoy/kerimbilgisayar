@@ -23,5 +23,6 @@
     "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true
-  }
+  },
+  "exclude": ["scripts", "node_modules", "dist"]
 }

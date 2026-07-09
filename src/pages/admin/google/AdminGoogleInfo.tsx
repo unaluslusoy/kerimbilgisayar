@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { adminRequest } from '../../../lib/api';
 import {
   Store, Loader2, Save, Image as ImageIcon, Phone, FileText,

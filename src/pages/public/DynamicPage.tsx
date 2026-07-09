@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
 import SafeHtml from '../../components/SafeHtml';
 import { useParams, Navigate, Link } from 'react-router-dom';
-import { fetchPublicPage } from '../../lib/api';
+import { fetchPublicPage, fetchPublicPageBlocks } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
+import RenderEngine from '../../components/RenderEngine';
 
 export default function DynamicPage() {
   const { slug } = useParams<{ slug: string }>();
   const [page, setPage] = useState<any>(null);
+  const [blocks, setBlocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -16,13 +18,17 @@ export default function DynamicPage() {
   useEffect(() => {
     if (!slug) return;
     setLoading(true);
-    fetchPublicPage(slug)
-      .then(data => {
-        setPage(data);
-        document.title = data.metaTitle || data.title;
+    Promise.all([
+      fetchPublicPage(slug),
+      fetchPublicPageBlocks(slug).catch(() => [])
+    ])
+      .then(([pageData, blocksData]) => {
+        setPage(pageData);
+        setBlocks(blocksData);
+        document.title = pageData.metaTitle || pageData.title;
         const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc && data.metaDescription) {
-          metaDesc.setAttribute('content', data.metaDescription);
+        if (metaDesc && pageData.metaDescription) {
+          metaDesc.setAttribute('content', pageData.metaDescription);
         }
       })
       .catch(() => setError(true))
@@ -68,9 +74,14 @@ export default function DynamicPage() {
 
       {/* Page Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <SafeHtml
-          className="prose prose-primary prose-lg max-w-none"
-          html={page.content}
+        <RenderEngine
+          blocks={blocks}
+          defaultContent={
+            <SafeHtml
+              className="prose prose-primary prose-lg max-w-none"
+              html={page.content}
+            />
+          }
         />
       </div>
     </div>

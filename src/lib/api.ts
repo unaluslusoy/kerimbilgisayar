@@ -429,6 +429,12 @@ export async function fetchPublicPage(slug: string) {
   return res.json();
 }
 
+export async function fetchPublicPageBlocks(slug: string) {
+  const res = await fetch(`/api/public/pages/${slug}/blocks`);
+  if (!res.ok) throw new Error('Sayfa blokları yüklenemedi');
+  return res.json();
+}
+
 // ============================================================
 // STOCK — DELETE
 // ============================================================

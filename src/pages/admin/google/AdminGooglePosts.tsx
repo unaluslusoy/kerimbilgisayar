@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { adminRequest } from '../../../lib/api';
 import {
   PlusCircle, Megaphone, Trash2, Edit2, Loader2, X, AlertTriangle,

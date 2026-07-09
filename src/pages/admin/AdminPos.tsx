@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, Barcode, ShoppingCart, User, Plus, X, Trash2, 
   CreditCard, Banknote, Landmark, FileText, CheckCircle, Printer, RefreshCw, ChevronRight, Layers, Eye
