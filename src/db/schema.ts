@@ -809,3 +809,14 @@ export const saleItems = mysqlTable('sale_items', {
   totalPrice: decimal('total_price', { precision: 12, scale: 2 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+export const blockedIps = mysqlTable('blocked_ips', {
+  id: int('id').autoincrement().primaryKey(),
+  ipAddress: varchar('ip_address', { length: 45 }).notNull().unique(),
+  blockedUntil: timestamp('blocked_until').notNull(),
+  reason: varchar('reason', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  ipIdx: uniqueIndex('idx_blocked_ips_ip').on(t.ipAddress),
+}));
+
