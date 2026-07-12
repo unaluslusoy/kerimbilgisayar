@@ -50,11 +50,28 @@ export default function Contact() {
       <SEO 
         title="İletişim" 
         description="Kerim Bilgisayar iletişim bilgileri, adres, telefon ve mesaj formu." 
+        geoLat={settings?.geoLat}
+        geoLng={settings?.geoLng}
+        geoRegion={settings?.geoRegion}
+        geoPlacename={settings?.geoPlacename}
+        breadcrumbs={[
+          { name: t('common.home', 'Anasayfa'), url: '/' },
+          { name: t('contact.title', 'İletişim'), url: '/iletisim' }
+        ]}
         schema={{
           "@context": "https://schema.org",
           "@type": "ContactPage",
           "name": "İletişim | Kerim Bilgisayar",
-          "url": "https://kerimbilgisayar.com/iletisim"
+          "url": "https://kerimbilgisayar.com/iletisim",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": settings?.contactAddress
+          },
+          "geo": {
+            "@type": "GeoCoordinates",
+            "latitude": settings?.geoLat,
+            "longitude": settings?.geoLng
+          }
         }}
       />
       {/* Breadcrumb & Title */}

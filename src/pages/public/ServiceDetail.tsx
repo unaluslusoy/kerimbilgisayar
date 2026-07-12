@@ -5,6 +5,8 @@ import { fetchService, fetchServices } from '../../lib/api';
 import { MousePointerClick, ArrowLeft, CheckCircle2, ChevronRight, Activity, Zap, ShieldCheck } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { usePageTitle } from '../../lib/usePageTitle';
+import SEO from '../../components/SEO';
+import { useSettings } from '../../context/SettingsContext';
 
 const DynamicIcon = ({ name, className }: { name?: string | null; className?: string }) => {
   if (!name) return <MousePointerClick className={className} />;
@@ -17,6 +19,7 @@ export default function ServiceDetail() {
   const [service, setService] = useState<any>(null);
   const [relatedServices, setRelatedServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { settings } = useSettings();
   
   usePageTitle(service?.name || '');
 
@@ -68,6 +71,31 @@ export default function ServiceDetail() {
 
   return (
     <div className="bg-white min-h-screen">
+      <SEO
+        title={service.name}
+        description={service.description?.substring(0, 160) || "Kurumsal ve bireysel IT altyapı hizmeti çözümleri."}
+        geoRegion={settings?.geoRegion}
+        geoLat={settings?.geoLat}
+        geoLng={settings?.geoLng}
+        geoPlacename={settings?.geoPlacename}
+        breadcrumbs={[
+          { name: 'Anasayfa', url: settings?.siteBaseUrl || 'https://kerimbilgisayar.com' },
+          { name: 'Çözümlerimiz', url: `${settings?.siteBaseUrl || 'https://kerimbilgisayar.com'}/hizmetler` },
+          { name: service.name, url: `${settings?.siteBaseUrl || 'https://kerimbilgisayar.com'}/hizmetler/${id}` }
+        ]}
+        schema={{
+          "@context": "https://schema.org",
+          "@type": "Service",
+          "name": service.name,
+          "description": service.description || "",
+          "provider": {
+            "@type": "LocalBusiness",
+            "name": settings?.siteTitle || "Kerim Bilgisayar",
+            "url": settings?.siteBaseUrl || "https://kerimbilgisayar.com"
+          },
+          "areaServed": settings?.geoPlacename || "Istanbul"
+        }}
+      />
       {/* Page Header */}
       <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

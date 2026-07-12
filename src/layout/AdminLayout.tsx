@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Wrench, Users, Box, MessageSquare, Settings, LogOut,
-  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid
+  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid, Shield
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState, useEffect } from 'react';
@@ -56,6 +56,7 @@ export default function AdminLayout() {
     { name: 'Sistem', separator: true },
     { name: 'API Anahtarları', path: '/admin/api-anahtarlari', icon: Key },
     { name: 'Webhooks', path: '/admin/webhooks', icon: Webhook },
+    { name: 'Guvenlik', path: '/admin/guvenlik', icon: Shield },
     { name: 'Eklentiler', path: '/admin/eklentiler', icon: Puzzle },
     { name: 'Dil Yönetimi', path: '/admin/diller', icon: BookOpen },
     { name: 'Ayarlar', path: '/admin/ayarlar', icon: Settings },

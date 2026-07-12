@@ -33,6 +33,15 @@ export default function AdminSettings() {
     sitemapDefaultChangefreq: 'weekly',
     sitemapExtraUrls: '',
     robotsTxt: '',
+    // Geo SEO
+    geoLat: '',
+    geoLng: '',
+    geoRegion: 'TR-34',
+    geoPlacename: 'Istanbul',
+    // Business hours
+    businessHoursOpen: '09:00',
+    businessHoursClose: '18:00',
+    businessDays: 'Monday,Tuesday,Wednesday,Thursday,Friday,Saturday',
     securityIpBlocklist: '',
     securityAdminIpAllowlist: '',
     securityAutoBlockEnabled: 'true',
@@ -506,6 +515,85 @@ export default function AdminSettings() {
                   <div>
                     <label className={labelCls}>robots.txt İçeriği</label>
                     <textarea rows={8} value={settings.robotsTxt || ''} onChange={e => handleChange('robotsTxt', e.target.value)} className={`${inputCls} font-mono`} placeholder={'User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: https://kerimbilgisayar.com/sitemap.xml'} />
+                  </div>
+                </div>
+              </div>
+
+              {/* GEO SEO */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4 flex items-center gap-2">
+                  <span>📍</span> Coğrafi Konum (Geo SEO)
+                </h3>
+                <p className="text-xs text-gray-500 mb-4">Bu bilgiler <code>geo.region</code>, <code>geo.position</code> ve <code>ICBM</code> meta tag'leri ile <code>LocalBusiness</code> schema'sına otomatik eklenir. Yerel SEO için kritik öneme sahiptir.</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Enlem (Latitude)</label>
+                      <input type="text" value={settings.geoLat || ''} onChange={e => handleChange('geoLat', e.target.value)} className={inputCls} placeholder="41.0082" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Boylam (Longitude)</label>
+                      <input type="text" value={settings.geoLng || ''} onChange={e => handleChange('geoLng', e.target.value)} className={inputCls} placeholder="28.9784" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Coğrafi Bölge Kodu</label>
+                    <input type="text" value={settings.geoRegion || ''} onChange={e => handleChange('geoRegion', e.target.value)} className={inputCls} placeholder="TR-34 (Istanbul icin)" />
+                    <p className="text-xs text-gray-500 mt-1">ISO 3166-2 formatı: TR-34 (İstanbul), TR-06 (Ankara), TR-35 (İzmir)</p>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Şehir / İlçe Adı</label>
+                    <input type="text" value={settings.geoPlacename || ''} onChange={e => handleChange('geoPlacename', e.target.value)} className={inputCls} placeholder="Istanbul, Kadikoy" />
+                  </div>
+                </div>
+              </div>
+
+              {/* BUSINESS HOURS */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4 flex items-center gap-2">
+                  <span>🕐</span> Çalışma Saatleri
+                </h3>
+                <p className="text-xs text-gray-500 mb-4">LocalBusiness schema'sındaki çalışma saatleri buradan yönetilir.</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Açılış Saati</label>
+                      <input type="time" value={settings.businessHoursOpen || '09:00'} onChange={e => handleChange('businessHoursOpen', e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Kapanış Saati</label>
+                      <input type="time" value={settings.businessHoursClose || '18:00'} onChange={e => handleChange('businessHoursClose', e.target.value)} className={inputCls} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Çalışma Günleri</label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {[
+                        { key: 'Monday', label: 'Pzt' }, { key: 'Tuesday', label: 'Sal' },
+                        { key: 'Wednesday', label: 'Çar' }, { key: 'Thursday', label: 'Per' },
+                        { key: 'Friday', label: 'Cum' }, { key: 'Saturday', label: 'Cmt' },
+                        { key: 'Sunday', label: 'Paz' },
+                      ].map(day => {
+                        const days = (settings.businessDays || '').split(',').filter(Boolean);
+                        const isActive = days.includes(day.key);
+                        return (
+                          <button key={day.key} type="button"
+                            onClick={() => {
+                              const updated = isActive
+                                ? days.filter(d => d !== day.key)
+                                : [...days, day.key];
+                              handleChange('businessDays', updated.join(','));
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                              isActive ? 'bg-primary text-white border-primary' : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
+                            }`}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Seçilen günler schema.org'a aktarılır.</p>
                   </div>
                 </div>
               </div>

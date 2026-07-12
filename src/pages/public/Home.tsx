@@ -762,35 +762,69 @@ export default function Home() {
     <div className="flex flex-col bg-white text-gray-800">
       <SEO 
         title="Kerim Bilgisayar" 
-        description={settings?.contactBannerDesc || "Kurumsal ve Bireysel BT Çözümleri, Teknik Servis ve Bakım Anlaşmaları"} 
-        schema={{
-          "@context": "https://schema.org",
-          "@type": "LocalBusiness",
-          "name": "Kerim Bilgisayar",
-          "image": settings?.contactBannerImage || "",
-          "@id": "",
-          "url": "https://kerimbilgisayar.com",
-          "telephone": settings?.contactPhone || "",
-          "address": {
-            "@type": "PostalAddress",
-            "streetAddress": settings?.contactAddress || "",
-            "addressLocality": "Istanbul",
-            "addressCountry": "TR"
+        description={settings?.contactBannerDesc || "Kurumsal ve Bireysel BT Cozumleri, Teknik Servis ve Bakim Anlasmalari"} 
+        image={settings?.siteOgImage || settings?.contactBannerImage || undefined}
+        geoRegion={settings?.geoRegion}
+        geoLat={settings?.geoLat}
+        geoLng={settings?.geoLng}
+        geoPlacename={settings?.geoPlacename}
+        breadcrumbs={[{ name: 'Anasayfa', url: settings?.siteBaseUrl || 'https://kerimbilgisayar.com' }]}
+        schema={[
+          {
+            "@context": "https://schema.org",
+            "@type": "LocalBusiness",
+            "name": settings?.siteTitle || "Kerim Bilgisayar",
+            "description": settings?.siteTagline || "Kurumsal ve Bireysel BT Cozumleri",
+            "url": settings?.siteBaseUrl || "https://kerimbilgisayar.com",
+            "telephone": settings?.contactPhone || "",
+            "email": settings?.contactEmail || "",
+            "image": settings?.siteOgImage || settings?.siteLogo || "",
+            "@id": settings?.siteBaseUrl || "https://kerimbilgisayar.com",
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": settings?.contactAddress || "",
+              "addressLocality": settings?.geoPlacename || "Istanbul",
+              "addressRegion": settings?.geoRegion || "TR-34",
+              "addressCountry": "TR"
+            },
+            ...(settings?.geoLat && settings?.geoLng ? {
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": settings.geoLat,
+                "longitude": settings.geoLng
+              }
+            } : {}),
+            "openingHoursSpecification": {
+              "@type": "OpeningHoursSpecification",
+              "dayOfWeek": (settings?.businessDays || "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday").split(","),
+              "opens": settings?.businessHoursOpen || "09:00",
+              "closes": settings?.businessHoursClose || "18:00"
+            },
+            "sameAs": [
+              settings?.socialFacebook,
+              settings?.socialTwitter,
+              settings?.socialInstagram,
+              settings?.socialLinkedin,
+            ].filter(Boolean),
+            "priceRange": "₺₺",
+            "currenciesAccepted": "TRY",
+            "paymentAccepted": "Cash, Credit Card, Bank Transfer"
           },
-          "openingHoursSpecification": {
-            "@type": "OpeningHoursSpecification",
-            "dayOfWeek": [
-              "Monday",
-              "Tuesday",
-              "Wednesday",
-              "Thursday",
-              "Friday",
-              "Saturday"
-            ],
-            "opens": "09:00",
-            "closes": "18:00"
+          {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "url": settings?.siteBaseUrl || "https://kerimbilgisayar.com",
+            "name": settings?.siteTitle || "Kerim Bilgisayar",
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": `${settings?.siteBaseUrl || "https://kerimbilgisayar.com"}/arama?q={search_term_string}`
+              },
+              "query-input": "required name=search_term_string"
+            }
           }
-        }}
+        ]}
       />
       {getSectionOrder().map(section => {
         switch (section) {

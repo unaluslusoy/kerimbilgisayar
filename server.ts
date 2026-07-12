@@ -77,7 +77,8 @@ import {
   sales,
   saleItems,
   stockMovements,
-  serializedItems
+  serializedItems,
+  blockedIps
 } from './src/db/schema';
 
 import { eq, desc, and, sql, asc, like } from 'drizzle-orm';
@@ -331,8 +332,23 @@ async function startServer() {
       const now = Date.now();
       const autoBlockedUntil = autoBlockedIps.get(ip) || 0;
 
+      // Check settings-based blocklist and in-memory auto-block
       if (blocklist.includes(ip) || autoBlockedUntil > now) {
         return res.status(403).json({ error: 'Erişim engellendi' });
+      }
+
+      // Check persistent DB-based block list
+      const dbBlock = await db.select().from(blockedIps)
+        .where(eq(blockedIps.ipAddress, ip))
+        .limit(1);
+      if (dbBlock.length > 0) {
+        const blockedUntil = new Date(dbBlock[0].blockedUntil).getTime();
+        if (blockedUntil > now) {
+          return res.status(403).json({ error: 'Erişim engellendi' });
+        } else {
+          // Expired block — clean up from DB
+          await db.delete(blockedIps).where(eq(blockedIps.ipAddress, ip)).catch(() => {});
+        }
       }
 
       if ((req.path.startsWith('/admin') || req.path.startsWith('/api/admin')) && adminAllowlist.length > 0 && !adminAllowlist.includes(ip)) {
@@ -349,6 +365,15 @@ async function startServer() {
         requestCounters.set(ip, bucket);
         if (bucket.count > limit) {
           autoBlockedIps.set(ip, now + blockMs);
+          // Persist auto-block to DB so it survives restarts
+          const blockedUntilDate = new Date(now + blockMs);
+          await db.insert(blockedIps).values({
+            ipAddress: ip,
+            blockedUntil: blockedUntilDate,
+            reason: 'Otomatik engel: istek limiti aşıldı',
+          }).onDuplicateKeyUpdate({
+            set: { blockedUntil: blockedUntilDate, reason: 'Otomatik engel: istek limiti aşıldı' }
+          }).catch(() => {});
           return res.status(429).json({ error: 'Çok fazla istek nedeniyle geçici engel uygulandı' });
         }
       }
@@ -394,6 +419,91 @@ async function startServer() {
   // ============================================================
   // PUBLIC API (CMS FRONTEND)
   // ============================================================
+
+  // --- SITEMAP ---
+  app.get('/sitemap.xml', async (req, res) => {
+    try {
+      const settingsMap = await readSettingsMap();
+      const base = (settingsMap.sitemapBaseUrl || settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com').replace(/\/$/, '');
+      const freq = settingsMap.sitemapDefaultChangefreq || 'weekly';
+      const now  = new Date().toISOString().split('T')[0];
+
+      const staticRoutes = [
+        { loc: '/',              priority: '1.0', changefreq: 'daily'  },
+        { loc: '/hakkimizda',    priority: '0.8', changefreq: freq     },
+        { loc: '/iletisim',      priority: '0.8', changefreq: freq     },
+        { loc: '/hizmetler',     priority: '0.9', changefreq: freq     },
+        { loc: '/blog',          priority: '0.8', changefreq: 'daily'  },
+        { loc: '/kampanyalar',   priority: '0.7', changefreq: freq     },
+        { loc: '/sss',           priority: '0.6', changefreq: 'monthly'},
+      ];
+
+      // Dynamic: blog posts
+      const blogRows = await db.select({ slug: blogPosts.slug, updatedAt: blogPosts.updatedAt })
+        .from(blogPosts).where(eq(blogPosts.status, 'yayinlandi'));
+
+      // Dynamic: pages
+      const pageRows = await db.select({ slug: pages.slug, updatedAt: pages.updatedAt })
+        .from(pages).where(eq(pages.status, 'yayinlandi'));
+
+      // Dynamic: services
+      const serviceRows = await db.select({ id: services.id })
+        .from(services).where(eq(services.isActive, true));
+
+      // Extra URLs from settings
+      const extraUrls = (settingsMap.sitemapExtraUrls || '')
+        .split(/[\n,]/).map((u: string) => u.trim()).filter(Boolean);
+
+      const urls: string[] = [
+        ...staticRoutes.map(r =>
+          `  <url>\n    <loc>${base}${r.loc}</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>${r.changefreq}</changefreq>\n    <priority>${r.priority}</priority>\n  </url>`
+        ),
+        ...blogRows.map(b =>
+          `  <url>\n    <loc>${base}/blog/${b.slug}</loc>\n    <lastmod>${b.updatedAt ? new Date(b.updatedAt).toISOString().split('T')[0] : now}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>`
+        ),
+        ...pageRows.map(p =>
+          `  <url>\n    <loc>${base}/${p.slug}</loc>\n    <lastmod>${p.updatedAt ? new Date(p.updatedAt).toISOString().split('T')[0] : now}</lastmod>\n    <changefreq>${freq}</changefreq>\n    <priority>0.6</priority>\n  </url>`
+        ),
+        ...serviceRows.map(s =>
+          `  <url>\n    <loc>${base}/hizmetler/${s.id}</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>${freq}</changefreq>\n    <priority>0.8</priority>\n  </url>`
+        ),
+        ...extraUrls.map((u: string) => {
+          const loc = u.startsWith('http') ? u : `${base}${u.startsWith('/') ? '' : '/'}${u}`;
+          return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>${freq}</changefreq>\n    <priority>0.5</priority>\n  </url>`;
+        }),
+      ];
+
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`;
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(xml);
+    } catch (e: any) {
+      res.status(500).send(`<?xml version="1.0"?><error>${e.message}</error>`);
+    }
+  });
+
+  // --- ROBOTS.TXT ---
+  app.get('/robots.txt', async (req, res) => {
+    try {
+      const settingsMap = await readSettingsMap();
+      const base = (settingsMap.sitemapBaseUrl || settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com').replace(/\/$/, '');
+      const customRobots = settingsMap.robotsTxt?.trim();
+      const content = customRobots || [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /admin/',
+        'Disallow: /api/',
+        'Disallow: /musteri/',
+        '',
+        `Sitemap: ${base}/sitemap.xml`,
+      ].join('\n');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.send(content);
+    } catch (e: any) {
+      res.status(500).send('# robots.txt error');
+    }
+  });
 
   app.get('/api/public/search', async (req, res) => {
     try {
@@ -500,7 +610,13 @@ async function startServer() {
         'contactBankName', 'contactBankAccount', 'contactBankIban', 'contactBankQrCode',
         'siteMetaDescription', 'siteOgImage', 'siteFocusKeyword', 'googleAnalyticsId', 'googleSearchConsoleCode',
         'googleSiteVerification', 'googleSearchConsoleVerification', 'googleVerificationCode', 'searchConsoleCode',
-        'captchaEnabled', 'turnstileSiteKey'
+        'captchaEnabled', 'turnstileSiteKey',
+        // Geo SEO
+        'geoLat', 'geoLng', 'geoRegion', 'geoPlacename',
+        // Business hours
+        'businessHoursOpen', 'businessHoursClose', 'businessDays',
+        // Sitemap / Robots
+        'sitemapBaseUrl', 'siteBaseUrl', 'robotsTxt'
       ];
       
       const publicSettings: Record<string, string> = {};
@@ -509,6 +625,22 @@ async function startServer() {
           publicSettings[s.key] = s.value || '';
         }
       });
+
+      // Get published theme settings and merge them
+      const publishedThemeSettings = await db.select().from(themeSettings).where(eq(themeSettings.isDraft, false));
+      publishedThemeSettings.forEach(ts => {
+        if (publicKeys.includes(ts.settingKey)) {
+          let val = ts.settingValue;
+          if (typeof val !== 'string') {
+            try { val = JSON.stringify(val); } catch { val = ''; }
+            if (typeof val === 'string' && val.startsWith('"') && val.endsWith('"')) {
+              val = val.slice(1, -1);
+            }
+          }
+          publicSettings[ts.settingKey] = val as string;
+        }
+      });
+
       res.json(publicSettings);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -4004,6 +4136,231 @@ async function startServer() {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+
+  // ─── PAYTR PAYMENT INTEGRATION ───────────────────────────────────────────
+  // POST /api/payments/paytr/init — generate PayTR iframe token for checkout
+  app.post('/api/payments/paytr/init', async (req, res) => {
+    try {
+      // Fetch PayTR credentials from plugin settings
+      const allPlugins = await db.select().from(plugins).where(eq(plugins.pluginId, 'paytr-integration'));
+      if (!allPlugins.length || !allPlugins[0].settings) {
+        return res.status(400).json({ error: 'PayTR ayarlari tanimlanmamis' });
+      }
+      const ps: any = allPlugins[0].settings;
+      const merchantId   = ps.merchantId?.trim();
+      const merchantKey  = ps.merchantKey?.trim();
+      const merchantSalt = ps.merchantSalt?.trim();
+      if (!merchantId || !merchantKey || !merchantSalt) {
+        return res.status(400).json({ error: 'PayTR kimlik bilgileri eksik' });
+      }
+
+      const {
+        orderId,
+        email,
+        amount,       // in kurus (kuruş — 1 TL = 100 kurus)
+        basketItems,  // [{ name, price, count }]
+        userName,
+        userAddress,
+        userPhone,
+        currency = 'TL',
+        installmentCount = 0,
+        noInstallment = 1,
+        maxInstallment = 1,
+        lang = 'tr',
+        debugOn = 0,
+        testMode = (process.env.NODE_ENV !== 'production') ? 1 : 0,
+      } = req.body;
+
+      if (!orderId || !email || !amount) {
+        return res.status(400).json({ error: 'orderId, email ve amount zorunludur' });
+      }
+
+      const merchantOkUrl   = `${process.env.APP_URL || 'http://localhost:3000'}/odeme/basarili`;
+      const merchantFailUrl = `${process.env.APP_URL || 'http://localhost:3000'}/odeme/basarisiz`;
+      const userIp = getClientIp(req);
+
+      const basket = JSON.stringify(Array.isArray(basketItems) && basketItems.length > 0
+        ? basketItems
+        : [[String(req.body.productName || 'Siparis'), String(amount), 1]]);
+
+      const hashStr = `${merchantId}${userIp}${orderId}${email}${amount}${basket}${noInstallment}${maxInstallment}${currency}${testMode}${merchantSalt}`;
+      const paytrToken = crypto.createHmac('sha256', merchantKey).update(hashStr).digest('base64');
+
+      const params = new URLSearchParams({
+        merchant_id:       merchantId,
+        user_ip:           userIp,
+        merchant_oid:      String(orderId),
+        email:             String(email),
+        payment_amount:    String(amount),
+        paytr_token:       paytrToken,
+        user_basket:       Buffer.from(basket).toString('base64'),
+        debug_on:          String(debugOn),
+        no_installment:    String(noInstallment),
+        max_installment:   String(maxInstallment),
+        user_name:         String(userName || email),
+        user_address:      String(userAddress || 'Belirtilmedi'),
+        user_phone:        String(userPhone || '05000000000'),
+        merchant_ok_url:   merchantOkUrl,
+        merchant_fail_url: merchantFailUrl,
+        timeout_limit:     '30',
+        currency:          currency,
+        test_mode:         String(testMode),
+        lang:              lang,
+      });
+
+      const paytrRes = await fetch('https://www.paytr.com/odeme/api/get-token', {
+        method: 'POST',
+        body: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      const paytrData = await paytrRes.json().catch(() => ({}));
+
+      if (paytrData.status !== 'success') {
+        return res.status(400).json({ error: paytrData.reason || 'PayTR token alinamamadi', detail: paytrData });
+      }
+
+      res.json({ iframeToken: paytrData.token });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/payments/paytr/callback — PayTR IPN (Instant Payment Notification)
+  app.post('/api/payments/paytr/callback', express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const allPlugins = await db.select().from(plugins).where(eq(plugins.pluginId, 'paytr-integration'));
+      if (!allPlugins.length || !allPlugins[0].settings) return res.send('PAYTR_SETTINGS_ERROR');
+      const ps: any = allPlugins[0].settings;
+      const merchantKey  = ps.merchantKey?.trim();
+      const merchantSalt = ps.merchantSalt?.trim();
+
+      const { merchant_oid, status, total_amount, hash } = req.body;
+
+      // Verify HMAC hash
+      const hashStr  = `${merchant_oid}${merchantSalt}${status}${total_amount}`;
+      const expected = crypto.createHmac('sha256', merchantKey).update(hashStr).digest('base64');
+
+      if (expected !== hash) {
+        console.warn('[PayTR] Gecersiz hash — callback reddedildi');
+        return res.send('PAYTR_INVALID_HASH');
+      }
+
+      console.log(`[PayTR] IPN alindi: ${merchant_oid} — ${status} — ${total_amount} kurus`);
+
+      // TODO: Update your order/subscription status in the DB here
+      // e.g. await db.update(orders).set({ paymentStatus: status }).where(eq(orders.orderId, merchant_oid));
+
+      // PayTR requires this exact response on success
+      res.send('OK');
+    } catch (e: any) {
+      console.error('[PayTR] Callback error:', e.message);
+      res.send('ERROR');
+    }
+  });
+
+  // ─── PAGE BLOCKS (Layout Builder) ────────────────────────────────────────
+  // GET    /api/admin/page-blocks/:ownerType/:ownerId
+  app.get('/api/admin/page-blocks/:ownerType/:ownerId', requireAdmin, async (req, res) => {
+    try {
+      const { ownerType, ownerId } = req.params;
+      const rows = await db.select().from(pageBlocks)
+        .where(and(eq(pageBlocks.ownerType, ownerType as any), eq(pageBlocks.ownerId, Number(ownerId))))
+        .orderBy(asc(pageBlocks.sortOrder));
+      res.json(rows);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST   /api/admin/page-blocks/:ownerType/:ownerId
+  app.post('/api/admin/page-blocks/:ownerType/:ownerId', requireAdmin, async (req, res) => {
+    try {
+      const { ownerType, ownerId } = req.params;
+      const { elementKey, props = {}, region = 'main', sortOrder = 0, isVisible = true } = req.body;
+      if (!elementKey) return res.status(400).json({ error: 'elementKey zorunludur' });
+      const [inserted] = await db.insert(pageBlocks).values({
+        tenantId: 1,
+        ownerType: ownerType as any,
+        ownerId: Number(ownerId),
+        elementKey,
+        props,
+        region,
+        sortOrder,
+        isVisible,
+      });
+      res.json({ id: (inserted as any).insertId, success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // PUT    /api/admin/page-blocks/:id
+  app.put('/api/admin/page-blocks/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { props, region, sortOrder, isVisible, visibilityRule, responsiveOverrides } = req.body;
+      await db.update(pageBlocks).set({
+        ...(props !== undefined && { props }),
+        ...(region !== undefined && { region }),
+        ...(sortOrder !== undefined && { sortOrder }),
+        ...(isVisible !== undefined && { isVisible }),
+        ...(visibilityRule !== undefined && { visibilityRule }),
+        ...(responsiveOverrides !== undefined && { responsiveOverrides }),
+      }).where(eq(pageBlocks.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // DELETE /api/admin/page-blocks/:id
+  app.delete('/api/admin/page-blocks/:id', requireAdmin, async (req, res) => {
+    try {
+      await db.delete(pageBlocks).where(eq(pageBlocks.id, Number(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST   /api/admin/page-blocks/reorder  — bulk sortOrder update
+  app.post('/api/admin/page-blocks/reorder', requireAdmin, async (req, res) => {
+    try {
+      const { blocks } = req.body; // [{ id, sortOrder }]
+      if (!Array.isArray(blocks)) return res.status(400).json({ error: 'blocks array zorunludur' });
+      for (const b of blocks) {
+        await db.update(pageBlocks).set({ sortOrder: b.sortOrder }).where(eq(pageBlocks.id, b.id));
+      }
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ─── IP BLOCK MANAGEMENT ───────────────────────────────────────────────────
+  // GET  /api/admin/blocked-ips       — list all DB-persisted blocked IPs
+  app.get('/api/admin/blocked-ips', requireAdmin, async (_req, res) => {
+    try {
+      const rows = await db.select().from(blockedIps).orderBy(desc(blockedIps.createdAt));
+      res.json(rows);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/admin/blocked-ips       — manually block an IP
+  app.post('/api/admin/blocked-ips', requireAdmin, async (req, res) => {
+    try {
+      const { ipAddress, reason, durationDays } = req.body;
+      if (!ipAddress) return res.status(400).json({ error: 'IP adresi zorunludur' });
+      const days = Number(durationDays) || 3650; // default 10 years = permanent
+      const blockedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+      await db.insert(blockedIps).values({
+        ipAddress,
+        blockedUntil,
+        reason: reason || 'Manuel engel (admin)',
+      }).onDuplicateKeyUpdate({ set: { blockedUntil, reason: reason || 'Manuel engel (admin)' } });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // DELETE /api/admin/blocked-ips/:id — remove a block by DB row id
+  app.delete('/api/admin/blocked-ips/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      // Also clear from in-memory map if present
+      const row = await db.select().from(blockedIps).where(eq(blockedIps.id, id)).limit(1);
+      if (row.length > 0) autoBlockedIps.delete(row[0].ipAddress);
+      await db.delete(blockedIps).where(eq(blockedIps.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
 
   // SPA catch-all — API ve uploads dışındaki her route index.html döner
   app.use(async (req, res, next) => {

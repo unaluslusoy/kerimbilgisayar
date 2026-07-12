@@ -39,6 +39,7 @@ const AdminAppearance = lazy(() => import('./pages/admin/AdminAppearance'));
 const AdminPlugins = lazy(() => import('./pages/admin/AdminPlugins'));
 const AdminApiKeys = lazy(() => import('./pages/admin/AdminApiKeys'));
 const AdminWebhooks = lazy(() => import('./pages/admin/AdminWebhooks'));
+const AdminSecurity = lazy(() => import('./pages/admin/AdminSecurity'));
 const LanguageSettings = lazy(() => import('./pages/admin/LanguageSettings'));
 const AdminServices = lazy(() => import('./pages/admin/AdminServices'));
 const AdminServiceCategories = lazy(() => import('./pages/admin/AdminServiceCategories'));
@@ -193,6 +194,7 @@ function AppContent() {
             <Route path="eklentiler" element={<AdminPlugins />} />
             <Route path="api-anahtarlari" element={<AdminApiKeys />} />
             <Route path="webhooks" element={<AdminWebhooks />} />
+             <Route path="guvenlik" element={<AdminSecurity />} />
             <Route path="hizmetler" element={<AdminServices />} />
             
             {/* Google Business Routes */}

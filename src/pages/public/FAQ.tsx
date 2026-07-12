@@ -5,13 +5,16 @@ import { HelpCircle, ChevronDown, Search, X } from 'lucide-react';
 import { fetchFAQ } from '../../lib/api';
 import { Link } from 'react-router-dom';
 import { usePageTitle } from '../../lib/usePageTitle';
+import SEO from '../../components/SEO';
+import { useSettings } from '../../context/SettingsContext';
 
 export default function FAQ() {
-  usePageTitle('Sıkça Sorulan Sorular');
+  usePageTitle('Sikca Sorulan Sorular');
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openItems, setOpenItems] = useState<Record<number, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const { settings } = useSettings();
 
   useEffect(() => {
     fetchFAQ()
@@ -58,9 +61,37 @@ export default function FAQ() {
 
   const totalQuestions = filteredCategories.reduce((acc, cat) => acc + (cat.questions?.length || 0), 0);
 
+  // Build FAQPage schema from all loaded questions
+  const faqSchema = useMemo(() => {
+    const allQs: any[] = [];
+    categories.forEach(cat => (cat.questions || []).forEach((q: any) => allQs.push(q)));
+    if (allQs.length === 0) return null;
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      'mainEntity': allQs.map(q => ({
+        '@type': 'Question',
+        'name': q.question,
+        'acceptedAnswer': { '@type': 'Answer', 'text': q.answer || '' },
+      })),
+    };
+  }, [categories]);
+
   return (
     <div className="bg-gray-50 min-h-screen">
-      {/* Page Header */}
+      <SEO
+        title="Sikca Sorulan Sorular"
+        description="Teknoloji danismanligi, SLA standartlarimiz, entegrasyon sureclerimiz ve kurumsal isleyisimiz hakkinda merak ettiginiz her sey."
+        geoRegion={settings?.geoRegion}
+        geoLat={settings?.geoLat}
+        geoLng={settings?.geoLng}
+        geoPlacename={settings?.geoPlacename}
+        breadcrumbs={[
+          { name: 'Anasayfa', url: settings?.siteBaseUrl || 'https://kerimbilgisayar.com' },
+          { name: 'SSS', url: `${settings?.siteBaseUrl || 'https://kerimbilgisayar.com'}/sss` },
+        ]}
+        schema={faqSchema || undefined}
+      />
       <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Sıkça Sorulan Sorular' }]} />

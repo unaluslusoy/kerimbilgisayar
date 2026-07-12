@@ -221,6 +221,7 @@ export default function PublicLayout() {
         }
       `}</style>
       <Helmet>
+        {/* Global site verification & analytics */}
         {googleSiteVerification && <meta name="google-site-verification" content={googleSiteVerification} />}
         {googleAnalyticsId && <script async src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`} />}
         {googleAnalyticsId && (
@@ -233,6 +234,13 @@ export default function PublicLayout() {
             `}
           </script>
         )}
+        {/* Global OG locale */}
+        <meta property="og:locale" content="tr_TR" />
+        {/* Global Geo SEO meta tags */}
+        {settings.geoRegion    && <meta name="geo.region"    content={settings.geoRegion}    />}
+        {settings.geoPlacename && <meta name="geo.placename" content={settings.geoPlacename} />}
+        {settings.geoLat && settings.geoLng && <meta name="geo.position" content={`${settings.geoLat};${settings.geoLng}`} />}
+        {settings.geoLat && settings.geoLng && <meta name="ICBM"         content={`${settings.geoLat}, ${settings.geoLng}`} />}
       </Helmet>
 
       {/* ===== SEARCH OVERLAY ===== */}

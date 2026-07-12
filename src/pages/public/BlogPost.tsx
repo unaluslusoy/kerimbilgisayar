@@ -6,6 +6,8 @@ import ReactMarkdown from 'react-markdown';
 import { fetchBlogPost, fetchBlogPosts } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 import { mediaUrl } from '../../lib/media';
+import SEO from '../../components/SEO';
+import { useSettings } from '../../context/SettingsContext';
 
 export default function BlogPost() {
   const { slug } = useParams();
@@ -13,6 +15,7 @@ export default function BlogPost() {
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [others, setOthers] = useState<any[]>([]);
+  const { settings } = useSettings();
 
   usePageTitle(post?.title || '');
 
@@ -72,7 +75,41 @@ export default function BlogPost() {
 
   return (
     <div className="bg-white min-h-screen">
-      {/* Page Header */}
+      <SEO
+        title={post.title}
+        description={post.metaDescription || post.excerpt || post.title}
+        type="article"
+        image={post.imageUrl ? mediaUrl(post.imageUrl) : settings?.siteOgImage}
+        url={typeof window !== 'undefined' ? window.location.href.split('?')[0] : undefined}
+        publishedTime={post.createdAt ? new Date(post.createdAt).toISOString() : undefined}
+        modifiedTime={post.updatedAt ? new Date(post.updatedAt).toISOString() : undefined}
+        author="Kerim Bilgisayar"
+        geoRegion={settings?.geoRegion}
+        geoLat={settings?.geoLat}
+        geoLng={settings?.geoLng}
+        geoPlacename={settings?.geoPlacename}
+        breadcrumbs={[
+          { name: 'Anasayfa', url: settings?.siteBaseUrl || 'https://kerimbilgisayar.com' },
+          { name: 'Blog', url: `${settings?.siteBaseUrl || 'https://kerimbilgisayar.com'}/blog` },
+          { name: post.title, url: `${settings?.siteBaseUrl || 'https://kerimbilgisayar.com'}/blog/${slug}` },
+        ]}
+        schema={{
+          '@context': 'https://schema.org',
+          '@type': 'Article',
+          'headline': post.title,
+          'description': post.metaDescription || post.excerpt || '',
+          'image': post.imageUrl ? mediaUrl(post.imageUrl) : '',
+          'author': { '@type': 'Organization', 'name': settings?.siteTitle || 'Kerim Bilgisayar' },
+          'publisher': {
+            '@type': 'Organization',
+            'name': settings?.siteTitle || 'Kerim Bilgisayar',
+            'logo': { '@type': 'ImageObject', 'url': settings?.siteLogo || '' },
+          },
+          'datePublished': post.createdAt ? new Date(post.createdAt).toISOString() : '',
+          'dateModified': post.updatedAt ? new Date(post.updatedAt).toISOString() : '',
+          'url': typeof window !== 'undefined' ? window.location.href.split('?')[0] : '',
+        }}
+      />
       <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Medya & Blog', href: '/blog' }, { label: post.title }]} />
