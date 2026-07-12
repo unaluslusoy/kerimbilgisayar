@@ -75,20 +75,26 @@ export default function AdminLayout() {
   }
 
   let navItems: any[] = [
+    { separator: true, name: 'Yönetim & Takip' },
     { name: 'Başlangıç', path: '/admin', icon: LayoutDashboard },
     { name: 'Servis Kayıtları', path: '/admin/servis', icon: Wrench },
-    { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
-    { name: 'POS Satış (POS)', path: '/admin/satis-pos', icon: Store },
     { name: 'Kargo Takibi', path: '/admin/kargo', icon: Truck },
-    { name: 'Gider & Masraflar', path: '/admin/masraflar', icon: DollarSign },
-    { name: 'Hizmetlerimiz', path: '/admin/hizmetler', icon: Wrench },
-    { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri', icon: Tag },
-    { name: 'Kullanıcılar', path: '/admin/kullanicilar', icon: Users },
-    { name: 'Müşteriler', path: '/admin/musteriler', icon: Users },
-    { name: 'Abonelik Paketleri', path: '/admin/abonelik-paketleri', icon: Tag },
     { name: 'Başvurular', path: '/admin/basvurular', icon: Inbox },
     { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare },
-    { separator: true, name: 'İçerik Yönetimi' },
+
+    { separator: true, name: 'Ticari & Finans' },
+    { name: 'POS Satış (POS)', path: '/admin/satis-pos', icon: Store },
+    { name: 'Gider & Masraflar', path: '/admin/masraflar', icon: DollarSign },
+    { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
+    { name: 'Abonelik Paketleri', path: '/admin/abonelik-paketleri', icon: Tag },
+
+    { separator: true, name: 'Müşteri & CRM' },
+    { name: 'Müşteriler', path: '/admin/musteriler', icon: Users },
+    { name: 'Kullanıcılar', path: '/admin/kullanicilar', icon: Users },
+
+    { separator: true, name: 'İçerik Yönetimi (CMS)' },
+    { name: 'Hizmetlerimiz', path: '/admin/hizmetler', icon: Wrench },
+    { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri', icon: Tag },
     { name: 'Ortam Kütüphanesi', path: '/admin/ortam', icon: ImageIcon },
     { name: 'Sayfalar', path: '/admin/sayfalar', icon: BookOpen },
     { name: 'Blog Yazıları', path: '/admin/blog', icon: BookOpen },
@@ -96,17 +102,19 @@ export default function AdminLayout() {
     { name: 'Müşteri Yorumları', path: '/admin/musteri-yorumlari', icon: MessageSquareQuote },
     { name: 'Kampanyalar', path: '/admin/kampanyalar', icon: Tag },
     { name: 'SSS / Yardım', path: '/admin/sss', icon: HelpCircle },
-    { separator: true, name: 'Görünüm' },
+
+    { separator: true, name: 'Görünüm & Tasarım' },
     { name: 'Özelleştir', path: '/admin/ozellestir', icon: Layout },
     { name: 'Temalar', path: '/admin/temalar', icon: Palette },
     { name: 'Menüler', path: '/admin/menuler', icon: Menu },
-    { name: 'Sistem', separator: true },
+
+    { separator: true, name: 'Sistem & Ayarlar' },
+    { name: 'Ayarlar', path: '/admin/ayarlar', icon: Settings },
+    { name: 'Dil Yönetimi', path: '/admin/diller', icon: BookOpen },
+    { name: 'Eklentiler', path: '/admin/eklentiler', icon: Puzzle },
+    { name: 'Guvenlik', path: '/admin/guvenlik', icon: Shield },
     { name: 'API Anahtarları', path: '/admin/api-anahtarlari', icon: Key },
     { name: 'Webhooks', path: '/admin/webhooks', icon: Webhook },
-    { name: 'Guvenlik', path: '/admin/guvenlik', icon: Shield },
-    { name: 'Eklentiler', path: '/admin/eklentiler', icon: Puzzle },
-    { name: 'Dil Yönetimi', path: '/admin/diller', icon: BookOpen },
-    { name: 'Ayarlar', path: '/admin/ayarlar', icon: Settings },
   ];
 
   if (isGoogleBusinessActive) {
