@@ -1,8 +1,10 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment } from '../../lib/api';
+import MediaPicker from '../../components/ui/MediaPicker';
+import { mediaUrl } from '../../lib/media';
 
 const STATUS_COLORS: Record<string, string> = {
   'yeni': 'bg-blue-100 text-blue-700',
@@ -56,6 +58,8 @@ export default function ServiceManager() {
   // Detay paneli
   const [detailTicket, setDetailTicket] = useState<any>(null);
   const [ticketNotes, setTicketNotes] = useState<any[]>([]);
+  const [ticketAttachments, setTicketAttachments] = useState<any[]>([]);
+  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [noteSending, setNoteSending] = useState(false);
   const notesEndRef = useRef<HTMLDivElement>(null);
@@ -160,6 +164,12 @@ export default function ServiceManager() {
     } catch (e) {
       setTicketNotes([]);
     }
+    try {
+      const atts = await fetchTicketAttachments(ticket.id);
+      setTicketAttachments(atts || []);
+    } catch (e) {
+      setTicketAttachments([]);
+    }
   };
 
   const handleSendNote = async () => {
@@ -175,6 +185,19 @@ export default function ServiceManager() {
       alert('Hata: ' + e.message);
     } finally {
       setNoteSending(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (id: number) => {
+    if (!window.confirm('Bu görseli silmek istediğinize emin misiniz?')) return;
+    try {
+      await deleteTicketAttachment(id);
+      if (detailTicket) {
+        const atts = await fetchTicketAttachments(detailTicket.id);
+        setTicketAttachments(atts || []);
+      }
+    } catch (e: any) {
+      alert('Silme hatası: ' + e.message);
     }
   };
 
@@ -464,6 +487,46 @@ export default function ServiceManager() {
                       <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{detailTicket.description}</p>
                     </div>
                   )}
+
+                  {/* Ekli Görseller (Cihaz Fotoğrafları) */}
+                  <div className="border border-gray-200 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                        <ImageIcon className="w-3.5 h-3.5 text-blue-500" /> Cihaz Görselleri ({ticketAttachments.length})
+                      </p>
+                      <button
+                        onClick={() => setIsMediaPickerOpen(true)}
+                        className="text-xs text-blue-600 hover:underline font-bold flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Fotoğraf Ekle
+                      </button>
+                    </div>
+
+                    {ticketAttachments.length === 0 ? (
+                      <p className="text-xs text-gray-400 italic">Cihaza ait yüklenmiş görsel bulunmamaktadır.</p>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                        {ticketAttachments.map(att => (
+                          <div key={att.id} className="relative group border border-gray-100 rounded-xl overflow-hidden aspect-video bg-gray-50 flex items-center justify-center">
+                            <a href={mediaUrl(att.fileUrl)} target="_blank" rel="noopener noreferrer" className="w-full h-full">
+                              <img
+                                src={mediaUrl(att.fileUrl)}
+                                alt={att.fileName}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            </a>
+                            <button
+                              onClick={() => handleDeleteAttachment(att.id)}
+                              className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-md"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Right Area: Chat & Internal Notes */}
@@ -641,6 +704,27 @@ export default function ServiceManager() {
           </div>
         </div>
       )}
+
+      {/* Media Picker Modal */}
+      <MediaPicker
+        isOpen={isMediaPickerOpen}
+        onClose={() => setIsMediaPickerOpen(false)}
+        onSelect={async (url) => {
+          setIsMediaPickerOpen(false);
+          if (!detailTicket) return;
+          try {
+            await createTicketAttachment(detailTicket.id, {
+              fileName: url.split('/').pop() || 'Fotoğraf',
+              fileUrl: url,
+              fileType: 'image/*',
+            });
+            const atts = await fetchTicketAttachments(detailTicket.id);
+            setTicketAttachments(atts || []);
+          } catch (err: any) {
+            alert('Dosya ekleme hatası: ' + err.message);
+          }
+        }}
+      />
     </div>
   );
 }

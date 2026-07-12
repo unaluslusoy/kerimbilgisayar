@@ -124,6 +124,34 @@ body {
   opacity: 0.9;
 }
 
+/* Admin Panel Form Contrast Enhancements */
+.admin-panel input,
+.admin-panel select,
+.admin-panel textarea {
+  border-color: #8a99ad !important; /* Prominent slate border */
+  border-width: 1px !important;
+  color: #0f172a !important; /* High contrast text */
+  background-color: #ffffff !important;
+}
+
+.admin-panel input::placeholder,
+.admin-panel textarea::placeholder {
+  color: #64748b !important;
+}
+
+.admin-panel input:focus,
+.admin-panel select:focus,
+.admin-panel textarea:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+  outline: none !important;
+}
+
+.admin-panel label {
+  color: #1e293b !important; /* Darker labels */
+  font-weight: 600 !important;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

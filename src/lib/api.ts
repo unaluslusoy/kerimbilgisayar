@@ -482,6 +482,21 @@ export async function convertLeadToTicket(id: number) {
 }
 
 // ============================================================
+// TICKET ATTACHMENTS (Görseller & Ekler)
+// ============================================================
+export async function fetchTicketAttachments(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/attachments`);
+}
+
+export async function createTicketAttachment(ticketId: number, data: { fileName: string; fileUrl: string; fileType?: string; fileSize?: number }) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/attachments`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function deleteTicketAttachment(id: number) {
+  return adminRequest(`/api/admin/tickets/attachments/${id}`, { method: 'DELETE' });
+}
+
+// ============================================================
 // SALES & POS SYSTEM
 // ============================================================
 export async function fetchAdminSales() {

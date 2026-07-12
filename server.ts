@@ -51,6 +51,7 @@ import {
   pages,
   tickets,
   ticketMessages,
+  ticketAttachments,
   stockItems,
   leads,
   forms,
@@ -1590,6 +1591,47 @@ async function startServer() {
         }
       }
 
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // ADMIN API — TICKET ATTACHMENTS (Servis Kaydı Görselleri)
+  // ============================================================
+
+  app.get('/api/admin/tickets/:ticketId/attachments', requireAdmin, async (req, res) => {
+    try {
+      const rows = await db.select().from(ticketAttachments)
+        .where(eq(ticketAttachments.ticketId, parseInt(req.params.ticketId)))
+        .orderBy(desc(ticketAttachments.createdAt));
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/tickets/:ticketId/attachments', requireAdmin, async (req, res) => {
+    try {
+      const { fileName, fileUrl, fileType, fileSize } = req.body;
+      const [inserted] = await db.insert(ticketAttachments).values({
+        tenantId: 1,
+        ticketId: parseInt(req.params.ticketId),
+        fileName: fileName || 'Dosya',
+        fileUrl,
+        fileType: fileType || 'image/*',
+        fileSize: fileSize || 0,
+      });
+      res.json({ id: (inserted as any).insertId, success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/tickets/attachments/:id', requireAdmin, async (req, res) => {
+    try {
+      await db.delete(ticketAttachments).where(eq(ticketAttachments.id, parseInt(req.params.id)));
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
