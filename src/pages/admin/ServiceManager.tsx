@@ -241,9 +241,9 @@ export default function ServiceManager() {
       </div>
 
       {/* Main layout: list + detail panel */}
-      <div className={`flex gap-5 flex-1 overflow-hidden min-h-0`}>
-        {/* Ticket Grid */}
-        <div className={`${detailTicket ? 'hidden xl:block xl:w-1/2' : 'w-full'} overflow-y-auto pb-4`}>
+      <div className="flex gap-5 flex-1 overflow-hidden min-h-0">
+        {/* Ticket Grid (Always Full Width now) */}
+        <div className="w-full overflow-y-auto pb-4">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="w-10 h-10 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
@@ -254,13 +254,13 @@ export default function ServiceManager() {
               <p className="text-sm mt-1">Filtrelerinizi değiştirin veya yeni kayıt oluşturun.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filtered.map(ticket => (
                 <div
                   key={ticket.id}
                   onClick={() => openDetail(ticket)}
                   className={cn(
-                    "bg-white rounded-theme border shadow-sm hover:shadow-md transition-all flex flex-col p-5 cursor-pointer",
+                    "bg-white rounded-theme border shadow-sm hover:shadow-md hover:border-gray-300 transition-all flex flex-col p-5 cursor-pointer",
                     detailTicket?.id === ticket.id ? 'border-primary ring-1 ring-primary' : 'border-gray-200',
                     ticket.status === 'musteri_onayi_bekliyor' && detailTicket?.id !== ticket.id ? 'border-amber-300' : ''
                   )}
@@ -306,179 +306,210 @@ export default function ServiceManager() {
           )}
         </div>
 
-        {/* Detail Panel */}
+        {/* Detail Modal (Full Screen Overlay) */}
         {detailTicket && (
-          <div className="flex-1 xl:w-1/2 bg-white rounded-theme border border-gray-200 shadow-sm flex flex-col overflow-hidden min-w-0">
-            {/* Panel Header */}
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-              <div>
-                <p className="font-mono text-xs text-gray-400 font-bold">{detailTicket.ticketNumber}</p>
-                <h2 className="font-bold text-gray-900 text-sm mt-0.5 line-clamp-1">{detailTicket.subject}</h2>
-              </div>
-              <button onClick={() => setDetailTicket(null)} className="p-1.5 hover:bg-gray-100 rounded-theme text-gray-400">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Ticket Info */}
-            <div className="p-4 border-b border-gray-100 grid grid-cols-2 gap-3 text-xs shrink-0">
-              <div>
-                <p className="text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Müşteri</p>
-                <p className="text-gray-800 font-medium">{detailTicket.customerName || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Telefon</p>
-                <p className="text-gray-800 flex items-center gap-1">
-                  {detailTicket.customerPhone
-                    ? <a href={`tel:${detailTicket.customerPhone}`} className="hover:text-primary flex items-center gap-1">
-                        <Phone className="w-3 h-3" /> {detailTicket.customerPhone}
-                      </a>
-                    : '—'}
-                </p>
-              </div>
-              {detailTicket.customerEmail && (
-                <div>
-                  <p className="text-gray-400 font-semibold uppercase tracking-wider mb-0.5">E-Posta</p>
-                  <a href={`mailto:${detailTicket.customerEmail}`} className="text-primary hover:underline flex items-center gap-1 truncate">
-                    <Mail className="w-3 h-3 shrink-0" /> {detailTicket.customerEmail}
-                  </a>
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-0 md:p-6 transition-all duration-300">
+            <div className="bg-white w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              
+              {/* Modal Header */}
+              <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-xl shadow-sm">
+                    {detailTicket.ticketNumber}
+                  </span>
+                  <h2 className="font-black text-gray-900 text-base leading-none">{detailTicket.subject}</h2>
                 </div>
-              )}
-              <div>
-                <p className="text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Cihaz</p>
-                <p className="text-gray-800">{[detailTicket.deviceBrand, detailTicket.deviceModel].filter(Boolean).join(' ') || detailTicket.deviceType || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Öncelik</p>
-                <p className={cn('font-semibold', PRIORITY_COLORS[detailTicket.priority || 'normal'])}>
-                  {PRIORITY_LABELS[detailTicket.priority || 'normal']}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Oluşturulma
-                </p>
-                <p className="text-gray-700">{formatDate(detailTicket.createdAt)}</p>
-              </div>
-            </div>
-
-            {/* Maliyet */}
-            <div className="px-4 py-3 border-b border-gray-100 shrink-0">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
-                  <DollarSign className="w-3 h-3" /> Servis Ücreti / Maliyet
-                </p>
-                {!editingCost && (
-                  <button
-                    onClick={() => { setEditingCost(true); setCostValue(detailTicket.cost || ''); }}
-                    className="text-xs text-primary hover:underline"
+                <div className="flex items-center gap-2">
+                  <Link
+                    to={`/print/ticket/${detailTicket.ticketNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-sm"
                   >
-                    Düzenle
-                  </button>
-                )}
-              </div>
-              {editingCost ? (
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₺</span>
-                    <input
-                      type="number"
-                      value={costValue}
-                      onChange={e => setCostValue(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full pl-6 pr-3 py-1.5 border border-gray-300 rounded-theme text-sm focus:ring-2 focus:ring-primary outline-none"
-                    />
-                  </div>
-                  <button
-                    onClick={handleCostSave}
-                    disabled={costSaving}
-                    className="px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-theme hover:bg-secondary disabled:opacity-50"
+                    <Printer className="w-3.5 h-3.5" /> Yazdır
+                  </Link>
+                  <button 
+                    onClick={() => setDetailTicket(null)} 
+                    className="p-2 hover:bg-gray-200 rounded-xl text-gray-400 hover:text-gray-900 transition-colors"
                   >
-                    {costSaving ? '...' : 'Kaydet'}
-                  </button>
-                  <button
-                    onClick={() => setEditingCost(false)}
-                    className="px-2 py-1.5 border border-gray-200 text-gray-500 text-xs rounded-theme hover:bg-gray-50"
-                  >
-                    <X className="w-3 h-3" />
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-              ) : (
-                <p className={`text-sm font-bold ${parseFloat(detailTicket.cost || 0) > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                  {parseFloat(detailTicket.cost || 0) > 0
-                    ? `₺${parseFloat(detailTicket.cost).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
-                    : 'Belirtilmedi'}
-                </p>
-              )}
-            </div>
+              </div>
 
-            {/* Durum Değiştir */}
-            <div className="px-4 py-3 border-b border-gray-100 shrink-0">
-              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">Durum Değiştir</p>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(STATUS_LABELS).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => handleStatusChange(detailTicket.id, val)}
-                    className={cn(
-                      'px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors',
-                      detailTicket.status === val
-                        ? STATUS_COLORS[val] + ' border-current'
-                        : 'bg-gray-100 text-gray-500 border-transparent hover:bg-gray-200'
+              {/* Modal Body */}
+              <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
+                {/* Left Area: Detail & Actions */}
+                <div className="w-full lg:w-3/5 overflow-y-auto p-6 space-y-6">
+                  
+                  {/* Grid fields */}
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Müşteri</p>
+                      <p className="text-gray-800 font-bold text-sm">{detailTicket.customerName || '—'}</p>
+                    </div>
+                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Telefon</p>
+                      <p className="text-gray-800 font-bold text-sm">
+                        {detailTicket.customerPhone
+                          ? <a href={`tel:${detailTicket.customerPhone}`} className="text-blue-600 hover:underline flex items-center gap-1">
+                              <Phone className="w-3.5 h-3.5" /> {detailTicket.customerPhone}
+                            </a>
+                          : '—'}
+                      </p>
+                    </div>
+                    {detailTicket.customerEmail && (
+                      <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">E-Posta</p>
+                        <a href={`mailto:${detailTicket.customerEmail}`} className="text-blue-600 hover:underline flex items-center gap-1 truncate font-bold text-sm">
+                          <Mail className="w-3.5 h-3.5 shrink-0" /> {detailTicket.customerEmail}
+                        </a>
+                      </div>
                     )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Açıklama */}
-            {detailTicket.description && (
-              <div className="px-4 py-3 border-b border-gray-100 shrink-0">
-                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-1">Açıklama</p>
-                <p className="text-xs text-gray-700 leading-relaxed">{detailTicket.description}</p>
-              </div>
-            )}
-
-            {/* Notlar */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
-                <MessageSquare className="w-3.5 h-3.5" /> Dahili Notlar ({ticketNotes.length})
-              </p>
-              {ticketNotes.length === 0 && (
-                <p className="text-xs text-gray-400 italic">Henüz not eklenmemiş.</p>
-              )}
-              {ticketNotes.map(note => (
-                <div key={note.id} className="bg-amber-50 border border-amber-200 rounded-theme p-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-semibold text-amber-800">{note.senderName}</span>
-                    <span className="text-[10px] text-amber-600">{formatDate(note.createdAt)}</span>
+                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Cihaz</p>
+                      <p className="text-gray-800 font-bold text-sm">
+                        {[detailTicket.deviceBrand, detailTicket.deviceModel].filter(Boolean).join(' ') || detailTicket.deviceType || '—'}
+                      </p>
+                    </div>
+                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Öncelik</p>
+                      <p className={cn('font-bold text-sm', PRIORITY_COLORS[detailTicket.priority || 'normal'])}>
+                        ● {PRIORITY_LABELS[detailTicket.priority || 'normal']}
+                      </p>
+                    </div>
+                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Oluşturulma
+                      </p>
+                      <p className="text-gray-700 font-bold text-sm">{formatDate(detailTicket.createdAt)}</p>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-700 whitespace-pre-line">{note.message}</p>
-                </div>
-              ))}
-              <div ref={notesEndRef} />
-            </div>
 
-            {/* Not Ekle */}
-            <div className="p-3 border-t border-gray-200 flex gap-2 shrink-0">
-              <textarea
-                rows={2}
-                value={noteText}
-                onChange={e => setNoteText(e.target.value)}
-                placeholder="Dahili not ekle... (Ctrl+Enter gönderin)"
-                className="flex-1 border border-gray-300 rounded-theme px-3 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
-                onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
-              />
-              <button
-                onClick={handleSendNote}
-                disabled={noteSending || !noteText.trim()}
-                className="px-3 py-2 bg-primary hover:bg-secondary text-white rounded-theme transition-colors disabled:opacity-50 shrink-0"
-                title="Not Gönder (Ctrl+Enter)"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+                  {/* Maliyet */}
+                  <div className="border border-gray-200 rounded-2xl p-4 bg-slate-50/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                        <DollarSign className="w-3.5 h-3.5" /> Servis Ücreti / Maliyet
+                      </p>
+                      {!editingCost && (
+                        <button
+                          onClick={() => { setEditingCost(true); setCostValue(detailTicket.cost || ''); }}
+                          className="text-xs text-blue-600 hover:underline font-bold"
+                        >
+                          Düzenle
+                        </button>
+                      )}
+                    </div>
+                    {editingCost ? (
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">₺</span>
+                          <input
+                            type="number"
+                            value={costValue}
+                            onChange={e => setCostValue(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none"
+                          />
+                        </div>
+                        <button
+                          onClick={handleCostSave}
+                          disabled={costSaving}
+                          className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-secondary disabled:opacity-50"
+                        >
+                          {costSaving ? '...' : 'Kaydet'}
+                        </button>
+                        <button
+                          onClick={() => setEditingCost(false)}
+                          className="px-3 py-2 border border-gray-200 text-gray-500 text-xs rounded-xl hover:bg-gray-150"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <p className={`text-lg font-black ${parseFloat(detailTicket.cost || 0) > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                        {parseFloat(detailTicket.cost || 0) > 0
+                          ? `₺${parseFloat(detailTicket.cost).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
+                          : 'Belirtilmedi'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Durum Değiştir */}
+                  <div className="border border-gray-200 rounded-2xl p-4">
+                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Durum Değiştir</p>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                        <button
+                          key={val}
+                          onClick={() => handleStatusChange(detailTicket.id, val)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-xs font-bold border transition-colors',
+                            detailTicket.status === val
+                              ? STATUS_COLORS[val] + ' border-current'
+                              : 'bg-gray-100 text-gray-500 border-transparent hover:bg-gray-200'
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Açıklama */}
+                  {detailTicket.description && (
+                    <div className="border border-gray-200 rounded-2xl p-4">
+                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">Açıklama / Şikayet</p>
+                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{detailTicket.description}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Area: Chat & Internal Notes */}
+                <div className="w-full lg:w-2/5 flex flex-col min-h-0 bg-slate-50/50 border-t lg:border-t-0 lg:border-l border-gray-200">
+                  <div className="p-4 border-b border-gray-200 shrink-0 bg-white">
+                    <p className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <MessageSquare className="w-4 h-4 text-blue-500" /> Dahili Notlar ({ticketNotes.length})
+                    </p>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {ticketNotes.length === 0 && (
+                      <p className="text-xs text-gray-400 italic text-center py-8">Henüz not eklenmemiş.</p>
+                    )}
+                    {ticketNotes.map(note => (
+                      <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-xl p-3 shadow-sm">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-bold text-amber-800">{note.senderName}</span>
+                          <span className="text-[10px] text-amber-600 font-medium">{formatDate(note.createdAt)}</span>
+                        </div>
+                        <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{note.message}</p>
+                      </div>
+                    ))}
+                    <div ref={notesEndRef} />
+                  </div>
+
+                  <div className="p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
+                    <textarea
+                      rows={2}
+                      value={noteText}
+                      onChange={e => setNoteText(e.target.value)}
+                      placeholder="Dahili not ekle... (Ctrl+Enter ile gönder)"
+                      className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
+                      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
+                    />
+                    <button
+                      onClick={handleSendNote}
+                      disabled={noteSending || !noteText.trim()}
+                      className="px-4 py-2 bg-primary hover:bg-secondary text-white rounded-xl transition-colors disabled:opacity-50 shrink-0 flex items-center justify-center"
+                      title="Gönder (Ctrl+Enter)"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
