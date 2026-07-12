@@ -48,6 +48,7 @@ import {
   knowledgeBase,
   faqCategories,
   settings,
+  notifications,
   pages,
   tickets,
   ticketMessages,
@@ -617,7 +618,9 @@ async function startServer() {
         // Business hours
         'businessHoursOpen', 'businessHoursClose', 'businessDays',
         // Sitemap / Robots
-        'sitemapBaseUrl', 'siteBaseUrl', 'robotsTxt'
+        'sitemapBaseUrl', 'siteBaseUrl', 'robotsTxt',
+        // WhatsApp API Settings
+        'whatsappApiEnabled', 'whatsappApiUrl', 'whatsappApiToken', 'whatsappTemplate'
       ];
       
       const publicSettings: Record<string, string> = {};
@@ -1400,6 +1403,72 @@ async function startServer() {
 
 
   // ============================================================
+  // WHATSAPP API DISPATCHER (Arka Planda WhatsApp Gönderimi)
+  // ============================================================
+  const STATUS_LABELS: Record<string, string> = {
+    'yeni': 'Servise Alındı',
+    'isleme_alindi': 'Arıza Tespiti',
+    'parca_bekliyor': 'Parça Bekleniyor',
+    'musteri_onayi_bekliyor': 'Onay Bekleniyor',
+    'cozuldu': 'Çözüldü',
+    'kapatildi': 'Kapatıldı',
+    'teslim_edildi': 'Teslim Edildi',
+    'iptal': 'İptal',
+  };
+
+  async function sendWhatsAppMessage(phone: string, text: string) {
+    try {
+      const allSettings = await db.select().from(settings);
+      const settingsMap: Record<string, string> = {};
+      allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
+
+      if (settingsMap.whatsappApiEnabled !== 'true') return;
+      const apiUrl = settingsMap.whatsappApiUrl;
+      const apiToken = settingsMap.whatsappApiToken;
+      if (!apiUrl || !apiToken) return;
+
+      let formattedPhone = phone.replace(/\D/g, '');
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '90' + formattedPhone.substring(1);
+      } else if (!formattedPhone.startsWith('90') && formattedPhone.length === 10) {
+        formattedPhone = '90' + formattedPhone;
+      }
+
+      let bodyObj: any = {};
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+      if (apiUrl.includes('ultramsg')) {
+        bodyObj = {
+          token: apiToken,
+          to: formattedPhone,
+          body: text
+        };
+      } else {
+        bodyObj = {
+          to: formattedPhone,
+          message: text,
+          text: text
+        };
+        headers['Authorization'] = `Bearer ${apiToken}`;
+        headers['x-api-key'] = apiToken;
+      }
+
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyObj)
+      });
+      if (!res.ok) {
+        console.error('WhatsApp API error:', res.status, await res.text());
+      } else {
+        console.log('WhatsApp message sent successfully to:', formattedPhone);
+      }
+    } catch (err) {
+      console.error('Failed to send WhatsApp message:', err);
+    }
+  }
+
+  // ============================================================
   // ADMIN API — TICKETS (Servis Kayıtları)
   // ============================================================
 
@@ -1559,13 +1628,16 @@ async function startServer() {
       
       await db.update(tickets).set(updateData).where(eq(tickets.id, parseInt(req.params.id)));
 
-      // Send status change email
+      // Send status change email & WhatsApp
       if (status) {
         const ticketInfo = await db.select({
           ticketNumber: tickets.ticketNumber,
           customerName: users.firstName,
+          customerPhone: users.phone,
           customerEmail: users.email,
-          deviceName: devices.name
+          deviceBrand: devices.brand,
+          deviceModel: devices.model,
+          deviceType: devices.deviceType
         }).from(tickets)
           .leftJoin(users, eq(tickets.userId, users.id))
           .leftJoin(devices, eq(tickets.deviceId, devices.id))
@@ -1574,6 +1646,9 @@ async function startServer() {
 
         if (ticketInfo.length > 0) {
           const t = ticketInfo[0];
+          const deviceName = `${t.deviceBrand || ''} ${t.deviceModel || ''}`.trim() || t.deviceType || 'Cihazınız';
+
+          // 1. Email notification
           if (t.customerEmail && !t.customerEmail.includes('@noemail.local')) {
             const statusMapDb: any = {
               'yeni': 'Yeni',
@@ -1585,12 +1660,135 @@ async function startServer() {
               'iptal': 'İptal Edildi'
             };
             const statusText = statusMapDb[status] || status;
-            const html = getStatusEmailTemplate(t.customerName || 'Müşterimiz', t.ticketNumber, t.deviceName || 'Cihazınız', statusText);
+            const html = getStatusEmailTemplate(t.customerName || 'Müşterimiz', t.ticketNumber, deviceName, statusText);
             sendTicketEmail(t.customerEmail, `Servis Durumu Güncellendi: ${t.ticketNumber}`, html).catch(console.error);
+          }
+
+          // 2. WhatsApp notification
+          if (t.customerPhone) {
+            const allSettings = await db.select().from(settings);
+            const settingsMap: Record<string, string> = {};
+            allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
+
+            if (settingsMap.whatsappApiEnabled === 'true') {
+              const statusLabel = STATUS_LABELS[status] || status;
+              const siteUrl = settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com';
+              const trackingLink = `${siteUrl}/ariza-sorgulama?no=${t.ticketNumber}`;
+
+              const defaultTemplate = "Sayın [Musteri], [No] numaralı [Cihaz] cihazınızın servis durumu '[Durum]' olarak güncellenmiştir. Takip linkiniz: [Link]";
+              const template = settingsMap.whatsappTemplate || defaultTemplate;
+
+              const text = template
+                .replace('[Musteri]', t.customerName || 'Müşterimiz')
+                .replace('[No]', t.ticketNumber || '')
+                .replace('[Cihaz]', deviceName)
+                .replace('[Durum]', statusLabel)
+                .replace('[Link]', trackingLink);
+
+              sendWhatsAppMessage(t.customerPhone, text).catch(console.error);
+            }
           }
         }
       }
 
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/tickets/:id/whatsapp-trigger', requireAdmin, async (req, res) => {
+    try {
+      const ticketInfo = await db.select({
+        ticketNumber: tickets.ticketNumber,
+        customerName: users.firstName,
+        customerPhone: users.phone,
+        deviceBrand: devices.brand,
+        deviceModel: devices.model,
+        deviceType: devices.deviceType,
+        status: tickets.status
+      }).from(tickets)
+        .leftJoin(users, eq(tickets.userId, users.id))
+        .leftJoin(devices, eq(tickets.deviceId, devices.id))
+        .where(eq(tickets.id, parseInt(req.params.id)))
+        .limit(1);
+
+      if (ticketInfo.length === 0) {
+        return res.status(404).json({ error: 'Kayıt bulunamadı' });
+      }
+
+      const t = ticketInfo[0];
+      if (!t.customerPhone) {
+        return res.status(400).json({ error: 'Müşteri telefon numarası tanımlı değil' });
+      }
+
+      const allSettings = await db.select().from(settings);
+      const settingsMap: Record<string, string> = {};
+      allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
+
+      const deviceName = `${t.deviceBrand || ''} ${t.deviceModel || ''}`.trim() || t.deviceType || 'Cihaz';
+      const statusLabel = STATUS_LABELS[t.status || 'yeni'] || t.status || 'Yeni';
+      const siteUrl = settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com';
+      const trackingLink = `${siteUrl}/ariza-sorgulama?no=${t.ticketNumber}`;
+
+      const defaultTemplate = "Sayın [Musteri], [No] numaralı [Cihaz] cihazınızın servis durumu '[Durum]' olarak güncellenmiştir. Takip linkiniz: [Link]";
+      const template = settingsMap.whatsappTemplate || defaultTemplate;
+
+      const text = template
+        .replace('[Musteri]', t.customerName || 'Müşterimiz')
+        .replace('[No]', t.ticketNumber || '')
+        .replace('[Cihaz]', deviceName)
+        .replace('[Durum]', statusLabel)
+        .replace('[Link]', trackingLink);
+
+      await sendWhatsAppMessage(t.customerPhone, text);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // ADMIN API — NOTIFICATIONS (Sistem Bildirimleri)
+  // ============================================================
+
+  app.get('/api/admin/notifications', requireAdmin, async (req, res) => {
+    try {
+      const rows = await db.select().from(notifications)
+        .orderBy(desc(notifications.createdAt))
+        .limit(10);
+      
+      if (rows.length === 0) {
+        const recentTickets = await db.select({
+          id: tickets.id,
+          ticketNumber: tickets.ticketNumber,
+          subject: tickets.subject,
+          status: tickets.status,
+          createdAt: tickets.createdAt
+        }).from(tickets)
+          .orderBy(desc(tickets.createdAt))
+          .limit(5);
+
+        const dynamicNotifications = recentTickets.map(t => ({
+          id: t.id,
+          title: `Yeni Servis Kaydı: ${t.ticketNumber}`,
+          message: `${t.subject} konulu cihaz servise alındı.`,
+          type: 'info',
+          isRead: false,
+          linkUrl: `/admin/servis`,
+          createdAt: t.createdAt
+        }));
+        return res.json(dynamicNotifications);
+      }
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/notifications/mark-read', requireAdmin, async (req, res) => {
+    try {
+      await db.update(notifications).set({ isRead: true }).where(eq(notifications.isRead, false));
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

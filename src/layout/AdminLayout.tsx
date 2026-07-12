@@ -1,18 +1,63 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Wrench, Users, Box, MessageSquare, Settings, LogOut,
-  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid, Shield
+  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid, Shield, Bell
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { adminRequest } from '../lib/api';
+import { adminRequest, fetchAdminNotifications, markNotificationsAsRead } from '../lib/api';
 
 export default function AdminLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
   const [isGoogleBusinessActive, setIsGoogleBusinessActive] = useState(false);
+
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [bellDropdownOpen, setBellDropdownOpen] = useState(false);
+  const bellRef = useRef<HTMLDivElement>(null);
+
+  const loadNotifications = async () => {
+    try {
+      const data = await fetchAdminNotifications();
+      if (Array.isArray(data)) {
+        setNotificationsList(data);
+        setUnreadCount(data.filter((n: any) => !n.isRead).length);
+      }
+    } catch (e) {
+      console.error('Failed to load notifications:', e);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markNotificationsAsRead();
+      setUnreadCount(0);
+      setNotificationsList(prev => prev.map(n => ({ ...n, isRead: true })));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadNotifications();
+      const interval = setInterval(loadNotifications, 30000); // 30s
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (bellRef.current && !bellRef.current.contains(event.target as Node)) {
+        setBellDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -77,14 +122,65 @@ export default function AdminLayout() {
     <div className="admin-panel min-h-screen flex flex-col font-sans text-[#3c434a] bg-[#f0f0f1]">
       
       {/* Top Admin Bar (WordPress Style) */}
-      <div className="h-8 bg-[#1d2327] text-[#f0f0f1] flex items-center justify-between px-3 shrink-0 z-50 sticky top-0">
+      <div className="hidden md:flex h-8 bg-[#1d2327] text-[#f0f0f1] items-center justify-between px-3 shrink-0 z-50 sticky top-0">
         <div className="flex items-center space-x-4 h-full">
           <Link to="/" target="_blank" className="flex items-center text-[13px] hover:text-[#72aee6] transition-colors h-full px-2">
             <span className="font-semibold mr-2">Kerim Bilgisayar</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </Link>
         </div>
-        <div className="flex items-center h-full">
+        <div className="flex items-center h-full space-x-2">
+          {/* Notification Bell Dropdown */}
+          <div className="relative h-full flex items-center px-3 border-r border-[#2c3338]" ref={bellRef}>
+            <button
+              onClick={() => setBellDropdownOpen(!bellDropdownOpen)}
+              className="relative text-[#a7aaad] hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center scale-90">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {bellDropdownOpen && (
+              <div className="absolute right-0 top-8 w-80 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 text-gray-800 py-2">
+                <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                  <span className="font-extrabold text-xs text-gray-700">Bildirimler ({unreadCount})</span>
+                  {unreadCount > 0 && (
+                    <button onClick={handleMarkAllRead} className="text-[10px] text-blue-600 hover:underline font-bold">
+                      Tümünü Okundu Say
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {notificationsList.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-6">Yeni bildirim bulunmuyor.</p>
+                  ) : (
+                    notificationsList.map(item => (
+                      <Link
+                        key={item.id}
+                        to={item.linkUrl || '#'}
+                        onClick={() => setBellDropdownOpen(false)}
+                        className={cn(
+                          "block px-4 py-2.5 hover:bg-slate-50 transition-colors border-b border-gray-50 text-left",
+                          !item.isRead ? "bg-blue-50/40" : ""
+                        )}
+                      >
+                        <p className={cn("text-xs font-bold text-gray-800", !item.isRead ? "text-blue-900" : "")}>{item.title}</p>
+                        <p className="text-[11px] text-gray-500 line-clamp-2 mt-0.5">{item.message}</p>
+                        <span className="text-[9px] text-gray-400 mt-1 block">
+                          {new Date(item.createdAt).toLocaleDateString('tr-TR')}
+                        </span>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <Link to="/admin/profilim" className="flex items-center px-3 hover:text-[#72aee6] cursor-pointer h-full text-[13px] transition-colors">
             <span className="mr-2">Merhaba, {user?.name || 'Admin'}</span>
             <UserCircle className="w-4 h-4" />
@@ -156,14 +252,64 @@ export default function AdminLayout() {
         {/* Main Column */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
           {/* Mobile header (for opening sidebar) */}
-          <div className="md:hidden flex items-center p-3 bg-white border-b border-gray-200">
-             <button
-                className="p-1 mr-3 text-gray-500 hover:text-gray-900"
+          <div className="md:hidden flex items-center justify-between p-3 bg-[#1d2327] text-white border-b border-gray-800 sticky top-0 z-30">
+            <div className="flex items-center">
+              <button
+                className="p-1 mr-3 text-gray-400 hover:text-white"
                 onClick={() => setSidebarOpen(true)}
               >
                 <Menu className="w-6 h-6" />
               </button>
-              <h1 className="text-sm font-semibold">Kerim Bilgisayar</h1>
+              <h1 className="text-sm font-bold tracking-tight">Kerim Bilgisayar</h1>
+            </div>
+            
+            {/* Mobile Bell Button */}
+            <div className="relative" ref={bellRef}>
+              <button
+                onClick={() => setBellDropdownOpen(!bellDropdownOpen)}
+                className="relative p-1 text-gray-400 hover:text-white cursor-pointer flex items-center justify-center"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center scale-90">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {bellDropdownOpen && (
+                <div className="absolute right-0 top-9 w-72 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 text-gray-800 py-2">
+                  <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                    <span className="font-extrabold text-xs text-gray-700">Bildirimler ({unreadCount})</span>
+                    {unreadCount > 0 && (
+                      <button onClick={handleMarkAllRead} className="text-[10px] text-blue-600 hover:underline font-bold">
+                        Hepsini Oku
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {notificationsList.length === 0 ? (
+                      <p className="text-xs text-gray-400 italic text-center py-6">Bildirim yok.</p>
+                    ) : (
+                      notificationsList.map(item => (
+                        <Link
+                          key={item.id}
+                          to={item.linkUrl || '#'}
+                          onClick={() => setBellDropdownOpen(false)}
+                          className={cn(
+                            "block px-4 py-2 hover:bg-slate-50 transition-colors border-b border-gray-50 text-left text-xs",
+                            !item.isRead ? "bg-blue-50/40" : ""
+                          )}
+                        >
+                          <p className="font-bold text-gray-800">{item.title}</p>
+                          <p className="text-[10px] text-gray-500 line-clamp-2">{item.message}</p>
+                        </Link>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Dynamic Page Content */}
@@ -172,9 +318,33 @@ export default function AdminLayout() {
           </main>
 
           {/* Footer Version Info */}
-          <footer className="py-4 text-center text-xs text-gray-400 bg-[#f0f0f1] shrink-0">
+          <footer className="py-4 text-center text-xs text-gray-400 bg-[#f0f0f1] shrink-0 mb-12 md:mb-0">
             Kerim Bilgisayar Yönetim Paneli • <span className="font-semibold text-gray-500">v1.2.0</span>
           </footer>
+
+          {/* Mobile Bottom Navigation Bar (for Webviews / Native feel) */}
+          <div className="md:hidden sticky bottom-0 bg-[#1d2327] text-gray-400 border-t border-gray-800 flex justify-around py-2 z-40 shrink-0">
+            <Link to="/admin" className={cn("flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors", location.pathname === '/admin' ? 'text-[#72aee6]' : 'hover:text-white')}>
+              <LayoutDashboard className="w-5 h-5" />
+              <span>Panel</span>
+            </Link>
+            <Link to="/admin/servis" className={cn("flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors", location.pathname.startsWith('/admin/servis') ? 'text-[#72aee6]' : 'hover:text-white')}>
+              <Wrench className="w-5 h-5" />
+              <span>Servis</span>
+            </Link>
+            <Link to="/admin/satis-pos" className={cn("flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors", location.pathname.startsWith('/admin/satis-pos') ? 'text-[#72aee6]' : 'hover:text-white')}>
+              <Store className="w-5 h-5" />
+              <span>POS</span>
+            </Link>
+            <Link to="/admin/ortam" className={cn("flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors", location.pathname.startsWith('/admin/ortam') ? 'text-[#72aee6]' : 'hover:text-white')}>
+              <ImageIcon className="w-5 h-5" />
+              <span>Medya</span>
+            </Link>
+            <Link to="/admin/ayarlar" className={cn("flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors", location.pathname.startsWith('/admin/ayarlar') ? 'text-[#72aee6]' : 'hover:text-white')}>
+              <Settings className="w-5 h-5" />
+              <span>Ayarlar</span>
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -58,6 +58,11 @@ export default function AdminSettings() {
     cloudflareAlwaysUseHttps: 'on',
     cloudflareDevelopmentMode: 'off',
     cloudflareBrowserCacheTtl: '14400',
+    // WhatsApp
+    whatsappApiEnabled: 'false',
+    whatsappApiUrl: '',
+    whatsappApiToken: '',
+    whatsappTemplate: '',
   });
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -147,6 +152,7 @@ export default function AdminSettings() {
     { id: 'seo', label: 'SEO', icon: Globe },
     { id: 'security', label: 'Güvenlik', icon: Shield },
     { id: 'cloudflare', label: 'Cloudflare', icon: Cloud },
+    { id: 'whatsapp', label: 'WhatsApp', icon: Send },
   ];
 
   const inputCls = 'w-full border border-gray-300 rounded-theme px-4 py-2 focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-sm';
@@ -725,6 +731,44 @@ export default function AdminSettings() {
                   <div>
                     <label className={labelCls}>Turnstile Secret Key</label>
                     <input type="password" value={settings.turnstileSecretKey || ''} onChange={e => handleChange('turnstileSecretKey', e.target.value)} className={inputCls} autoComplete="new-password" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'whatsapp' && (
+            <div className="space-y-6 max-w-2xl">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">WhatsApp Otomatik Bildirim Entegrasyonu</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className={labelCls}>Durum Bildirimi Gönderimi</label>
+                    <select value={settings.whatsappApiEnabled || 'false'} onChange={e => handleChange('whatsappApiEnabled', e.target.value)} className={inputCls}>
+                      <option value="false">Kapalı (Otomatik Gönderim Yapma)</option>
+                      <option value="true">Açık (Durum Değiştiğinde API ile Gönder)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>WhatsApp API Gateway URL (UltraMsg, Wassenger, vb.)</label>
+                    <input type="text" value={settings.whatsappApiUrl || ''} onChange={e => handleChange('whatsappApiUrl', e.target.value)} className={inputCls} placeholder="https://api.ultramsg.com/instanceXXXX/messages/chat" />
+                    <p className="text-[11px] text-gray-400 mt-1">UltraMsg veya Wassenger gibi gateway servislerinin mesaj gönderim endpoint adresini yazınız.</p>
+                  </div>
+                  <div>
+                    <label className={labelCls}>API Token / Key</label>
+                    <input type="password" value={settings.whatsappApiToken || ''} onChange={e => handleChange('whatsappApiToken', e.target.value)} className={inputCls} placeholder="Mesaj gönderim yetki tokeni" autoComplete="new-password" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Varsayılan Bildirim Şablonu</label>
+                    <textarea rows={4} value={settings.whatsappTemplate || ''} onChange={e => handleChange('whatsappTemplate', e.target.value)} className={inputCls} placeholder="Sayın [Musteri], [No] numaralı [Cihaz] cihazınızın servis durumu '[Durum]' olarak güncellenmiştir. Takip linkiniz: [Link]" />
+                    <div className="text-[11px] text-gray-400 mt-1.5 space-y-1">
+                      <p className="font-semibold text-gray-500">Kullanabileceğiniz Parametreler:</p>
+                      <p>• <span className="font-mono text-gray-600 bg-gray-150 px-1 rounded">[Musteri]</span>: Müşteri Adı Soyadı</p>
+                      <p>• <span className="font-mono text-gray-600 bg-gray-150 px-1 rounded">[No]</span>: Servis Fiş Numarası</p>
+                      <p>• <span className="font-mono text-gray-600 bg-gray-150 px-1 rounded">[Cihaz]</span>: Cihaz Marka & Model</p>
+                      <p>• <span className="font-mono text-gray-600 bg-gray-150 px-1 rounded">[Durum]</span>: Yeni Servis Durumu</p>
+                      <p>• <span className="font-mono text-gray-600 bg-gray-150 px-1 rounded">[Link]</span>: Arıza Durumu Sorgulama Linki</p>
+                    </div>
                   </div>
                 </div>
               </div>

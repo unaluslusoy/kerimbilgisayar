@@ -2,7 +2,7 @@ import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, 
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import { mediaUrl } from '../../lib/media';
 
@@ -371,15 +371,46 @@ export default function ServiceManager() {
                       <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Müşteri</p>
                       <p className="text-gray-800 font-bold text-sm">{detailTicket.customerName || '—'}</p>
                     </div>
-                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Telefon</p>
-                      <p className="text-gray-800 font-bold text-sm">
-                        {detailTicket.customerPhone
-                          ? <a href={`tel:${detailTicket.customerPhone}`} className="text-blue-600 hover:underline flex items-center gap-1">
-                              <Phone className="w-3.5 h-3.5" /> {detailTicket.customerPhone}
-                            </a>
-                          : '—'}
-                      </p>
+                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 flex flex-col justify-between">
+                      <div>
+                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Telefon</p>
+                        <p className="text-gray-800 font-bold text-sm">
+                          {detailTicket.customerPhone
+                            ? <a href={`tel:${detailTicket.customerPhone}`} className="text-blue-600 hover:underline flex items-center gap-1">
+                                <Phone className="w-3.5 h-3.5" /> {detailTicket.customerPhone}
+                              </a>
+                            : '—'}
+                        </p>
+                      </div>
+                      {detailTicket.customerPhone && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <a
+                            href={`https://wa.me/${detailTicket.customerPhone.replace(/\D/g, '').startsWith('0') ? '90' + detailTicket.customerPhone.replace(/\D/g, '').substring(1) : detailTicket.customerPhone.replace(/\D/g, '').startsWith('90') ? detailTicket.customerPhone.replace(/\D/g, '') : '90' + detailTicket.customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Merhaba Sayın Müşterimiz, ${detailTicket.ticketNumber} numaralı cihazınızın servis işlemlerini takip etmek için: https://kerimbilgisayar.com/ariza-sorgulama?no=${detailTicket.ticketNumber}`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-[10px] font-bold transition-colors"
+                          >
+                            <Send className="w-3 h-3 text-green-600" /> WhatsApp Web
+                          </a>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await triggerTicketWhatsApp(detailTicket.id);
+                                if (res.success) {
+                                  alert('WhatsApp bildirimi arka planda başarıyla sıraya alındı.');
+                                } else {
+                                  alert('Hata: Gönderilemedi. Ayarları kontrol edin.');
+                                }
+                              } catch (e: any) {
+                                alert('WhatsApp API hatası: ' + e.message);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold transition-colors"
+                          >
+                            <Send className="w-3 h-3 text-blue-600" /> API ile Gönder
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {detailTicket.customerEmail && (
                       <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">

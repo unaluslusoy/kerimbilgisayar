@@ -496,6 +496,18 @@ export async function deleteTicketAttachment(id: number) {
   return adminRequest(`/api/admin/tickets/attachments/${id}`, { method: 'DELETE' });
 }
 
+export async function triggerTicketWhatsApp(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/whatsapp-trigger`, { method: 'POST' });
+}
+
+export async function fetchAdminNotifications() {
+  return adminRequest('/api/admin/notifications');
+}
+
+export async function markNotificationsAsRead() {
+  return adminRequest('/api/admin/notifications/mark-read', { method: 'POST' });
+}
+
 // ============================================================
 // SALES & POS SYSTEM
 // ============================================================
