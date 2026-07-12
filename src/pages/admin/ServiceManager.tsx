@@ -2,7 +2,7 @@ import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, 
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import { mediaUrl } from '../../lib/media';
 
@@ -62,6 +62,7 @@ export default function ServiceManager() {
   const [ticketShipment, setTicketShipment] = useState<any | null>(null);
   const [isCreatingShipment, setIsCreatingShipment] = useState(false);
   const [selectedCarrier, setSelectedCarrier] = useState('yurtici');
+  const [activeCarriers, setActiveCarriers] = useState<string[]>([]);
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [noteSending, setNoteSending] = useState(false);
@@ -179,6 +180,22 @@ export default function ServiceManager() {
       setTicketShipment(match || null);
     } catch (e) {
       setTicketShipment(null);
+    }
+    try {
+      const pluginsData = await adminRequest('/api/admin/plugins').catch(() => []);
+      const active: string[] = [];
+      if (pluginsData && Array.isArray(pluginsData)) {
+        if (pluginsData.some((p: any) => p.pluginId === 'yurtici-cargo' && p.isActive)) active.push('yurtici');
+        if (pluginsData.some((p: any) => p.pluginId === 'aras-cargo' && p.isActive)) active.push('aras');
+        if (pluginsData.some((p: any) => p.pluginId === 'mng-cargo' && p.isActive)) active.push('mng');
+        if (pluginsData.some((p: any) => p.pluginId === 'ptt-cargo' && p.isActive)) active.push('ptt');
+      }
+      setActiveCarriers(active);
+      if (active.length > 0) {
+        setSelectedCarrier(active[0]);
+      }
+    } catch (e) {
+      setActiveCarriers([]);
     }
   };
 
@@ -627,15 +644,27 @@ export default function ServiceManager() {
                         <p className="text-xs text-gray-500">Cihazı müşteriye anlaşmalı fiyatlarla göndermek için kargo çıkışı yapın.</p>
                         <div className="flex gap-2">
                           <select
-                            value={selectedCarrier}
-                            onChange={e => setSelectedCarrier(e.target.value)}
-                            className="text-xs border border-slate-300 rounded-xl px-2.5 py-1.5 focus:ring-1 focus:ring-primary outline-none"
-                          >
-                            <option value="yurtici">Yurtiçi Kargo (%35 İndirim)</option>
-                            <option value="aras">Aras Kargo (%30 İndirim)</option>
-                            <option value="mng">MNG Kargo (%25 İndirim)</option>
-                            <option value="ptt">PTT Kargo (%40 İndirim)</option>
-                          </select>
+                             value={selectedCarrier}
+                             onChange={e => setSelectedCarrier(e.target.value)}
+                             className="text-xs border border-slate-300 rounded-xl px-2.5 py-1.5 focus:ring-1 focus:ring-primary outline-none"
+                           >
+                             {activeCarriers.length > 0 ? (
+                               activeCarriers.map(c => (
+                                 <option key={c} value={c}>
+                                   {c === 'yurtici' ? 'Yurtiçi Kargo (%35 İndirim)' :
+                                    c === 'aras' ? 'Aras Kargo (%30 İndirim)' :
+                                    c === 'mng' ? 'MNG Kargo (%25 İndirim)' : 'PTT Kargo (%40 İndirim)'}
+                                 </option>
+                               ))
+                             ) : (
+                               <>
+                                 <option value="yurtici">Yurtiçi Kargo (Demo)</option>
+                                 <option value="aras">Aras Kargo (Demo)</option>
+                                 <option value="mng">MNG Kargo (Demo)</option>
+                                 <option value="ptt">PTT Kargo (Demo)</option>
+                               </>
+                             )}
+                           </select>
                           <button
                             onClick={handleCreateShipment}
                             disabled={isCreatingShipment}

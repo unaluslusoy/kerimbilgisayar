@@ -1831,10 +1831,19 @@ async function startServer() {
     try {
       const { ticketId, carrier, trackingNumber, senderDetails, receiverDetails, notes } = req.body;
       const tracking = trackingNumber || `KP-${carrier.substring(0,2).toUpperCase()}-${String(Date.now()).slice(-6)}`;
+      
+      let parsedTicketId: number | null = null;
+      if (ticketId !== undefined && ticketId !== null && ticketId !== '') {
+        const parsedVal = parseInt(String(ticketId), 10);
+        if (!isNaN(parsedVal)) {
+          parsedTicketId = parsedVal;
+        }
+      }
+
       const [inserted] = await db.insert(shipments).values({
         tenantId: 1,
-        ticketId: ticketId ? parseInt(ticketId) : null,
-        carrier,
+        ticketId: parsedTicketId,
+        carrier: carrier || 'yurtici',
         trackingNumber: tracking,
         status: 'hazirlaniyor',
         senderDetails: senderDetails || 'Kerim Bilgisayar Merkez Ofis',

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, Search, Plus, Printer, RefreshCw, X, Check, Eye, Trash2, ArrowUpDown } from 'lucide-react';
-import { fetchAdminShipments, createAdminShipment, updateAdminShipment, deleteAdminShipment, fetchAdminTickets } from '../../lib/api';
+import { fetchAdminShipments, createAdminShipment, updateAdminShipment, deleteAdminShipment, fetchAdminTickets, fetchAdminSettings, adminRequest } from '../../lib/api';
+import { mediaUrl } from '../../lib/media';
 
 const CARRIERS: Record<string, { label: string; color: string; logo: string }> = {
   yurtici: { label: 'Yurtiçi Kargo', color: 'bg-blue-600 text-white', logo: 'YK' },
@@ -33,6 +34,8 @@ export default function AdminShipments() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
+  const [activeCarriers, setActiveCarriers] = useState<string[]>([]);
 
   // New Shipment Form
   const [newShipment, setNewShipment] = useState({
@@ -47,12 +50,45 @@ export default function AdminShipments() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [shipmentData, ticketData] = await Promise.all([
+      const [shipmentData, ticketData, settingsData, pluginsData] = await Promise.all([
         fetchAdminShipments(),
-        fetchAdminTickets()
+        fetchAdminTickets(),
+        fetchAdminSettings(),
+        adminRequest('/api/admin/plugins').catch(() => [])
       ]);
       setShipments(shipmentData || []);
       setTickets(ticketData || []);
+      setSystemSettings(settingsData || {});
+
+      // Filter active carriers based on active plugins
+      const active: string[] = [];
+      if (pluginsData && Array.isArray(pluginsData)) {
+        if (pluginsData.some((p: any) => p.pluginId === 'yurtici-cargo' && p.isActive)) active.push('yurtici');
+        if (pluginsData.some((p: any) => p.pluginId === 'aras-cargo' && p.isActive)) active.push('aras');
+        if (pluginsData.some((p: any) => p.pluginId === 'mng-cargo' && p.isActive)) active.push('mng');
+        if (pluginsData.some((p: any) => p.pluginId === 'ptt-cargo' && p.isActive)) active.push('ptt');
+      }
+      setActiveCarriers(active);
+
+      // Pre-fill sender details dynamically from settings
+      const siteTitle = settingsData?.siteTitle || 'Kerim Bilgisayar';
+      const phone = settingsData?.contactPhone || '';
+      const address = settingsData?.contactAddress || '';
+      const taxOffice = settingsData?.taxOffice || '';
+      const taxNumber = settingsData?.taxNumber || '';
+      const companyTitle = settingsData?.companyTitle || '';
+      
+      let sender = siteTitle;
+      if (companyTitle) sender = companyTitle;
+      if (phone) sender += `\nTel: ${phone}`;
+      if (address) sender += `\nAdres: ${address}`;
+      if (taxOffice || taxNumber) sender += `\nVD: ${taxOffice || ''} - VN: ${taxNumber || ''}`;
+
+      setNewShipment(prev => ({
+        ...prev,
+        senderDetails: sender,
+        carrier: active.length > 0 ? active[0] : 'yurtici'
+      }));
     } catch (e) {
       console.error('Failed to load shipment data:', e);
     } finally {
@@ -116,6 +152,7 @@ export default function AdminShipments() {
 
   const printLabel = (shipment: any) => {
     const carrierName = CARRIERS[shipment.carrier]?.label || shipment.carrier;
+    const logoUrl = systemSettings?.logoUrl ? mediaUrl(systemSettings.logoUrl) : '';
     const win = window.open('', '_blank');
     if (!win) return;
     win.document.write(`
@@ -123,29 +160,41 @@ export default function AdminShipments() {
         <head>
           <title>Kargo Barkodu - ${shipment.trackingNumber}</title>
           <style>
-            body { font-family: system-ui, sans-serif; padding: 20px; text-align: center; }
-            .label-card { border: 3px solid #000; padding: 20px; max-width: 400px; margin: 0 auto; border-radius: 12px; }
-            .carrier { font-size: 24px; font-weight: 800; text-transform: uppercase; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 15px; }
-            .section { text-align: left; margin-bottom: 10px; font-size: 13px; }
-            .title { font-weight: 800; color: #555; text-transform: uppercase; font-size: 10px; }
-            .barcode { font-family: monospace; font-size: 28px; font-weight: 900; background: #000; color: #fff; padding: 10px; letter-spacing: 5px; margin: 15px 0; border-radius: 4px; display: inline-block; }
-            .tracking { font-weight: bold; font-size: 14px; }
+            body { font-family: system-ui, sans-serif; padding: 20px; text-align: center; color: #1e293b; }
+            .label-card { border: 3px solid #0f172a; padding: 24px; max-width: 440px; margin: 0 auto; border-radius: 16px; background: #fff; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+            .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px dashed #cbd5e1; padding-bottom: 12px; margin-bottom: 16px; }
+            .logo-img { max-height: 40px; object-fit: contain; }
+            .carrier { font-size: 18px; font-weight: 900; text-transform: uppercase; color: #1e3a8a; }
+            .section { text-align: left; margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
+            .title { font-weight: 800; color: #64748b; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
+            .content { color: #334155; white-space: pre-wrap; font-weight: 600; }
+            .barcode-container { background: #f8fafc; border: 2px solid #e2e8f0; padding: 16px; margin: 20px 0; border-radius: 12px; }
+            .barcode { font-family: monospace; font-size: 26px; font-weight: 900; background: #0f172a; color: #fff; padding: 8px 16px; letter-spacing: 4px; display: inline-block; border-radius: 8px; }
+            .tracking { font-weight: 800; font-size: 14px; color: #0f172a; margin-top: 8px; }
+            .footer-info { margin-top: 16px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; font-weight: bold; }
           </style>
         </head>
         <body onload="window.print()">
           <div class="label-card">
-            <div class="carrier">${carrierName}</div>
+            <div class="header">
+              ${logoUrl ? `<img src="${logoUrl}" class="logo-img" />` : `<div style="font-weight:900; font-size:16px;">${systemSettings?.siteTitle || 'Kerim Bilgisayar'}</div>`}
+              <div class="carrier">${carrierName}</div>
+            </div>
             <div class="section">
               <span class="title">GÖNDERİCİ:</span>
-              <div>${shipment.senderDetails}</div>
+              <div class="content">${shipment.senderDetails}</div>
             </div>
             <div class="section">
               <span class="title">ALICI:</span>
-              <div style="font-size: 15px; font-weight: bold;">${shipment.receiverDetails}</div>
+              <div class="content" style="font-size: 14px; color: #0f172a;">${shipment.receiverDetails}</div>
             </div>
-            <div class="barcode">${shipment.trackingNumber}</div>
-            <div class="tracking">TAKİP NO: ${shipment.trackingNumber}</div>
-            <div style="margin-top: 15px; font-size: 10px; color: #666;">Kerim Bilgisayar Kargo Yönetim Entegrasyonu</div>
+            <div class="barcode-container">
+              <div class="barcode">${shipment.trackingNumber}</div>
+              <div class="tracking">TAKİP NO: ${shipment.trackingNumber}</div>
+            </div>
+            <div class="footer-info">
+              ${systemSettings?.siteTitle || 'Kerim Bilgisayar'} Teknik Servis Entegrasyon Sistemi
+            </div>
           </div>
         </body>
       </html>
@@ -341,12 +390,23 @@ export default function AdminShipments() {
                     onChange={e => setNewShipment({ ...newShipment, carrier: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
                   >
-                    <option value="yurtici">Yurtiçi Kargo</option>
-                    <option value="aras">Aras Kargo</option>
-                    <option value="mng">MNG Kargo</option>
-                    <option value="ptt">PTT Kargo</option>
+                    {activeCarriers.length > 0 ? (
+                      activeCarriers.map(c => (
+                        <option key={c} value={c}>{CARRIERS[c]?.label || c}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="yurtici">Yurtiçi Kargo (Demo)</option>
+                        <option value="aras">Aras Kargo (Demo)</option>
+                        <option value="mng">MNG Kargo (Demo)</option>
+                        <option value="ptt">PTT Kargo (Demo)</option>
+                      </>
+                    )}
                     <option value="diger">Diğer</option>
                   </select>
+                  {activeCarriers.length === 0 && (
+                    <span className="text-[10px] text-amber-600 block mt-1 font-semibold">⚠️ Aktif kargo eklentisi yok. Demo modu.</span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Takip Numarası</label>

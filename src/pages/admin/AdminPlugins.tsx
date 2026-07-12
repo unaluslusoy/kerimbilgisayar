@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShieldAlert, MonitorPlay, BarChart, CheckCircle, XCircle, CreditCard, Copy, AlertCircle, ChevronRight } from 'lucide-react';
+import { ShieldAlert, MonitorPlay, BarChart, CheckCircle, XCircle, CreditCard, Copy, AlertCircle, ChevronRight, Truck } from 'lucide-react';
 import { adminRequest } from '../../lib/api';
 
 const AVAILABLE_PLUGINS = [
@@ -38,6 +38,42 @@ const AVAILABLE_PLUGINS = [
     color: 'text-emerald-600',
     bg: 'bg-emerald-50',
     type: 'Payment'
+  },
+  {
+    id: 'yurtici-cargo',
+    name: 'Yurtiçi Kargo Entegrasyonu',
+    description: 'Yurtiçi Kargo API entegrasyonu ile gönderi oluşturun, durum takip edin ve etiket bastırın.',
+    icon: Truck,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
+    type: 'Shipping'
+  },
+  {
+    id: 'aras-cargo',
+    name: 'Aras Kargo Entegrasyonu',
+    description: 'Aras Kargo API entegrasyonu ile gönderi oluşturun, durum takip edin ve etiket bastırın.',
+    icon: Truck,
+    color: 'text-red-600',
+    bg: 'bg-red-50',
+    type: 'Shipping'
+  },
+  {
+    id: 'mng-cargo',
+    name: 'MNG Kargo Entegrasyonu',
+    description: 'MNG Kargo API entegrasyonu ile gönderi oluşturun, durum takip edin ve etiket bastırın.',
+    icon: Truck,
+    color: 'text-orange-500',
+    bg: 'bg-orange-50',
+    type: 'Shipping'
+  },
+  {
+    id: 'ptt-cargo',
+    name: 'PTT Kargo Entegrasyonu',
+    description: 'PTT Kargo API entegrasyonu ile gönderi oluşturun, durum takip edin ve etiket bastırın.',
+    icon: Truck,
+    color: 'text-yellow-600',
+    bg: 'bg-yellow-50',
+    type: 'Shipping'
   }
 ];
 
@@ -56,6 +92,12 @@ export default function AdminPlugins() {
   const [paytrMerchantId, setPaytrMerchantId] = useState('');
   const [paytrMerchantKey, setPaytrMerchantKey] = useState('');
   const [paytrMerchantSalt, setPaytrMerchantSalt] = useState('');
+  const [isCargoModalOpen, setIsCargoModalOpen] = useState(false);
+  const [selectedCargoPlugin, setSelectedCargoPlugin] = useState('');
+  const [cargoApiKey, setCargoApiKey] = useState('');
+  const [cargoApiPassword, setCargoApiPassword] = useState('');
+  const [cargoCustomerCode, setCargoCustomerCode] = useState('');
+  const [cargoApiUrl, setCargoApiUrl] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -274,6 +316,54 @@ export default function AdminPlugins() {
     }
   };
 
+  const openCargoSettings = (plugin: any) => {
+    let settings = plugin?.settings;
+    if (typeof settings === 'string') {
+      try { settings = JSON.parse(settings); } catch (_) {}
+    }
+    setCargoApiKey(settings?.apiKey || '');
+    setCargoApiPassword(settings?.apiPassword || '');
+    setCargoCustomerCode(settings?.customerCode || '');
+    setCargoApiUrl(settings?.apiUrl || '');
+    setSelectedCargoPlugin(plugin.pluginId);
+    setIsCargoModalOpen(true);
+  };
+
+  const saveCargoSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await adminRequest(`/api/admin/plugins/${selectedCargoPlugin}/settings`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          settings: { apiKey: cargoApiKey, apiPassword: cargoApiPassword, customerCode: cargoCustomerCode, apiUrl: cargoApiUrl }
+        })
+      });
+      showToast('Kargo API ayarları başarıyla kaydedildi!', 'success');
+      setIsCargoModalOpen(false);
+      fetchPlugins();
+    } catch (e: any) {
+      showToast('Hata: ' + e.message, 'error');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const resetCargoSettings = async () => {
+    if (!confirm('Kargo ayarlarını sıfırlamak istediğinize emin misiniz?')) return;
+    try {
+      await adminRequest(`/api/admin/plugins/${selectedCargoPlugin}/settings`, { method: 'DELETE' });
+      setCargoApiKey('');
+      setCargoApiPassword('');
+      setCargoCustomerCode('');
+      setCargoApiUrl('');
+      fetchPlugins();
+      showToast('Ayarlar başarıyla sıfırlandı.', 'success');
+      setIsCargoModalOpen(false);
+    } catch (e: any) {
+      showToast('Hata: ' + e.message, 'error');
+    }
+  };
+
   const copyRedirectUri = () => {
     navigator.clipboard.writeText(redirectUri).then(() => {
       setCopied(true);
@@ -335,6 +425,10 @@ export default function AdminPlugins() {
                   </button>
                 ) : isActive && plugin.id === 'paytr-integration' ? (
                   <button onClick={() => openPaytrSettings(dbPlugin)} className="text-sm text-primary font-medium hover:underline">
+                    Ayarlar
+                  </button>
+                ) : isActive && (plugin.id === 'yurtici-cargo' || plugin.id === 'aras-cargo' || plugin.id === 'mng-cargo' || plugin.id === 'ptt-cargo') ? (
+                  <button onClick={() => openCargoSettings(dbPlugin || { pluginId: plugin.id, settings: {} })} className="text-sm text-primary font-medium hover:underline">
                     Ayarlar
                   </button>
                 ) : (
@@ -618,6 +712,88 @@ export default function AdminPlugins() {
                   onClick={savePaytrSettings}
                   disabled={savingSettings || !paytrMerchantId || !paytrMerchantKey || !paytrMerchantSalt}
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-theme hover:bg-secondary transition-colors disabled:opacity-50"
+                >
+                  {savingSettings ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Cargo Settings Modal ── */}
+      {isCargoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50">
+              <h2 className="text-base font-bold text-gray-900">
+                {selectedCargoPlugin === 'yurtici-cargo' ? 'Yurtiçi Kargo Entegrasyon Ayarları' :
+                 selectedCargoPlugin === 'aras-cargo' ? 'Aras Kargo Entegrasyon Ayarları' :
+                 selectedCargoPlugin === 'mng-cargo' ? 'MNG Kargo Entegrasyon Ayarları' : 'PTT Kargo Entegrasyon Ayarları'}
+              </h2>
+              <button onClick={() => setIsCargoModalOpen(false)} className="text-gray-400 hover:text-gray-650">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Müşteri Kodu (Customer Code / ID)</label>
+                <input
+                  type="text"
+                  value={cargoCustomerCode}
+                  onChange={(e) => setCargoCustomerCode(e.target.value)}
+                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="Örn: 320491823"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">API Kullanıcı Adı (API Key)</label>
+                <input
+                  type="text"
+                  value={cargoApiKey}
+                  onChange={(e) => setCargoApiKey(e.target.value)}
+                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="API kullanıcı adı veya anahtarı"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">API Şifresi (API Password)</label>
+                <input
+                  type="password"
+                  value={cargoApiPassword}
+                  onChange={(e) => setCargoApiPassword(e.target.value)}
+                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="••••••••"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">API Servis URL'si (Endpoint URL)</label>
+                <input
+                  type="text"
+                  value={cargoApiUrl}
+                  onChange={(e) => setCargoApiUrl(e.target.value)}
+                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-[11px] focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="https://api.kargofirmasi.com/service/v1"
+                />
+              </div>
+            </div>
+            <div className="p-6 bg-gray-50 flex justify-between items-center gap-3 rounded-b-xl border-t border-gray-100">
+              <button
+                onClick={resetCargoSettings}
+                className="px-4 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-theme hover:bg-red-100 transition-colors"
+              >
+                Ayarları Sıfırla
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsCargoModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-theme hover:bg-gray-50 transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={saveCargoSettings}
+                  disabled={savingSettings || !cargoCustomerCode || !cargoApiKey || !cargoApiPassword}
+                  className="px-4 py-2 text-xs font-bold text-white bg-primary rounded-theme hover:bg-secondary transition-colors disabled:opacity-50"
                 >
                   {savingSettings ? 'Kaydediliyor...' : 'Kaydet'}
                 </button>

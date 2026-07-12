@@ -181,6 +181,10 @@ export async function updateStockItem(id: number, data: any) {
 }
 
 // Settings
+export async function fetchAdminSettings() {
+  return adminRequest('/api/admin/settings');
+}
+
 export async function saveAdminSettings(data: Record<string, string>) {
   return adminRequest('/api/admin/settings', { method: 'PUT', body: JSON.stringify(data) });
 }
