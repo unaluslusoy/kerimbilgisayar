@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Wrench, Users, Box, MessageSquare, Settings, LogOut,
-  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid, Shield, Bell
+  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid, Shield, Bell, Truck, DollarSign
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState, useEffect, useRef } from 'react';
@@ -79,6 +79,8 @@ export default function AdminLayout() {
     { name: 'Servis Kayıtları', path: '/admin/servis', icon: Wrench },
     { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
     { name: 'POS Satış (POS)', path: '/admin/satis-pos', icon: Store },
+    { name: 'Kargo Takibi', path: '/admin/kargo', icon: Truck },
+    { name: 'Gider & Masraflar', path: '/admin/masraflar', icon: DollarSign },
     { name: 'Hizmetlerimiz', path: '/admin/hizmetler', icon: Wrench },
     { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri', icon: Tag },
     { name: 'Kullanıcılar', path: '/admin/kullanicilar', icon: Users },

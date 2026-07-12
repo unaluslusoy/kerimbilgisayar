@@ -509,6 +509,44 @@ export async function markNotificationsAsRead() {
 }
 
 // ============================================================
+// SHIPMENTS (Kargo Yönetimi)
+// ============================================================
+export async function fetchAdminShipments() {
+  return adminRequest('/api/admin/shipments');
+}
+
+export async function createAdminShipment(data: any) {
+  return adminRequest('/api/admin/shipments', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateAdminShipment(id: number, data: any) {
+  return adminRequest(`/api/admin/shipments/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function deleteAdminShipment(id: number) {
+  return adminRequest(`/api/admin/shipments/${id}`, { method: 'DELETE' });
+}
+
+// ============================================================
+// EXPENSES & OCR (Masraflar & Fiş Tarama)
+// ============================================================
+export async function fetchAdminExpenses() {
+  return adminRequest('/api/admin/expenses');
+}
+
+export async function createAdminExpense(data: any) {
+  return adminRequest('/api/admin/expenses', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function deleteAdminExpense(id: number) {
+  return adminRequest(`/api/admin/expenses/${id}`, { method: 'DELETE' });
+}
+
+export async function analyzeReceiptOcr(imageUrl: string) {
+  return adminRequest('/api/admin/expenses/ocr', { method: 'POST', body: JSON.stringify({ imageUrl }) });
+}
+
+// ============================================================
 // SALES & POS SYSTEM
 // ============================================================
 export async function fetchAdminSales() {

@@ -820,3 +820,30 @@ export const blockedIps = mysqlTable('blocked_ips', {
   ipIdx: uniqueIndex('idx_blocked_ips_ip').on(t.ipAddress),
 }));
 
+export const shipments = mysqlTable('shipments', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  ticketId: int('ticket_id').references(() => tickets.id, { onDelete: 'set null' }),
+  carrier: varchar('carrier', { length: 50 }).notNull(), // 'yurtici', 'aras', 'mng', 'ptt', 'diger'
+  trackingNumber: varchar('tracking_number', { length: 100 }),
+  status: mysqlEnum('status', ['hazirlaniyor', 'kargoya_verildi', 'yolda', 'teslim_edildi', 'iade']).default('hazirlaniyor'),
+  senderDetails: text('sender_details'),
+  receiverDetails: text('receiver_details'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+export const expenses = mysqlTable('expenses', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  title: varchar('title', { length: 255 }).notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  category: varchar('category', { length: 100 }), // e.g. 'yol', 'yemek', 'kargo', 'donanim'
+  description: text('description'),
+  receiptUrl: varchar('receipt_url', { length: 500 }), // photo of the receipt
+  expenseDate: timestamp('expense_date').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+

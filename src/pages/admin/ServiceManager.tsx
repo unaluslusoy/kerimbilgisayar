@@ -1,8 +1,8 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import { mediaUrl } from '../../lib/media';
 
@@ -59,6 +59,9 @@ export default function ServiceManager() {
   const [detailTicket, setDetailTicket] = useState<any>(null);
   const [ticketNotes, setTicketNotes] = useState<any[]>([]);
   const [ticketAttachments, setTicketAttachments] = useState<any[]>([]);
+  const [ticketShipment, setTicketShipment] = useState<any | null>(null);
+  const [isCreatingShipment, setIsCreatingShipment] = useState(false);
+  const [selectedCarrier, setSelectedCarrier] = useState('yurtici');
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [noteSending, setNoteSending] = useState(false);
@@ -170,6 +173,13 @@ export default function ServiceManager() {
     } catch (e) {
       setTicketAttachments([]);
     }
+    try {
+      const shipmentsData = await fetchAdminShipments();
+      const match = shipmentsData.find((s: any) => s.ticketId === ticket.id);
+      setTicketShipment(match || null);
+    } catch (e) {
+      setTicketShipment(null);
+    }
   };
 
   const handleSendNote = async () => {
@@ -198,6 +208,32 @@ export default function ServiceManager() {
       }
     } catch (e: any) {
       alert('Silme hatası: ' + e.message);
+    }
+  };
+
+  const handleCreateShipment = async () => {
+    if (!detailTicket) return;
+    setIsCreatingShipment(true);
+    try {
+      const receiverDetails = `${detailTicket.customerName}\nTel: ${detailTicket.customerPhone || ''}\nCihaz: ${[detailTicket.deviceBrand, detailTicket.deviceModel].filter(Boolean).join(' ') || detailTicket.deviceType || ''}`;
+      const payload = {
+        ticketId: detailTicket.id,
+        carrier: selectedCarrier,
+        senderDetails: 'Kerim Bilgisayar Merkez Ofis - İstanbul',
+        receiverDetails,
+        notes: `${detailTicket.ticketNumber} nolu servis kaydı için otomatik oluşturuldu.`
+      };
+      const res = await createAdminShipment(payload);
+      if (res.success) {
+        const shipmentsData = await fetchAdminShipments();
+        const match = shipmentsData.find((s: any) => s.ticketId === detailTicket.id);
+        setTicketShipment(match || null);
+        alert(`Kargo başarıyla oluşturuldu! Takip No: ${res.trackingNumber}`);
+      }
+    } catch (e: any) {
+      alert('Kargo oluşturulurken hata: ' + e.message);
+    } finally {
+      setIsCreatingShipment(false);
     }
   };
 
@@ -555,6 +591,59 @@ export default function ServiceManager() {
                             </button>
                           </div>
                         ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Kargo Yönetim Entegrasyonu */}
+                  <div className="border border-gray-200 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                      <Truck className="w-3.5 h-3.5 text-blue-500" /> Kargo Yönetim Entegrasyonu
+                    </p>
+
+                    {ticketShipment ? (
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-gray-800">
+                            {ticketShipment.carrier.toUpperCase()} Kargo
+                          </span>
+                          <span className="font-mono text-gray-900 bg-white border border-gray-150 px-2 py-0.5 rounded-lg font-bold">
+                            {ticketShipment.trackingNumber}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-500">Kargo Durumu:</span>
+                          <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                            {ticketShipment.status === 'hazirlaniyor' ? 'Hazırlanıyor' :
+                             ticketShipment.status === 'kargoya_verildi' ? 'Kargoya Verildi' :
+                             ticketShipment.status === 'yolda' ? 'Yolda / Dağıtımda' :
+                             ticketShipment.status === 'teslim_edildi' ? 'Teslim Edildi' : 'İade Edildi'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-gray-400">Son Güncelleme: {new Date(ticketShipment.updatedAt || ticketShipment.createdAt).toLocaleDateString('tr-TR')}</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs text-gray-500">Cihazı müşteriye anlaşmalı fiyatlarla göndermek için kargo çıkışı yapın.</p>
+                        <div className="flex gap-2">
+                          <select
+                            value={selectedCarrier}
+                            onChange={e => setSelectedCarrier(e.target.value)}
+                            className="text-xs border border-slate-300 rounded-xl px-2.5 py-1.5 focus:ring-1 focus:ring-primary outline-none"
+                          >
+                            <option value="yurtici">Yurtiçi Kargo (%35 İndirim)</option>
+                            <option value="aras">Aras Kargo (%30 İndirim)</option>
+                            <option value="mng">MNG Kargo (%25 İndirim)</option>
+                            <option value="ptt">PTT Kargo (%40 İndirim)</option>
+                          </select>
+                          <button
+                            onClick={handleCreateShipment}
+                            disabled={isCreatingShipment}
+                            className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-1"
+                          >
+                            {isCreatingShipment ? '...' : <><Truck className="w-3.5 h-3.5" /> Kargola</>}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

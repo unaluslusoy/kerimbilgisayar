@@ -43,6 +43,8 @@ const AdminSecurity = lazy(() => import('./pages/admin/AdminSecurity'));
 const LanguageSettings = lazy(() => import('./pages/admin/LanguageSettings'));
 const AdminServices = lazy(() => import('./pages/admin/AdminServices'));
 const AdminServiceCategories = lazy(() => import('./pages/admin/AdminServiceCategories'));
+const AdminShipments = lazy(() => import('./pages/admin/AdminShipments'));
+const AdminExpenses = lazy(() => import('./pages/admin/AdminExpenses'));
 const DynamicPage = lazy(() => import('./pages/public/DynamicPage'));
 const LegalPage = lazy(() => import('./pages/public/LegalPage'));
 const About = lazy(() => import('./pages/public/About'));
@@ -194,8 +196,10 @@ function AppContent() {
             <Route path="eklentiler" element={<AdminPlugins />} />
             <Route path="api-anahtarlari" element={<AdminApiKeys />} />
             <Route path="webhooks" element={<AdminWebhooks />} />
-             <Route path="guvenlik" element={<AdminSecurity />} />
+            <Route path="guvenlik" element={<AdminSecurity />} />
             <Route path="hizmetler" element={<AdminServices />} />
+            <Route path="kargo" element={<AdminShipments />} />
+            <Route path="masraflar" element={<AdminExpenses />} />
             
             {/* Google Business Routes */}
             <Route path="google" element={<AdminGoogleDashboard />} />
