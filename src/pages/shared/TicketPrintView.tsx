@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSettings } from "../../context/SettingsContext";
 import { fetchTicket } from "../../lib/api";
@@ -41,6 +41,14 @@ export default function TicketPrintView() {
     }, 400);
   };
 
+  const handleGoBack = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/admin');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -61,7 +69,7 @@ export default function TicketPrintView() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Kayıt Bulunamadı</h2>
           <p className="text-sm text-gray-500 mb-6">Aradığınız {ticketNumber} numaralı servis kaydı sistemde bulunamadı.</p>
-          <button onClick={() => navigate(-1)} className="w-full bg-gray-900 hover:bg-black text-white py-2.5 rounded-xl font-medium transition-colors">
+          <button onClick={handleGoBack} className="w-full bg-gray-900 hover:bg-black text-white py-2.5 rounded-xl font-medium transition-colors">
             Geri Dön
           </button>
         </div>
@@ -355,7 +363,7 @@ export default function TicketPrintView() {
 
           <div className="px-8 pb-8 pt-2 flex justify-between items-center bg-slate-50/30">
             <button
-              onClick={() => navigate(-1)}
+              onClick={handleGoBack}
               className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" /> Geri Dön
