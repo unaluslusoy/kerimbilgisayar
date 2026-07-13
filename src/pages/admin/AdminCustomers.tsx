@@ -5,6 +5,7 @@ import { assignCustomerSubscription, createAdminCustomer, fetchAdminCustomers, f
 const inputCls = 'w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary';
 
 const emptyCustomer = {
+  customerType: 'bireysel',
   firstName: '', lastName: '', email: '', phone: '', password: 'musteri123',
   companyName: '', taxId: '', taxOffice: '', address: '', sector: '', accountCode: '', balance: '0.00', creditLimit: '0.00', notes: '', isActive: true,
 };
@@ -46,6 +47,7 @@ export default function AdminCustomers() {
   const openEdit = (customer: any) => {
     setEditing(customer);
     setForm({
+      customerType: customer.companyName ? 'kurumsal' : 'bireysel',
       firstName: customer.firstName || '',
       lastName: customer.lastName || '',
       email: customer.email || '',
@@ -66,11 +68,24 @@ export default function AdminCustomers() {
   };
 
   const saveCustomer = async () => {
+    if (form.customerType === 'kurumsal' && !form.companyName) {
+      alert('Lütfen firma ünvanını girin.');
+      return;
+    }
     if (!form.firstName || !form.email) return;
+    
+    const submitData = { ...form };
+    if (form.customerType === 'bireysel') {
+      submitData.companyName = '';
+      submitData.taxId = '';
+      submitData.taxOffice = '';
+      submitData.sector = '';
+    }
+
     setSaving(true);
     try {
-      if (editing) await updateAdminCustomer(editing.id, form);
-      else await createAdminCustomer(form);
+      if (editing) await updateAdminCustomer(editing.id, submitData);
+      else await createAdminCustomer(submitData);
       setShowModal(false);
       await load();
     } catch (e: any) { alert('Hata: ' + e.message); }
@@ -209,21 +224,107 @@ export default function AdminCustomers() {
               <h2 className="text-lg font-bold text-gray-900">{editing ? 'Müşteri Düzenle' : 'Yeni Müşteri'}</h2>
               <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-theme"><X className="w-5 h-5 text-gray-500" /></button>
             </div>
+            
+            {/* Müşteri Türü Seçimi */}
+            <div className="px-6 pt-4">
+              <label className="block text-xs font-semibold text-gray-505 mb-2">Müşteri Türü</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, customerType: 'bireysel' })}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-theme border transition-all ${
+                    form.customerType === 'bireysel'
+                      ? 'bg-primary text-white border-primary shadow-sm'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Bireysel Müşteri
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, customerType: 'kurumsal' })}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-theme border transition-all ${
+                    form.customerType === 'kurumsal'
+                      ? 'bg-primary text-white border-primary shadow-sm'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Kurumsal Müşteri
+                </button>
+              </div>
+            </div>
+
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className={inputCls} placeholder="Ad *" />
-              <input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className={inputCls} placeholder="Soyad" />
-              <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className={inputCls} placeholder="E-posta *" />
-              <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} placeholder="Telefon" />
-              {!editing && <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className={inputCls} placeholder="Müşteri panel şifresi" />}
-              <input value={form.companyName} onChange={e => setForm({ ...form, companyName: e.target.value })} className={inputCls} placeholder="Firma / Cari adı" />
-              <input value={form.taxOffice} onChange={e => setForm({ ...form, taxOffice: e.target.value })} className={inputCls} placeholder="Vergi dairesi" />
-              <input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} className={inputCls} placeholder="Vergi / TCKN" />
-              <input value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} className={inputCls} placeholder="Sektör" />
-              <input value={form.accountCode} onChange={e => setForm({ ...form, accountCode: e.target.value })} className={inputCls} placeholder="Cari kod" />
-              <input type="number" value={form.balance} onChange={e => setForm({ ...form, balance: e.target.value })} className={inputCls} placeholder="Cari bakiye" />
-              <input type="number" value={form.creditLimit} onChange={e => setForm({ ...form, creditLimit: e.target.value })} className={inputCls} placeholder="Kredi limiti" />
-              <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className={`${inputCls} md:col-span-2 resize-none`} rows={3} placeholder="Adres" />
-              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className={`${inputCls} md:col-span-2 resize-none`} rows={3} placeholder="Cari not / anlaşma bilgisi" />
+              {form.customerType === 'kurumsal' && (
+                <div className="md:col-span-2 animate-in fade-in duration-200">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ünvanı *</label>
+                  <input value={form.companyName} onChange={e => setForm({ ...form, companyName: e.target.value })} className={inputCls} placeholder="Firma Ünvanı" required />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  {form.customerType === 'kurumsal' ? 'Yetkili Adı *' : 'Ad *'}
+                </label>
+                <input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className={inputCls} placeholder="Ad" required />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  {form.customerType === 'kurumsal' ? 'Yetkili Soyadı' : 'Soyad'}
+                </label>
+                <input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className={inputCls} placeholder="Soyad" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">E-posta adresi *</label>
+                <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className={inputCls} placeholder="E-posta" required />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Telefon Numarası</label>
+                <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} placeholder="Telefon" />
+              </div>
+              {!editing && (
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Giriş Şifresi</label>
+                  <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className={inputCls} placeholder="Şifre" />
+                </div>
+              )}
+              
+              {form.customerType === 'kurumsal' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
+                    <input value={form.taxOffice} onChange={e => setForm({ ...form, taxOffice: e.target.value })} className={inputCls} placeholder="Vergi dairesi" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi / TCKN</label>
+                    <input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} className={inputCls} placeholder="Vergi / TCKN" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Sektör</label>
+                    <input value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} className={inputCls} placeholder="Sektör" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Kod</label>
+                    <input value={form.accountCode} onChange={e => setForm({ ...form, accountCode: e.target.value })} className={inputCls} placeholder="Cari kod" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Bakiye</label>
+                    <input type="number" value={form.balance} onChange={e => setForm({ ...form, balance: e.target.value })} className={inputCls} placeholder="Cari bakiye" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Kredi Limiti</label>
+                    <input type="number" value={form.creditLimit} onChange={e => setForm({ ...form, creditLimit: e.target.value })} className={inputCls} placeholder="Kredi limiti" />
+                  </div>
+                </>
+              )}
+              
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Adres</label>
+                <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className={`${inputCls} resize-none`} rows={2} placeholder="Adres" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Anlaşma Notları</label>
+                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className={`${inputCls} resize-none`} rows={2} placeholder="Cari not / anlaşma bilgisi" />
+              </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">
               <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-theme font-semibold hover:bg-gray-50">İptal</button>

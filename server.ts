@@ -1099,10 +1099,15 @@ async function startServer() {
         updatedAt: tickets.updatedAt,
         estimatedCost: tickets.cost,
         laborCost: tickets.laborCost,
-        accessories: tickets.accessories
+        accessories: tickets.accessories,
+        customerAddress: companies.address,
+        companyName: companies.name,
+        taxId: companies.taxId,
+        taxOffice: companies.taxOffice
       }).from(tickets)
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
         .leftJoin(users, eq(tickets.userId, users.id))
+        .leftJoin(companies, eq(users.companyId, companies.id))
         .where(eq(tickets.ticketNumber, req.params.ticketNumber))
         .limit(1);
       
@@ -1144,6 +1149,10 @@ async function startServer() {
         customerName: `${t.customerName || ''} ${t.customerLastName || ''}`.trim() || 'Müşteri',
         customerPhone: t.customerPhone,
         customerEmail: t.customerEmail,
+        customerAddress: t.customerAddress || '',
+        companyName: t.companyName || '',
+        taxId: t.taxId || '',
+        taxOffice: t.taxOffice || '',
         issueDescription: t.issueDescription,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,

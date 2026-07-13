@@ -121,6 +121,11 @@ export default function ServiceManager() {
     assignedTo: '' as string | number,
     accessories: '',
     technicianNotes: '',
+    customerType: 'bireysel',
+    companyName: '',
+    taxId: '',
+    taxOffice: '',
+    address: '',
   });
 
   const loadTickets = async () => {
@@ -232,6 +237,11 @@ export default function ServiceManager() {
         assignedTo: '',
         accessories: '',
         technicianNotes: '',
+        customerType: 'bireysel',
+        companyName: '',
+        taxId: '',
+        taxOffice: '',
+        address: '',
       });
       await loadTickets();
       if (res && res.ticketNumber) {
@@ -1372,9 +1382,54 @@ export default function ServiceManager() {
                 {/* Sol Sütun: Müşteri & Cihaz */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1.5 mb-3">Müşteri & Cihaz Bilgileri</h3>
+                  
+                  {/* Müşteri Türü Seçimi */}
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold text-gray-555 mb-1.5">Müşteri Türü</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewTicket({ ...newTicket, customerType: 'bireysel' })}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all ${
+                          newTicket.customerType === 'bireysel'
+                            ? 'bg-primary text-white border-primary shadow-sm'
+                            : 'bg-white text-gray-750 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Bireysel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewTicket({ ...newTicket, customerType: 'kurumsal' })}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all ${
+                          newTicket.customerType === 'kurumsal'
+                            ? 'bg-primary text-white border-primary shadow-sm'
+                            : 'bg-white text-gray-750 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Kurumsal (Firma)
+                      </button>
+                    </div>
+                  </div>
+
+                  {newTicket.customerType === 'kurumsal' && (
+                    <div className="mb-3 animate-in fade-in duration-200">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ünvanı *</label>
+                      <input
+                        type="text" value={newTicket.companyName}
+                        onChange={e => setNewTicket({ ...newTicket, companyName: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                        placeholder="Firma Adı / Ticari Ünvan"
+                        required={newTicket.customerType === 'kurumsal'}
+                      />
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Adı *</label>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                        {newTicket.customerType === 'kurumsal' ? 'Yetkili Adı Soyadı *' : 'Müşteri Adı Soyadı *'}
+                      </label>
                       <input
                         type="text" value={newTicket.customerName}
                         onChange={e => setNewTicket({ ...newTicket, customerName: e.target.value })}
@@ -1393,13 +1448,49 @@ export default function ServiceManager() {
                       />
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Adresi</label>
+                      <input
+                        type="email" value={newTicket.customerEmail}
+                        onChange={e => setNewTicket({ ...newTicket, customerEmail: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                        placeholder="musteri@eposta.com"
+                      />
+                    </div>
+                    {newTicket.customerType === 'kurumsal' && (
+                      <div className="grid grid-cols-2 gap-2 animate-in fade-in duration-200">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
+                          <input
+                            type="text" value={newTicket.taxOffice}
+                            onChange={e => setNewTicket({ ...newTicket, taxOffice: e.target.value })}
+                            className="w-full border border-gray-300 rounded-xl px-3 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Vergi Dairesi"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi / TCKN</label>
+                          <input
+                            type="text" value={newTicket.taxId}
+                            onChange={e => setNewTicket({ ...newTicket, taxId: e.target.value })}
+                            className="w-full border border-gray-300 rounded-xl px-3 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Vergi No / TCKN"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Adresi</label>
-                    <input
-                      type="email" value={newTicket.customerEmail}
-                      onChange={e => setNewTicket({ ...newTicket, customerEmail: e.target.value })}
-                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-                      placeholder="musteri@eposta.com"
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Adresi</label>
+                    <textarea
+                      value={newTicket.address}
+                      onChange={e => setNewTicket({ ...newTicket, address: e.target.value })}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none resize-none"
+                      rows={2}
+                      placeholder="Müşteri adresi (Fatura / Teslimat için)"
                     />
                   </div>
 

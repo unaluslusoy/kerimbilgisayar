@@ -152,104 +152,153 @@ export default function TicketPrintView() {
   const trackingUrl = `${settings.siteBaseUrl || "https://kerimbilgisayar.com"}/ariza-sorgulama?no=${ticketNumber}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(trackingUrl)}`;
 
+  // Helper to format monospace columns matching exact 42 characters width
+  const formatMonoRow = (col1: string, col2: string, col3: string) => {
+    const c1 = (col1 || '').substring(0, 19).padEnd(19, ' ');
+    const c2 = (col2 || '').substring(0, 6).padStart(6, ' ');
+    const c3 = (col3 || '').substring(0, 17).padStart(17, ' ');
+    return c1 + c2 + c3;
+  };
+
   // --- BİLEŞEN: POS (80mm) Termal Fiş Nüshası ---
   const PosReceipt = ({ copyType }: { copyType: "FİRMA" | "MÜŞTERİ" }) => (
-    <div className="pos-receipt mx-auto bg-white text-black text-[13px] font-sans font-black leading-tight w-[80mm] p-2 print:p-0 print:w-full print:text-black">
-      <div className="text-center border-b-2 border-black pb-2 mb-2">
-        <h1 className="font-extrabold text-lg tracking-tight uppercase mb-0.5">{settings.siteTitle || "KERİM BİLGİSAYAR"}</h1>
-        <p className="text-[10px] text-black font-extrabold mb-1">{settings.siteTagline}</p>
-        <p className="text-[9px] text-black leading-normal max-w-[220px] mx-auto font-bold">{settings.contactAddress}</p>
-        <p className="text-[10px] font-black mt-1">Tel: {settings.contactPhone}</p>
-        <div className="text-[10px] font-black bg-black text-white px-2 py-0.5 rounded inline-block mt-1 uppercase tracking-widest">{copyType} NÜSHASI</div>
+    <div className="pos-receipt mx-auto bg-white text-black leading-tight w-[80mm] p-2 print:p-0 print:w-full print:text-black" style={{ fontFamily: "'DejaVu Sans Mono', Monaco, Consolas, 'Courier New', monospace", fontSize: '10pt' }}>
+      
+      {/* Üst Kısım: Sol QR Kod, Sağ Başlık & Bilgiler */}
+      <div className="flex items-center gap-3 border-b border-dashed border-black pb-2 mb-2">
+        <div className="shrink-0">
+          <img src={qrCodeUrl} alt="Takip QR" className="w-18 h-18 border border-black p-0.5" />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="font-bold text-[10pt] uppercase tracking-tight">{settings.siteTitle || "KERİM BİLGİSAYAR"}</div>
+          <div className="text-[7.5pt] leading-tight mb-1 font-normal text-black">{settings.contactAddress}</div>
+          <div className="text-[8.5pt] font-normal">Tel: {settings.contactPhone}</div>
+          <div className="font-bold text-[8.5pt] bg-black text-white px-2 py-0.5 mt-1 inline-block uppercase">{copyType} NÜSHASI</div>
+        </div>
       </div>
 
-      <div className="text-center mb-2">
-        <div className="text-[10px] font-black text-black uppercase tracking-wider">Servis Takip Fişi</div>
-        <div className="text-xl font-black tracking-wider my-0.5">{ticketNumber}</div>
-        <div className="text-[10px] text-black font-bold">{new Date(ticket.createdAt).toLocaleString("tr-TR")}</div>
+      {/* Servis Fişi Numarası & Tarih */}
+      <div className="flex justify-between items-center mb-2 pb-1 border-b border-dashed border-black">
+        <div>
+          <div className="text-[10pt] font-bold">SERVİS TAKİP FİŞİ</div>
+          <div className="text-[8.5pt] font-normal">{new Date(ticket.createdAt).toLocaleString("tr-TR")}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[12.5pt] font-bold tracking-tight">{ticketNumber}</div>
+        </div>
       </div>
 
-      <div className="border-t-2 border-b-2 border-black py-1.5 mb-2 space-y-0.5 text-[12px]">
-        <div className="flex justify-between"><span>Müşteri:</span> <span className="font-black">{ticket.customerName}</span></div>
-        {ticket.customerPhone && <div className="flex justify-between"><span>Tel:</span> <span className="font-black">{ticket.customerPhone}</span></div>}
-        <div className="flex justify-between"><span>Cihaz:</span> <span className="font-black">{ticket.deviceType}</span></div>
-        <div className="flex justify-between"><span>Model:</span> <span className="font-black">{ticket.brandModel}</span></div>
-        <div className="flex justify-between"><span>Durum:</span> <span className="font-black bg-black text-white px-1.5 py-0.2 rounded">{statusMap[ticket.rawStatus] || ticket.status}</span></div>
+      {/* Müşteri & Cihaz Bilgileri */}
+      <div className="space-y-0.5 text-[9.5pt] border-b border-dashed border-black pb-2 mb-2">
+        <div className="flex justify-between">
+          <span className="font-bold">Müşteri:</span>
+          <span className="font-normal">{ticket.customerName}</span>
+        </div>
+        {ticket.companyName && (
+          <div className="flex justify-between">
+            <span className="font-bold">Firma:</span>
+            <span className="font-normal">{ticket.companyName}</span>
+          </div>
+        )}
+        {ticket.taxId && (
+          <div className="flex justify-between">
+            <span className="font-bold">Vergi:</span>
+            <span className="font-normal">{ticket.taxOffice} / {ticket.taxId}</span>
+          </div>
+        )}
+        {ticket.customerPhone && (
+          <div className="flex justify-between">
+            <span className="font-bold">Tel:</span>
+            <span className="font-normal">{ticket.customerPhone}</span>
+          </div>
+        )}
+        {ticket.customerAddress && (
+          <div className="flex justify-between">
+            <span className="font-bold">Adres:</span>
+            <span className="font-normal text-[8.5pt] text-right truncate max-w-[210px]" title={ticket.customerAddress}>{ticket.customerAddress}</span>
+          </div>
+        )}
+        <div className="flex justify-between">
+          <span className="font-bold">Cihaz:</span>
+          <span className="font-normal">{ticket.deviceType}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="font-bold">Model:</span>
+          <span className="font-normal">{ticket.brandModel}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="font-bold">Durum:</span>
+          <span className="font-bold">{statusMap[ticket.rawStatus] || ticket.status}</span>
+        </div>
       </div>
 
+      {/* Emanetler */}
       {ticket.accessories && (
-        <div className="border-b-2 border-black pb-1.5 mb-2 text-[11px]">
-          <span className="font-black text-black">Emanet Alınanlar:</span> <span className="font-bold">{ticket.accessories}</span>
+        <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt]">
+          <span className="font-bold">Emanet Alınanlar:</span>
+          <p className="font-normal mt-0.5 text-[9pt] leading-tight text-black">{ticket.accessories}</p>
         </div>
       )}
 
-      <div className="mb-2 border-b-2 border-black pb-2">
-        <p className="font-black text-black mb-0.5">Şikayet / Açıklama:</p>
-        <p className="text-[12px] whitespace-pre-wrap leading-tight font-medium" dangerouslySetInnerHTML={{ __html: ticket.issueDescription }}></p>
+      {/* Şikayet / Açıklama */}
+      <div className="mb-2 border-b border-dashed border-black pb-2 text-[9.5pt]">
+        <p className="font-bold mb-0.5">Şikayet / Açıklama:</p>
+        <p className="font-normal text-[9pt] whitespace-pre-wrap leading-tight text-black" dangerouslySetInnerHTML={{ __html: ticket.issueDescription }}></p>
       </div>
 
-      {/* Parça ve İşlem Dökümü */}
-      <div className="mb-2 border-b-2 border-black pb-2">
-        <p className="font-black text-black mb-1">Masraf & İşlem Dökümü:</p>
-        <div className="text-[11px] space-y-1">
+      {/* Masraf & İşlem Dökümü */}
+      <div className="mb-2 border-b border-dashed border-black pb-2 text-[9.5pt]">
+        <p className="font-bold mb-1">Masraf & İşlem Dökümü:</p>
+        <pre className="font-mono text-[9pt] leading-normal whitespace-pre bg-transparent p-0 m-0 border-0 text-black" style={{ fontFamily: "'DejaVu Sans Mono', Monaco, Consolas, 'Courier New', monospace" }}>
+          {formatMonoRow("ÜRÜN / İŞLEM", "ADET", "TUTAR")}
+          {"\n"}
+          {"------------------------------------------"}
+          {"\n"}
           {ticket.parts && ticket.parts.length > 0 ? (
-            ticket.parts.map((p: any) => (
-              <div key={p.id} className="flex justify-between font-bold">
-                <span>{p.name} (x{p.quantity})</span>
-                <span className="font-black">₺{parseFloat(p.totalPrice).toLocaleString("tr-TR")}</span>
-              </div>
-            ))
+            ticket.parts.map((p: any) => formatMonoRow(p.name, p.quantity.toString(), parseFloat(p.totalPrice).toFixed(2) + " TL")).join("\n")
           ) : (
-            <div className="italic text-[10px] text-gray-700">Ekstra parça/masraf kaydı bulunmuyor.</div>
+            "  (Kullanılan yedek parça kaydı bulunmuyor.)\n"
           )}
           {parseFloat(ticket.laborCost) > 0 && (
-            <div className="flex justify-between border-t border-dashed border-black pt-1 mt-1 font-bold">
-              <span>İşçilik Ücreti</span>
-              <span className="font-black">₺{parseFloat(ticket.laborCost).toLocaleString("tr-TR")}</span>
-            </div>
+            "\n" + formatMonoRow("İşçilik Ücreti", "1", parseFloat(ticket.laborCost).toFixed(2) + " TL")
           )}
-        </div>
+          {"\n"}
+          {"------------------------------------------"}
+          {"\n"}
+          {"TOPLAM".padEnd(28, ' ')}
+          {grandTotal.toFixed(2).padStart(11, ' ')} TL
+        </pre>
       </div>
 
-      {grandTotal > 0 ? (
-        <div className="pt-1.5 mb-3 text-right">
-          <p className="text-[11px] font-black uppercase">Toplam Tutar</p>
-          <p className="font-black text-lg">₺{grandTotal.toLocaleString("tr-TR")}</p>
-        </div>
-      ) : (
-        <div className="py-1 mb-3 text-center font-black text-[11px] bg-gray-100 rounded">
-          Ücretsiz Tespit / Servis Bedeli Bekleniyor
-        </div>
-      )}
-
+      {/* Teknisyen Görüşü */}
       {ticket.technicianNotes && (
-        <div className="border-t-2 border-black pt-2 mb-2 text-[11px]">
-          <span className="font-black block">Teknisyen Görüşü:</span>
-          <p className="font-medium text-gray-800 italic leading-tight" dangerouslySetInnerHTML={{ __html: ticket.technicianNotes }}></p>
+        <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt]">
+          <span className="font-bold block">Teknisyen Görüşü / Raporu:</span>
+          <p className="font-normal text-[9pt] text-black italic leading-tight mt-0.5" dangerouslySetInnerHTML={{ __html: ticket.technicianNotes }}></p>
         </div>
       )}
 
-      <div className="flex flex-col items-center justify-center border-t-2 border-black pt-3 mb-2 text-center">
-        <img src={qrCodeUrl} alt="Takip QR" className="w-28 h-28 mb-1 border-2 border-black p-0.5 rounded" />
-        <p className="text-[10px] font-black text-black">Cihaz Durum Sorgulama</p>
-      </div>
-
-      <div className="mt-4 text-center">
-        <div className="grid grid-cols-2 gap-2 text-[10px] font-black mb-6">
+      {/* İmzalar */}
+      <div className="mt-4 text-center border-b border-dashed border-black pb-4 font-mono text-[9.5pt]">
+        <div className="grid grid-cols-2 gap-4 font-bold">
           <div>
             <p>Müşteri</p>
-            <p className="mt-6 border-t border-black pt-1">İmza</p>
+            <p className="mt-8 border-t border-black pt-1 font-normal text-[8.5pt]">İmza / Tarih</p>
           </div>
           <div>
             <p>Yetkili Servis</p>
-            <p className="mt-6 border-t border-black pt-1">İmza / Kaşe</p>
+            <p className="mt-8 border-t border-black pt-1 font-normal text-[8.5pt]">İmza / Kaşe</p>
           </div>
         </div>
       </div>
 
-      <div className="mt-2 pt-2 border-t-2 border-dashed border-black text-center text-[9px] font-black leading-normal">
+      {/* Alt Bilgilendirme - Sola Yaslı */}
+      <div className="mt-2 text-left text-[8pt] leading-normal font-normal space-y-1">
         <p>Bizi tercih ettiğiniz için teşekkür ederiz.</p>
         <p>Cihaz tesliminde bu fişin ibraz edilmesi zorunludur.</p>
+        <p className="text-[7.5pt] text-black border-t border-dotted border-black pt-1 mt-1">
+          * Cihaz durumunu sol üstteki QR kod ile anlık sorgulayabilirsiniz.
+        </p>
       </div>
     </div>
   );
@@ -294,10 +343,22 @@ export default function TicketPrintView() {
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 border-b pb-1">Müşteri Bilgileri</h3>
             <table className="w-full text-[11px] leading-relaxed">
               <tbody>
+                {ticket.companyName && (
+                  <tr>
+                    <td className="text-gray-500 font-medium w-16 py-0.5">Firma:</td>
+                    <td className="font-bold text-gray-900 py-0.5">{ticket.companyName}</td>
+                  </tr>
+                )}
                 <tr>
-                  <td className="text-gray-500 font-medium w-16 py-0.5">Müşteri:</td>
+                  <td className="text-gray-500 font-medium w-16 py-0.5">{ticket.companyName ? 'Yetkili:' : 'Müşteri:'}</td>
                   <td className="font-bold text-gray-900 py-0.5">{ticket.customerName}</td>
                 </tr>
+                {ticket.taxId && (
+                  <tr>
+                    <td className="text-gray-500 font-medium py-0.5">Vergi:</td>
+                    <td className="font-semibold text-gray-700 py-0.5">{ticket.taxOffice} / {ticket.taxId}</td>
+                  </tr>
+                )}
                 <tr>
                   <td className="text-gray-500 font-medium py-0.5">Kayıt Tarihi:</td>
                   <td className="font-semibold text-gray-700 py-0.5">{new Date(ticket.createdAt).toLocaleDateString("tr-TR")}</td>
@@ -306,6 +367,12 @@ export default function TicketPrintView() {
                   <tr>
                     <td className="text-gray-500 font-medium py-0.5">Telefon:</td>
                     <td className="font-semibold text-gray-700 py-0.5">{ticket.customerPhone}</td>
+                  </tr>
+                )}
+                {ticket.customerAddress && (
+                  <tr>
+                    <td className="text-gray-500 font-medium py-0.5">Adres:</td>
+                    <td className="font-semibold text-gray-700 py-0.5 break-words max-w-[200px]">{ticket.customerAddress}</td>
                   </tr>
                 )}
               </tbody>
@@ -494,15 +561,13 @@ export default function TicketPrintView() {
       {/* PRINT LAYOUT: POS 80mm */}
       <div className={`print-container-pos ${printMode === "pos" ? "block" : "hidden"} print:block mx-auto max-w-[80mm]`}>
         {printMode === "pos" && (
-          <div className="flex flex-col gap-6">
-            <PosReceipt copyType="FİRMA" />
-            
-            {/* Separation line for POS */}
-            <div className="w-full border-t-2 border-dashed border-black my-4 text-center py-2">
-              <span className="text-[10px] font-black uppercase text-black">Kesim Çizgisi ✂ (Firma / Müşteri)</span>
+          <div className="flex flex-col">
+            <div className="pos-receipt-page">
+              <PosReceipt copyType="FİRMA" />
             </div>
-
-            <PosReceipt copyType="MÜŞTERİ" />
+            <div className="pos-receipt-page">
+              <PosReceipt copyType="MÜŞTERİ" />
+            </div>
           </div>
         )}
       </div>
@@ -526,7 +591,19 @@ export default function TicketPrintView() {
             @page { size: 80mm auto; margin: 0; }
             .print-container-a4 { display: none !important; }
             .print-container-pos { display: block !important; width: 80mm; margin: 0 !important; padding: 0 !important; }
-            .pos-receipt { width: 100% !important; margin: 0 !important; padding: 5px !important; }
+            .pos-receipt-page {
+              width: 80mm !important;
+              margin: 0 !important;
+              padding: 4px !important;
+              page-break-after: always;
+              break-after: page;
+              box-sizing: border-box;
+            }
+            .pos-receipt-page:last-child {
+              page-break-after: avoid;
+              break-after: avoid;
+            }
+            .pos-receipt { width: 100% !important; margin: 0 !important; padding: 0 !important; }
           `}
         }
       `}</style>
