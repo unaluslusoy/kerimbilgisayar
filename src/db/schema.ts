@@ -314,6 +314,8 @@ export const stockItems = mysqlTable('stock_items', {
   sellingPrice: decimal('selling_price', { precision: 10, scale: 2 }),
   currentStock: int('current_stock').default(0),
   minStockLevel: int('min_stock_level').default(0),
+  hasSerialTracking: boolean('has_serial_tracking').default(false),
+  warrantyMonths: int('warranty_months').default(0),
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),

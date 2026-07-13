@@ -46,7 +46,7 @@ export default function AdminStock() {
     sku: '', barcode: '', name: '', brand: '', model: '', 
     unit: 'adet', vatRate: '20', imageUrl: '', description: '',
     currentStock: '', minStockLevel: '5', costPrice: '', sellingPrice: '',
-    categoryId: ''
+    categoryId: '', hasSerialTracking: false, warrantyMonths: 0
   });
 
   const load = async () => {
@@ -164,7 +164,7 @@ export default function AdminStock() {
         sku: '', barcode: '', name: '', brand: '', model: '', 
         unit: 'adet', vatRate: '20', imageUrl: '', description: '',
         currentStock: '', minStockLevel: '5', costPrice: '', sellingPrice: '',
-        categoryId: ''
+        categoryId: '', hasSerialTracking: false, warrantyMonths: 0
       });
       await load();
     } catch (e: any) { 
@@ -758,6 +758,17 @@ export default function AdminStock() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Kritik Stok Seviyesi</label>
                   <input type="number" value={data.minStockLevel ?? ''} onChange={e => setField('minStockLevel', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Seri No Takibi</label>
+                  <div className="flex items-center h-[38px]">
+                    <input type="checkbox" checked={data.hasSerialTracking || false} onChange={e => setField('hasSerialTracking', e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer" />
+                    <span className="ml-2 text-sm text-gray-700">Aktif</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Garanti Süresi (Ay)</label>
+                  <input type="number" value={data.warrantyMonths ?? 0} onChange={e => setField('warrantyMonths', parseInt(e.target.value) || 0)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Görsel URL</label>

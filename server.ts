@@ -2142,6 +2142,20 @@ async function startServer() {
   // ADMIN API — STOCK
   // ============================================================
 
+  function generateEAN13Backend(): string {
+    let code12 = '200';
+    for (let i = 0; i < 9; i++) {
+      code12 += Math.floor(Math.random() * 10);
+    }
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      const d = parseInt(code12[i], 10);
+      sum += d * (i % 2 === 0 ? 1 : 3);
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    return code12 + checkDigit;
+  }
+
   app.get('/api/admin/stock', requireAdmin, async (req, res) => {
     try {
       const items = await db.select({
@@ -2159,6 +2173,8 @@ async function startServer() {
         sellingPrice: stockItems.sellingPrice,
         currentStock: stockItems.currentStock,
         minStockLevel: stockItems.minStockLevel,
+        hasSerialTracking: stockItems.hasSerialTracking,
+        warrantyMonths: stockItems.warrantyMonths,
         isActive: stockItems.isActive,
         categoryId: stockItems.categoryId,
         categoryName: inventoryCategories.name,
@@ -2173,11 +2189,13 @@ async function startServer() {
 
   app.post('/api/admin/stock', requireAdmin, async (req, res) => {
     try {
-      const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId } = req.body;
+      const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId, hasSerialTracking, warrantyMonths } = req.body;
+      const finalBarcode = barcode && barcode.trim() !== '' ? barcode.trim() : generateEAN13Backend();
+      
       await db.insert(stockItems).values({
         tenantId: 1,
         sku: sku || `SKU-${Date.now()}`,
-        barcode: barcode || `869${Math.floor(Math.random() * 10000000000)}`,
+        barcode: finalBarcode,
         name,
         description: description || null,
         brand: brand || null,
@@ -2189,6 +2207,8 @@ async function startServer() {
         sellingPrice: sellingPrice?.toString() || '0.00',
         currentStock: parseInt(currentStock) || 0,
         minStockLevel: parseInt(minStockLevel) || 5,
+        hasSerialTracking: hasSerialTracking === true || hasSerialTracking === 'true',
+        warrantyMonths: parseInt(warrantyMonths) || 0,
         categoryId: categoryId ? parseInt(categoryId) : null,
       });
       res.json({ success: true });
@@ -2199,7 +2219,7 @@ async function startServer() {
 
   app.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
     try {
-      const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive } = req.body;
+      const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive, hasSerialTracking, warrantyMonths } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
@@ -2214,6 +2234,8 @@ async function startServer() {
       if (costPrice !== undefined) updateData.costPrice = costPrice.toString();
       if (barcode !== undefined) updateData.barcode = barcode;
       if (isActive !== undefined) updateData.isActive = isActive;
+      if (hasSerialTracking !== undefined) updateData.hasSerialTracking = hasSerialTracking === true || hasSerialTracking === 'true';
+      if (warrantyMonths !== undefined) updateData.warrantyMonths = parseInt(warrantyMonths) || 0;
       
       if (adjustment !== undefined) {
         const [current] = await db.select({ stock: stockItems.currentStock }).from(stockItems).where(eq(stockItems.id, parseInt(req.params.id)));
