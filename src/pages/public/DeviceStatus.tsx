@@ -1,6 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
-import { Search, Package, CheckCircle2, Wrench, Clock, FileText, AlertCircle, CalendarPlus, ArrowRight, Loader2 } from 'lucide-react';
+import { Search, Package, CheckCircle2, Wrench, Clock, FileText, AlertCircle, CalendarPlus, ArrowRight, Loader2, CreditCard, Building2, Landmark, Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchTicket } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
@@ -14,11 +14,48 @@ export default function DeviceStatus() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
+  // Approval/Rejection & Payment State
+  const [processingAction, setProcessingAction] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'bank' | 'cash' | null>(null);
+  const [cardHolder, setCardHolder] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentMsg, setPaymentMsg] = useState('');
+
+  // Extract from query params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const no = params.get('no');
+    if (no) {
+      const code = no.trim().toUpperCase();
+      setTicketId(code);
+      setSearched(true);
+      setLoading(true);
+      setError(false);
+      fetchTicket(code)
+        .then((data) => {
+          setResult(data);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error(err);
+          setResult(null);
+          setError(true);
+          setLoading(false);
+        });
+    }
+  }, []);
+
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
+    if (!ticketId.trim()) return;
     setSearched(true);
     setLoading(true);
     setError(false);
+    setSelectedPaymentMethod(null);
+    setPaymentSuccess(false);
     try {
       const data = await fetchTicket(ticketId.trim().toUpperCase());
       setResult(data);
@@ -29,25 +66,99 @@ export default function DeviceStatus() {
     setLoading(false);
   };
 
+  const handleApprove = async () => {
+    if (!result) return;
+    setProcessingAction(true);
+    try {
+      const res = await fetch(`/api/tickets/${result.id}/approve`, { method: 'POST' });
+      if (!res.ok) throw new Error('Onaylama işlemi başarısız.');
+      // Refresh ticket info
+      const data = await fetchTicket(result.id);
+      setResult(data);
+      alert('Onarım onayınız başarıyla iletildi. Cihazınız sıraya alınmıştır.');
+    } catch (err: any) {
+      alert('Hata: ' + err.message);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    if (!result) return;
+    if (!window.confirm('Teklifi reddetmek istediğinize emin misiniz? Cihaz işlem yapılmadan iade edilecektir.')) return;
+    setProcessingAction(true);
+    try {
+      const res = await fetch(`/api/tickets/${result.id}/decline`, { method: 'POST' });
+      if (!res.ok) throw new Error('İşlem başarısız.');
+      const data = await fetchTicket(result.id);
+      setResult(data);
+      alert('Talebiniz alınmıştır. Cihaz iade edilmek üzere hazırlanacaktır.');
+    } catch (err: any) {
+      alert('Hata: ' + err.message);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleMockPayment = async (method: 'kredi_karti' | 'havale_eft' | 'nakit') => {
+    if (!result) return;
+    setProcessingAction(true);
+    try {
+      const res = await fetch(`/api/tickets/${result.id}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentMethod: method })
+      });
+      if (!res.ok) throw new Error('Ödeme kaydı oluşturulamadı.');
+      
+      setPaymentSuccess(true);
+      if (method === 'kredi_karti') {
+        setPaymentMsg('Ödemeniz başarıyla tahsil edildi. Cihazınızı teslim alabilirsiniz.');
+      } else if (method === 'havale_eft') {
+        setPaymentMsg('Havale ödeme bildiriminiz başarıyla yöneticilere iletildi. Kontrol sonrası onaylanacaktır.');
+      } else {
+        setPaymentMsg('Elden nakit ödeme tercihiniz kaydedildi.');
+      }
+      
+      // Refresh data
+      const data = await fetchTicket(result.id);
+      setResult(data);
+    } catch (err: any) {
+      alert('Ödeme hatası: ' + err.message);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
   const statusMap: Record<string, { label: string; icon: any; color: string; bg: string }> = {
-    // English legacy statuses
     'pending': { label: 'Kayıt Kabul / Alındı', icon: Package, color: 'text-gray-500', bg: 'bg-gray-100' },
-    'diagnosing': { label: 'Laboratuvar Analizi', icon: Search, color: 'text-purple-600', bg: 'bg-purple-100' },
-    'waiting_parts': { label: 'Yedek Parça Tedariği', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-100' },
-    'repairing': { label: 'Aktif Onarım / Entegrasyon', icon: Wrench, color: 'text-primary', bg: 'bg-primary/10' },
+    'diagnosing': { label: 'Analiz / Arıza Tespiti', icon: Search, color: 'text-purple-600', bg: 'bg-purple-100' },
+    'waiting_parts': { label: 'Parça / Müşteri Onayı Bekleniyor', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-100' },
+    'repairing': { label: 'Aktif Onarım / Tamirde', icon: Wrench, color: 'text-primary', bg: 'bg-primary/10' },
     'ready': { label: 'Test Sürecinde / Teslime Hazır', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' },
     'delivered': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-500', bg: 'bg-gray-100' },
-    // Turkish statuses
+    
+    // Raw Turkish status maps
     'yeni': { label: 'Servise Alındı', icon: Package, color: 'text-blue-600', bg: 'bg-blue-100' },
-    'isleme_alindi': { label: 'Arıza Tespiti', icon: Wrench, color: 'text-purple-600', bg: 'bg-purple-100' },
+    'isleme_alindi': { label: 'Arıza Tespiti / İşlemde', icon: Wrench, color: 'text-purple-600', bg: 'bg-purple-100' },
     'parca_bekliyor': { label: 'Parça Bekleniyor', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-100' },
     'musteri_onayi_bekliyor': { label: 'Müşteri Onayı Bekleniyor', icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-100' },
-    'cozuldu': { label: 'Çözüldü', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' },
+    'cozuldu': { label: 'Onarım Tamamlandı', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' },
     'kapatildi': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-500', bg: 'bg-gray-100' },
+    'teslim_edildi': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-500', bg: 'bg-gray-100' },
     'iptal': { label: 'İptal Edildi', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-100' },
   };
 
   const getStatusInfo = (status: string) => statusMap[status] ?? { label: status, icon: FileText, color: 'text-gray-500', bg: 'bg-gray-100' };
+
+  // Sum parts + labor
+  const partsTotal = result?.parts ? result.parts.reduce((sum: number, p: any) => sum + parseFloat(p.totalPrice || '0'), 0) : 0;
+  const grandTotal = partsTotal + (parseFloat(result?.laborCost) || 0);
+
+  const bankIban = 'TR 0400 0100 0851 6494 6919 5006';
+  const bankName = 'Ziraat Bankası';
+  const bankAccount = 'Yılmaz Kerim';
+  const qrBankUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(`iban=${bankIban}&name=${bankAccount}`)}`;
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 min-h-screen">
@@ -59,167 +170,343 @@ export default function DeviceStatus() {
             Cihaz Durumu Sorgulama
           </h1>
           <p className="text-lg text-gray-600 max-w-3xl leading-relaxed">
-            Teknik laboratuvarımıza bıraktığınız cihazlarınızın güncel onarım ve test durumunu takip numarasıyla anlık olarak sorgulayabilirsiniz.
+            Takip numaranız ile cihazınızın onarım aşamalarını ve maliyet detaylarını anlık görebilir, onay verebilir ve online ödeme yapabilirsiniz.
           </p>
         </div>
       </div>
 
       <div className="py-16 md:py-24 px-4 flex justify-center">
-        <div className="max-w-2xl w-full">
+        <div className="max-w-3xl w-full">
 
-        <form onSubmit={handleSearch} className="bg-white p-2 rounded-theme border border-gray-200 shadow-sm flex items-center mb-10 font-sans">
-          <Search className="w-6 h-6 text-gray-400 ml-4 mr-2 shrink-0" />
-          <input 
-            type="text" 
-            placeholder="Örn: SRV-2023-001"
-            aria-label="Takip Numarası"
-            className="flex-1 w-full bg-transparent border-none focus:outline-none text-gray-900 font-medium py-3 text-lg placeholder:text-gray-400 min-w-0 disabled:opacity-50"
-            value={ticketId}
-            onChange={(e) => setTicketId(e.target.value)}
-            disabled={loading}
-            required
-          />
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="bg-primary hover:bg-secondary text-white px-6 md:px-8 py-3 rounded-theme font-bold transition-colors shadow-sm ml-2 shrink-0 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[120px]"
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sorgula'}
-          </button>
-        </form>
+          <form onSubmit={handleSearch} className="bg-white p-2 rounded-theme border border-gray-200 shadow-sm flex items-center mb-10 font-sans">
+            <Search className="w-6 h-6 text-gray-400 ml-4 mr-2 shrink-0" />
+            <input 
+              type="text" 
+              placeholder="Örn: SRV-2026-60160"
+              aria-label="Takip Numarası"
+              className="flex-1 w-full bg-transparent border-none focus:outline-none text-gray-900 font-medium py-3 text-lg placeholder:text-gray-400 min-w-0 disabled:opacity-50"
+              value={ticketId}
+              onChange={(e) => setTicketId(e.target.value)}
+              disabled={loading}
+              required
+            />
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="bg-primary hover:bg-secondary text-white px-6 md:px-8 py-3 rounded-theme font-bold transition-colors shadow-sm ml-2 shrink-0 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[120px]"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sorgula'}
+            </button>
+          </form>
 
-        {searched && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {loading ? (
-              <div className="text-center p-12 bg-white rounded-theme border border-gray-200 border-dashed shadow-sm">
-                 <div className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mx-auto mb-4"></div>
-                 <h3 className="text-lg font-bold text-gray-900 mb-2">Sorgulanıyor...</h3>
-                 <p className="text-gray-500 font-medium">Lütfen bekleyin, cihazınızın durumu kontrol ediliyor.</p>
-              </div>
-            ) : result && !error ? (
-              <div className="bg-white rounded-theme border border-gray-200 overflow-hidden shadow-xl shadow-gray-200/50">
-                {/* Header */}
-                <div className="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gray-50">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Takip Numarası</p>
-                    <p className="text-xl font-bold font-mono text-gray-900">{result.ticketNumber || result.id}</p>
-                  </div>
-                  <div className={cn('px-4 py-2 rounded-full flex items-center text-sm font-bold', getStatusInfo(result.status).bg, getStatusInfo(result.status).color)}>
-                    {(() => { const Icon = getStatusInfo(result.status).icon; return <Icon className="w-4 h-4 mr-2" />; })()}
-                    {getStatusInfo(result.status).label}
-                  </div>
+          {searched && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {loading ? (
+                <div className="text-center p-12 bg-white rounded-theme border border-gray-200 border-dashed shadow-sm">
+                   <div className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mx-auto mb-4"></div>
+                   <h3 className="text-lg font-bold text-gray-900 mb-2">Sorgulanıyor...</h3>
+                   <p className="text-gray-500 font-medium">Lütfen bekleyin, cihazınızın durumu kontrol ediliyor.</p>
                 </div>
-
-                <div className="p-6">
-                  {/* Device Info */}
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">
-                    {[result.deviceBrand, result.deviceModel].filter(Boolean).join(' ') ||
-                     result.deviceType || result.brandModel || 'Cihaz Bilgisi'}
-                  </h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-                    {result.customerName && (
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Müşteri</p>
-                        <p className="font-medium text-gray-900">
-                          {result.customerName.charAt(0)}{'*'.repeat(Math.min(3, result.customerName.length - 1))}{' '}
-                          {result.customerName.split(' ').slice(1).map((n: string) => n.charAt(0) + '***').join(' ')}
-                        </p>
-                      </div>
-                    )}
-                    {(result.deviceType || result.type) && (
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Cihaz Türü</p>
-                        <p className="font-medium text-gray-900 capitalize">{result.deviceType || result.type}</p>
-                      </div>
-                    )}
-                    {result.subject && (
-                      <div className="md:col-span-2">
-                        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Konu</p>
-                        <p className="font-medium text-gray-800">{result.subject}</p>
-                      </div>
-                    )}
-                    {(result.issueDescription || result.description) && (
-                      <div className="md:col-span-2">
-                        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Şikayet / Arıza
-                        </p>
-                        <p className="text-gray-700 bg-gray-50 p-3 rounded-theme border border-gray-100 leading-relaxed font-medium">
-                          {result.issueDescription || result.description}
-                        </p>
-                      </div>
-                    )}
+              ) : result && !error ? (
+                <div className="bg-white rounded-theme border border-gray-200 overflow-hidden shadow-xl shadow-gray-200/50">
+                  {/* Header */}
+                  <div className="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gray-50">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Takip Numarası</p>
+                      <p className="text-xl font-bold font-mono text-gray-900">{result.id}</p>
+                    </div>
+                    <div className={cn('px-4 py-2 rounded-full flex items-center text-sm font-bold', getStatusInfo(result.rawStatus).bg, getStatusInfo(result.rawStatus).color)}>
+                      {(() => { const Icon = getStatusInfo(result.rawStatus).icon; return <Icon className="w-4 h-4 mr-2" />; })()}
+                      {getStatusInfo(result.rawStatus).label}
+                    </div>
                   </div>
 
-                  {/* Timeline */}
-                  <div className="relative">
-                    <div className="absolute left-4 top-0 bottom-0 w-[2px] bg-gray-100"></div>
-                    <div className="space-y-6 relative">
-                      <div className="flex gap-4">
-                        <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white shadow-sm flex items-center justify-center shrink-0 z-10">
-                          <FileText className="w-4 h-4 text-gray-500" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-gray-900">Kayıt Oluşturuldu</p>
-                          <p className="text-sm text-gray-500 font-medium">{new Date(result.createdAt).toLocaleString('tr-TR')}</p>
-                        </div>
-                      </div>
-
-                      {result.status !== 'pending' && result.status !== 'yeni' && (
-                        <div className="flex gap-4">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 border-2 border-white shadow-sm flex items-center justify-center shrink-0 z-10">
-                            <Wrench className="w-4 h-4 text-primary" />
-                          </div>
+                  <div className="p-6 space-y-6">
+                    {/* Device details */}
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">
+                        {[result.deviceBrand, result.deviceModel].filter(Boolean).join(' ') || result.deviceType || 'Cihaz Bilgisi'}
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        {result.customerName && (
                           <div>
-                            <p className="font-bold text-gray-900">Durum Güncellendi</p>
-                            <p className="text-sm text-gray-500 font-medium">{new Date(result.updatedAt).toLocaleString('tr-TR')}</p>
-                            <p className="text-sm text-gray-600 mt-1">Cihaz durumu "{getStatusInfo(result.status).label}" olarak güncellendi.</p>
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Müşteri</p>
+                            <p className="font-bold text-gray-800">{result.customerName}</p>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Cost */}
-                  {parseFloat(result.cost || result.estimatedCost || 0) > 0 && (
-                    <div className="bg-gray-900 rounded-theme p-5 mt-6 flex flex-col md:flex-row justify-between items-start md:items-center text-white gap-3">
-                      <div>
-                        <p className="text-gray-400 text-sm mb-1">Servis Ücreti / Maliyet</p>
-                        <p className="text-2xl font-bold text-primary">
-                          {parseFloat(result.cost || result.estimatedCost).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-                        </p>
+                        )}
+                        {result.deviceType && (
+                          <div>
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Cihaz Türü</p>
+                            <p className="font-bold text-gray-800 capitalize">{result.deviceType}</p>
+                          </div>
+                        )}
+                        {result.accessories && (
+                          <div className="md:col-span-2">
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Emanet Alınan Aksesuarlar</p>
+                            <p className="font-bold text-gray-800 bg-amber-50/40 border border-amber-100 rounded-lg p-2.5">{result.accessories}</p>
+                          </div>
+                        )}
+                        {result.issueDescription && (
+                          <div className="md:col-span-2">
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Şikayet / Açıklama</p>
+                            <p className="text-gray-700 bg-gray-50 p-3.5 rounded-theme border border-gray-150 leading-relaxed font-medium whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: result.issueDescription }}></p>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
 
-                  {/* CTA */}
-                  <div className="mt-6 pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
-                    <Link
-                      to="/randevu"
-                      className="flex-1 inline-flex items-center justify-center gap-2 bg-primary hover:bg-secondary text-white font-bold py-3 px-5 rounded-theme transition-colors shadow-sm"
-                    >
-                      <CalendarPlus className="w-4 h-4" />
-                      Yeni Servis Talebi
-                    </Link>
-                    <Link
-                      to="/iletisim"
-                      className="flex-1 inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-3 px-5 rounded-theme transition-colors"
-                    >
-                      Bize Ulaşın <ArrowRight className="w-4 h-4" />
-                    </Link>
+                    {/* Timeline */}
+                    <div className="border-t border-gray-100 pt-6">
+                      <h4 className="text-sm font-bold text-gray-900 mb-4">Servis Geçmişi</h4>
+                      <div className="relative pl-5 border-l-2 border-gray-100 space-y-5">
+                        <div className="relative">
+                          <div className="absolute -left-[26px] top-0.5 w-3 h-3 rounded-full bg-gray-300 border-2 border-white"></div>
+                          <p className="font-bold text-xs text-gray-900">Cihaz Servise Alındı</p>
+                          <p className="text-[11px] text-gray-400">{new Date(result.createdAt).toLocaleString('tr-TR')}</p>
+                        </div>
+                        {result.rawStatus !== 'yeni' && (
+                          <div className="relative">
+                            <div className="absolute -left-[26px] top-0.5 w-3 h-3 rounded-full bg-primary border-2 border-white"></div>
+                            <p className="font-bold text-xs text-gray-900">Durum Güncellemesi</p>
+                            <p className="text-[11px] text-gray-450">Cihazınız "{getStatusInfo(result.rawStatus).label}" aşamasına getirildi.</p>
+                            <p className="text-[11px] text-gray-400">{new Date(result.updatedAt).toLocaleString('tr-TR')}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Fiş Kalemleri ve Maliyet Masraf Listesi */}
+                    <div className="border-t border-gray-100 pt-6">
+                      <h4 className="text-sm font-black text-gray-900 mb-3">İşlemler & Maliyet Masraf Detayları</h4>
+                      <div className="bg-slate-50 rounded-xl border border-gray-200 p-4 space-y-2.5">
+                        {result.parts && result.parts.length > 0 ? (
+                          result.parts.map((p: any) => (
+                            <div key={p.id} className="flex justify-between text-xs text-gray-700">
+                              <span>{p.name} (x{p.quantity})</span>
+                              <span className="font-bold text-gray-900">₺{parseFloat(p.totalPrice).toLocaleString('tr-TR')}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-gray-450 italic">Ekstra yedek parça bulunmuyor.</p>
+                        )}
+                        
+                        {result.laborCost > 0 && (
+                          <div className="flex justify-between text-xs text-gray-700 border-t border-dashed border-gray-300 pt-2 mt-2">
+                            <span>Teknik İşçilik Hizmeti</span>
+                            <span className="font-bold text-gray-900">₺{parseFloat(result.laborCost).toLocaleString('tr-TR')}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center text-sm font-black text-gray-900 border-t-2 border-gray-300 pt-3 mt-3">
+                          <span>GENEL TOPLAM</span>
+                          <span className="text-base text-primary">₺{grandTotal.toLocaleString('tr-TR')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Müşteri Onayı Ekranı (musteri_onayi_bekliyor durumunda çıkar) */}
+                    {result.rawStatus === 'musteri_onayi_bekliyor' && (
+                      <div className="border-2 border-amber-200 bg-amber-50/30 rounded-2xl p-5 space-y-4">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-bold text-amber-800">Onarım Onayınız Bekleniyor</h4>
+                            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                              Yukarıda dökümü sunulan masrafı ve parça değişimlerini onaylamanız halinde cihazınızın tamir işlemleri hemen başlayacaktır.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                          <button
+                            onClick={handleApprove}
+                            disabled={processingAction}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
+                          >
+                            {processingAction ? 'Lütfen bekleyin...' : 'Onarımı Onayla'}
+                          </button>
+                          <button
+                            onClick={handleDecline}
+                            disabled={processingAction}
+                            className="flex-1 border border-red-300 hover:bg-red-50 text-red-700 text-xs font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center"
+                          >
+                            Teklifi Reddet / İade İste
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ödeme Alma Ekranı (cozuldu/ready durumunda çıkar) */}
+                    {(result.rawStatus === 'cozuldu' || result.rawStatus === 'ready') && grandTotal > 0 && (
+                      <div className="border-2 border-green-200 bg-green-50/10 rounded-2xl p-5 space-y-4">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-bold text-green-800">Onarım Tamamlandı — Ödeme Seçenekleri</h4>
+                            <p className="text-xs text-green-700 mt-1">
+                              Cihazınız başarıyla onarılmıştır. Teslim alabilmek için lütfen aşağıdaki ödeme yöntemlerinden birini tercih ederek işleminizi tamamlayınız.
+                            </p>
+                          </div>
+                        </div>
+
+                        {!paymentSuccess ? (
+                          <div className="space-y-4 pt-2">
+                            {/* Ödeme yöntemi seçimi */}
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPaymentMethod('card')}
+                                className={cn('p-3 border rounded-xl flex flex-col items-center text-center gap-1.5 transition-all', selectedPaymentMethod === 'card' ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary' : 'border-gray-200 hover:bg-gray-50 text-gray-600')}
+                              >
+                                <CreditCard className="w-5 h-5" />
+                                <span className="text-[10px] font-bold">Kredi Kartı</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPaymentMethod('bank')}
+                                className={cn('p-3 border rounded-xl flex flex-col items-center text-center gap-1.5 transition-all', selectedPaymentMethod === 'bank' ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary' : 'border-gray-200 hover:bg-gray-50 text-gray-600')}
+                              >
+                                <Building2 className="w-5 h-5" />
+                                <span className="text-[10px] font-bold">Havale / EFT</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPaymentMethod('cash')}
+                                className={cn('p-3 border rounded-xl flex flex-col items-center text-center gap-1.5 transition-all', selectedPaymentMethod === 'cash' ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary' : 'border-gray-200 hover:bg-gray-50 text-gray-600')}
+                              >
+                                <Landmark className="w-5 h-5" />
+                                <span className="text-[10px] font-bold">Elden Nakit</span>
+                              </button>
+                            </div>
+
+                            {/* Detaylar */}
+                            {selectedPaymentMethod === 'card' && (
+                              <div className="border border-gray-200 rounded-xl p-4 bg-white space-y-3 font-sans text-xs">
+                                <p className="font-bold text-gray-800">Kart Bilgilerini Girin (Güvenli Mock Ödeme)</p>
+                                <div className="space-y-2">
+                                  <input
+                                    type="text" placeholder="Kart Sahibi Adı Soyadı"
+                                    value={cardHolder} onChange={e => setCardHolder(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                                  />
+                                  <input
+                                    type="text" placeholder="Kart Numarası (16 Hane)"
+                                    value={cardNumber} onChange={e => setCardNumber(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                                  />
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <input
+                                      type="text" placeholder="AA/YY"
+                                      value={cardExpiry} onChange={e => setCardExpiry(e.target.value)}
+                                      className="border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                                    />
+                                    <input
+                                      type="text" placeholder="CVV"
+                                      value={cardCvv} onChange={e => setCardCvv(e.target.value)}
+                                      className="border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                                    />
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMockPayment('kredi_karti')}
+                                  disabled={processingAction || !cardHolder || !cardNumber}
+                                  className="w-full bg-primary hover:bg-secondary text-white py-2 rounded-lg font-bold transition-all shadow-sm"
+                                >
+                                  {processingAction ? 'İşleniyor...' : `₺${grandTotal.toLocaleString('tr-TR')} Öde`}
+                                </button>
+                              </div>
+                            )}
+
+                            {selectedPaymentMethod === 'bank' && (
+                              <div className="border border-gray-200 rounded-xl p-4 bg-white space-y-3 font-sans text-xs">
+                                <p className="font-bold text-gray-800">Banka Havale Bilgileri</p>
+                                <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 space-y-1.5 font-mono text-[11px] text-gray-700">
+                                  <div className="flex justify-between"><span>Banka:</span> <span className="font-bold text-gray-900">{bankName}</span></div>
+                                  <div className="flex justify-between"><span>Alıcı:</span> <span className="font-bold text-gray-900">{bankAccount}</span></div>
+                                  <div className="flex flex-col border-t border-dashed pt-1.5 mt-1.5">
+                                    <span>IBAN:</span>
+                                    <span className="font-black text-gray-900 text-xs tracking-wider">{bankIban}</span>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-center justify-center py-2 bg-slate-50/50 border rounded-lg">
+                                  <img src={qrBankUrl} alt="Banka QR" className="w-32 h-32 border p-1 rounded bg-white shadow-sm" />
+                                  <p className="text-[9px] font-bold text-gray-500 mt-1">Mobil bankacılık ile IBAN'ı taratın</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMockPayment('havale_eft')}
+                                  disabled={processingAction}
+                                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-bold transition-all shadow-sm"
+                                >
+                                  {processingAction ? 'Bildiriliyor...' : 'Havale Yaptım Bildir'}
+                                </button>
+                              </div>
+                            )}
+
+                            {selectedPaymentMethod === 'cash' && (
+                              <div className="border border-gray-200 rounded-xl p-4 bg-white space-y-3 font-sans text-xs">
+                                <p className="text-gray-600 leading-relaxed">
+                                  Cihazınızı ofisimize gelip teslim alırken ödemenizi **nakit** olarak elden yapabilirsiniz.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMockPayment('nakit')}
+                                  disabled={processingAction}
+                                  className="w-full bg-gray-850 hover:bg-black text-white py-2 rounded-lg font-bold transition-all"
+                                >
+                                  Elden Nakit Ödeyeceğim
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="bg-green-600 text-white rounded-xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+                            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                              <Check className="w-5 h-5 text-white font-bold" />
+                            </div>
+                            <p className="text-xs font-bold">{paymentMsg}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Teknisyen Görüşü */}
+                    {result.technicianNotes && (
+                      <div className="border-t border-gray-100 pt-6">
+                        <h4 className="text-sm font-bold text-gray-900 mb-2">Servis Personeli Görüş / Notu</h4>
+                        <p className="text-xs text-gray-600 bg-slate-50 border border-slate-100 rounded-xl p-3.5 italic leading-relaxed" dangerouslySetInnerHTML={{ __html: result.technicianNotes }}></p>
+                      </div>
+                    )}
+
+                    {/* CTA */}
+                    <div className="mt-6 pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+                      <Link
+                        to="/randevu"
+                        className="flex-1 inline-flex items-center justify-center gap-2 bg-primary hover:bg-secondary text-white font-bold py-3 px-5 rounded-theme transition-colors shadow-sm"
+                      >
+                        <CalendarPlus className="w-4 h-4" />
+                        Yeni Servis Talebi
+                      </Link>
+                      <Link
+                        to="/iletisim"
+                        className="flex-1 inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-3 px-5 rounded-theme transition-colors"
+                      >
+                        Bize Ulaşın <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center p-12 bg-white rounded-theme border border-gray-200 border-dashed shadow-sm">
-                <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Kayıt Bulunamadı</h3>
-                <p className="text-gray-500 font-medium max-w-md mx-auto">Girdiğiniz numaraya ait bir servis kaydı bulanmıyor. Lütfen takip numarasını kontrol edip tekrar deneyiniz.</p>
-              </div>
-            )}
-          </div>
-        )}
+              ) : (
+                <div className="text-center p-12 bg-white rounded-theme border border-gray-200 border-dashed shadow-sm">
+                  <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Kayıt Bulunamadı</h3>
+                  <p className="text-gray-500 font-medium max-w-md mx-auto">Girdiğiniz numaraya ait bir servis kaydı bulunmuyor. Lütfen takip numarasını kontrol edip tekrar deneyiniz.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
     </div>
   );
 }

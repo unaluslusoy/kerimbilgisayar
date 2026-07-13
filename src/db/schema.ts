@@ -267,6 +267,7 @@ export const tickets = mysqlTable('tickets', {
   accessories: text('accessories'),
   isUnderWarranty: boolean('is_under_warranty').default(false),
   warrantyNote: text('warranty_note'),
+  technicianNotes: text('technician_notes'),
   estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),
   estimatedDueAt: timestamp('estimated_due_at'),
   completedAt: timestamp('completed_at'),

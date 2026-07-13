@@ -2,8 +2,9 @@ import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
+import RichTextEditor from '../../components/ui/RichTextEditor';
 import { mediaUrl } from '../../lib/media';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -89,6 +90,19 @@ export default function ServiceManager() {
   const [dealers, setDealers] = useState<any[]>([]);
   const [cameraUploading, setCameraUploading] = useState(false);
 
+  // Edit Details Mode State
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerEmail, setEditCustomerEmail] = useState('');
+  const [editAccessories, setEditAccessories] = useState('');
+  const [editTechnicianNotes, setEditTechnicianNotes] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editDeviceType, setEditDeviceType] = useState('');
+  const [editDeviceBrand, setEditDeviceBrand] = useState('');
+  const [editDeviceModel, setEditDeviceModel] = useState('');
+  const [isDeletingTicket, setIsDeletingTicket] = useState(false);
+
   const [newTicket, setNewTicket] = useState({
     subject: '',
     description: '',
@@ -102,6 +116,9 @@ export default function ServiceManager() {
     deviceModel: '',
     dealerId: '' as string | number,
     source: 'walk_in',
+    assignedTo: '' as string | number,
+    accessories: '',
+    technicianNotes: '',
   });
 
   const loadTickets = async () => {
@@ -154,13 +171,32 @@ export default function ServiceManager() {
   });
 
   const handleCreate = async () => {
-    if (!newTicket.subject || !newTicket.customerName) return;
+    if (!newTicket.customerName) return;
     setSaving(true);
     try {
-      await createAdminTicket(newTicket);
+      const res = await createAdminTicket(newTicket);
       setShowModal(false);
-      setNewTicket({ subject: '', description: '', type: 'ariza', priority: 'normal', customerName: '', customerPhone: '', customerEmail: '', deviceType: '', deviceBrand: '', deviceModel: '', dealerId: '', source: 'walk_in' });
+      setNewTicket({
+        subject: '',
+        description: '',
+        type: 'ariza',
+        priority: 'normal',
+        customerName: '',
+        customerPhone: '',
+        customerEmail: '',
+        deviceType: '',
+        deviceBrand: '',
+        deviceModel: '',
+        dealerId: '',
+        source: 'walk_in',
+        assignedTo: '',
+        accessories: '',
+        technicianNotes: '',
+      });
       await loadTickets();
+      if (res && res.ticketNumber) {
+        window.open(`/print/ticket/${res.ticketNumber}`, '_blank');
+      }
     } catch (e: any) {
       alert('Hata: ' + e.message);
     } finally {
@@ -221,12 +257,72 @@ export default function ServiceManager() {
     }
   };
 
+  const handleSaveDetails = async () => {
+    if (!detailTicket) return;
+    setSaving(true);
+    try {
+      const dataToSave = {
+        customerName: editCustomerName,
+        customerPhone: editCustomerPhone,
+        customerEmail: editCustomerEmail,
+        accessories: editAccessories,
+        technicianNotes: editTechnicianNotes,
+        description: editDescription,
+        deviceType: editDeviceType,
+        deviceBrand: editDeviceBrand,
+        deviceModel: editDeviceModel,
+      };
+      await updateAdminTicket(detailTicket.id, dataToSave);
+      
+      const updatedTicket = {
+        ...detailTicket,
+        ...dataToSave,
+      };
+      setDetailTicket(updatedTicket);
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, ...dataToSave } : t));
+      setIsEditingDetails(false);
+      alert('Servis kaydı başarıyla güncellendi.');
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteTicket = async () => {
+    if (!detailTicket) return;
+    if (!window.confirm('Bu servis kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) return;
+    setIsDeletingTicket(true);
+    try {
+      await deleteAdminTicket(detailTicket.id);
+      setDetailTicket(null);
+      await loadTickets();
+      alert('Servis kaydı silindi.');
+    } catch (e: any) {
+      alert('Silme işlemi başarısız: ' + e.message);
+    } finally {
+      setIsDeletingTicket(false);
+    }
+  };
+
   const openDetail = async (ticket: any) => {
     setDetailTicket(ticket);
     setCostValue(ticket.cost || '');
     setLaborCostValue(ticket.laborCost || '');
     setEditingCost(false);
     setNoteText('');
+    
+    // Initialize edit details fields
+    setEditCustomerName(ticket.customerName || '');
+    setEditCustomerPhone(ticket.customerPhone || '');
+    setEditCustomerEmail(ticket.customerEmail || '');
+    setEditAccessories(ticket.accessories || '');
+    setEditTechnicianNotes(ticket.technicianNotes || '');
+    setEditDescription(ticket.description || '');
+    setEditDeviceType(ticket.deviceType || '');
+    setEditDeviceBrand(ticket.deviceBrand || '');
+    setEditDeviceModel(ticket.deviceModel || '');
+    setIsEditingDetails(false);
     
     try {
       const parts = await fetchTicketParts(ticket.id);
@@ -633,80 +729,194 @@ export default function ServiceManager() {
                 {/* Left Area: Detail & Actions */}
                 <div className="w-full lg:w-3/5 overflow-y-auto p-6 space-y-6">
                   
-                  {/* Grid fields */}
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Müşteri</p>
-                      <p className="text-gray-800 font-bold text-sm">{detailTicket.customerName || '—'}</p>
+                  {/* Action Controls for Edits and Deletions */}
+                  <div className="flex items-center justify-between bg-slate-50 border border-slate-200/60 p-4 rounded-2xl shadow-sm">
+                    <div>
+                      <p className="text-xs font-black text-gray-550 uppercase tracking-widest">
+                        {isEditingDetails ? 'Düzenleme Modu Aktif' : 'Bilgi Düzenleme & Silme'}
+                      </p>
                     </div>
-                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 flex flex-col justify-between">
-                      <div>
-                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Telefon</p>
-                        <p className="text-gray-800 font-bold text-sm">
-                          {detailTicket.customerPhone
-                            ? <a href={`tel:${detailTicket.customerPhone}`} className="text-blue-600 hover:underline flex items-center gap-1">
-                                <Phone className="w-3.5 h-3.5" /> {detailTicket.customerPhone}
-                              </a>
-                            : '—'}
-                        </p>
-                      </div>
-                      {detailTicket.customerPhone && (
-                        <div className="mt-2 flex items-center gap-2">
-                          <a
-                            href={`https://wa.me/${detailTicket.customerPhone.replace(/\D/g, '').startsWith('0') ? '90' + detailTicket.customerPhone.replace(/\D/g, '').substring(1) : detailTicket.customerPhone.replace(/\D/g, '').startsWith('90') ? detailTicket.customerPhone.replace(/\D/g, '') : '90' + detailTicket.customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Merhaba Sayın Müşterimiz, ${detailTicket.ticketNumber} numaralı cihazınızın servis işlemlerini takip etmek için: https://kerimbilgisayar.com/ariza-sorgulama?no=${detailTicket.ticketNumber}`)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-[10px] font-bold transition-colors"
-                          >
-                            <Send className="w-3 h-3 text-green-600" /> WhatsApp Web
-                          </a>
+                    <div className="flex items-center gap-2">
+                      {isEditingDetails ? (
+                        <>
                           <button
-                            onClick={async () => {
-                              try {
-                                const res = await triggerTicketWhatsApp(detailTicket.id);
-                                if (res.success) {
-                                  alert('WhatsApp bildirimi arka planda başarıyla sıraya alındı.');
-                                } else {
-                                  alert('Hata: Gönderilemedi. Ayarları kontrol edin.');
-                                }
-                              } catch (e: any) {
-                                alert('WhatsApp API hatası: ' + e.message);
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold transition-colors"
+                            onClick={handleSaveDetails}
+                            disabled={saving}
+                            className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1"
                           >
-                            <Send className="w-3 h-3 text-blue-600" /> API ile Gönder
+                            Değişiklikleri Kaydet
                           </button>
-                        </div>
+                          <button
+                            onClick={() => setIsEditingDetails(false)}
+                            className="border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold px-4 py-2 rounded-xl transition-all"
+                          >
+                            Vazgeç
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditCustomerName(detailTicket.customerName || '');
+                              setEditCustomerPhone(detailTicket.customerPhone || '');
+                              setEditCustomerEmail(detailTicket.customerEmail || '');
+                              setEditAccessories(detailTicket.accessories || '');
+                              setEditTechnicianNotes(detailTicket.technicianNotes || '');
+                              setEditDescription(detailTicket.description || '');
+                              setEditDeviceType(detailTicket.deviceType || '');
+                              setEditDeviceBrand(detailTicket.deviceBrand || '');
+                              setEditDeviceModel(detailTicket.deviceModel || '');
+                              setIsEditingDetails(true);
+                            }}
+                            className="bg-primary hover:bg-secondary text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm"
+                          >
+                            Bilgileri Düzenle
+                          </button>
+                          <button
+                            onClick={handleDeleteTicket}
+                            disabled={isDeletingTicket}
+                            className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-bold px-4 py-2 rounded-xl transition-all flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Servis Kaydını Sil
+                          </button>
+                        </>
                       )}
                     </div>
-                    {detailTicket.customerEmail && (
-                      <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">E-Posta</p>
-                        <a href={`mailto:${detailTicket.customerEmail}`} className="text-blue-600 hover:underline flex items-center gap-1 truncate font-bold text-sm">
-                          <Mail className="w-3.5 h-3.5 shrink-0" /> {detailTicket.customerEmail}
-                        </a>
-                      </div>
-                    )}
-                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Cihaz</p>
-                      <p className="text-gray-800 font-bold text-sm">
-                        {[detailTicket.deviceBrand, detailTicket.deviceModel].filter(Boolean).join(' ') || detailTicket.deviceType || '—'}
-                      </p>
-                    </div>
-                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Öncelik</p>
-                      <p className={cn('font-bold text-sm', PRIORITY_COLORS[detailTicket.priority || 'normal'])}>
-                        ● {PRIORITY_LABELS[detailTicket.priority || 'normal']}
-                      </p>
-                    </div>
-                    <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Oluşturulma
-                      </p>
-                      <p className="text-gray-700 font-bold text-sm">{formatDate(detailTicket.createdAt)}</p>
-                    </div>
                   </div>
+
+                  {/* Grid fields */}
+                  {isEditingDetails ? (
+                    <div className="grid grid-cols-2 gap-4 text-xs font-sans">
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Müşteri Adı Soyadı</label>
+                        <input
+                          type="text"
+                          value={editCustomerName}
+                          onChange={e => setEditCustomerName(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Telefon Numarası</label>
+                        <input
+                          type="text"
+                          value={editCustomerPhone}
+                          onChange={e => setEditCustomerPhone(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">E-Posta Adresi</label>
+                        <input
+                          type="email"
+                          value={editCustomerEmail}
+                          onChange={e => setEditCustomerEmail(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Cihaz Türü</label>
+                        <input
+                          type="text"
+                          value={editDeviceType}
+                          onChange={e => setEditDeviceType(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Marka</label>
+                        <input
+                          type="text"
+                          value={editDeviceBrand}
+                          onChange={e => setEditDeviceBrand(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Model</label>
+                        <input
+                          type="text"
+                          value={editDeviceModel}
+                          onChange={e => setEditDeviceModel(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Müşteri</p>
+                        <p className="text-gray-850 font-bold text-sm">{detailTicket.customerName || '—'}</p>
+                      </div>
+                      <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 flex flex-col justify-between">
+                        <div>
+                          <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Telefon</p>
+                          <p className="text-gray-850 font-bold text-sm">
+                            {detailTicket.customerPhone
+                              ? <a href={`tel:${detailTicket.customerPhone}`} className="text-blue-600 hover:underline flex items-center gap-1">
+                                  <Phone className="w-3.5 h-3.5" /> {detailTicket.customerPhone}
+                                </a>
+                              : '—'}
+                          </p>
+                        </div>
+                        {detailTicket.customerPhone && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <a
+                              href={`https://wa.me/${detailTicket.customerPhone.replace(/\D/g, '').startsWith('0') ? '90' + detailTicket.customerPhone.replace(/\D/g, '').substring(1) : detailTicket.customerPhone.replace(/\D/g, '').startsWith('90') ? detailTicket.customerPhone.replace(/\D/g, '') : '90' + detailTicket.customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Merhaba Sayın Müşterimiz, ${detailTicket.ticketNumber} numaralı cihazınızın servis işlemlerini takip etmek için: https://kerimbilgisayar.com/ariza-sorgulama?no=${detailTicket.ticketNumber}`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-[10px] font-bold transition-colors"
+                            >
+                              <Send className="w-3 h-3 text-green-600" /> WhatsApp Web
+                            </a>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await triggerTicketWhatsApp(detailTicket.id);
+                                  if (res.success) {
+                                    alert('WhatsApp bildirimi arka planda başarıyla sıraya alındı.');
+                                  } else {
+                                    alert('Hata: Gönderilemedi. Ayarları kontrol edin.');
+                                  }
+                                } catch (e: any) {
+                                  alert('WhatsApp API hatası: ' + e.message);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold transition-colors"
+                            >
+                              <Send className="w-3 h-3 text-blue-600" /> API ile Gönder
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {detailTicket.customerEmail && (
+                        <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                          <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">E-Posta</p>
+                          <a href={`mailto:${detailTicket.customerEmail}`} className="text-blue-600 hover:underline flex items-center gap-1 truncate font-bold text-sm">
+                            <Mail className="w-3.5 h-3.5 shrink-0" /> {detailTicket.customerEmail}
+                          </a>
+                        </div>
+                      )}
+                      <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Cihaz</p>
+                        <p className="text-gray-850 font-bold text-sm">
+                          {[detailTicket.deviceBrand, detailTicket.deviceModel].filter(Boolean).join(' ') || detailTicket.deviceType || '—'}
+                        </p>
+                      </div>
+                      <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Öncelik</p>
+                        <p className={cn('font-bold text-sm', PRIORITY_COLORS[detailTicket.priority || 'normal'])}>
+                          ● {PRIORITY_LABELS[detailTicket.priority || 'normal']}
+                        </p>
+                      </div>
+                      <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                        <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Oluşturulma
+                        </p>
+                        <p className="text-gray-850 font-bold text-sm">{formatDate(detailTicket.createdAt)}</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Personel Atama */}
                   <div className="border border-gray-200 rounded-2xl p-4 bg-blue-50/30">
@@ -872,11 +1082,61 @@ export default function ServiceManager() {
                     </div>
                   </div>
 
-                  {/* Açıklama */}
-                  {detailTicket.description && (
-                    <div className="border border-gray-200 rounded-2xl p-4">
-                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">Açıklama / Şikayet</p>
-                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{detailTicket.description}</p>
+                  {/* Aksesuarlar / Emanetler */}
+                  {(isEditingDetails || detailTicket.accessories) && (
+                    <div className="border border-gray-200 rounded-2xl p-4 bg-amber-50/10">
+                      <p className="text-xs text-gray-550 font-black uppercase tracking-wider mb-2">Cihazla Birlikte Alınan Emanetler (Aksesuarlar)</p>
+                      {isEditingDetails ? (
+                        <input
+                          type="text"
+                          value={editAccessories}
+                          onChange={e => setEditAccessories(e.target.value)}
+                          className="w-full border border-gray-300 rounded-xl p-2 text-sm focus:ring-1 focus:ring-primary outline-none bg-white"
+                          placeholder="Örn: Şarj aleti, kılıf, çanta..."
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-800 font-bold bg-amber-50/30 p-3 rounded-xl border border-amber-100/60">
+                          {detailTicket.accessories}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Açıklama / Müşteri Şikayeti */}
+                  <div className="border border-gray-200 rounded-2xl p-4">
+                    <p className="text-xs text-gray-550 font-black uppercase tracking-wider mb-2">Açıklama / Şikayet</p>
+                    {isEditingDetails ? (
+                      <RichTextEditor
+                        value={editDescription}
+                        onChange={val => setEditDescription(val)}
+                        placeholder="Müşterinin bildirdiği arıza açıklaması..."
+                        className="bg-white rounded-xl"
+                      />
+                    ) : (
+                      <div 
+                        className="text-sm text-gray-700 leading-relaxed prose max-w-none" 
+                        dangerouslySetInnerHTML={{ __html: detailTicket.description || 'Açıklama belirtilmemiş.' }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Teknisyen Görüşü / Raporu */}
+                  {(isEditingDetails || detailTicket.technicianNotes) && (
+                    <div className="border border-gray-200 rounded-2xl p-4 bg-slate-50/60">
+                      <p className="text-xs text-gray-550 font-black uppercase tracking-wider mb-2">Teknisyen Görüşü / Raporu</p>
+                      {isEditingDetails ? (
+                        <RichTextEditor
+                          value={editTechnicianNotes}
+                          onChange={val => setEditTechnicianNotes(val)}
+                          placeholder="Teknik detaylar, onarım raporu ve öneriler..."
+                          className="bg-white rounded-xl"
+                        />
+                      ) : (
+                        <div 
+                          className="text-sm text-gray-700 leading-relaxed italic prose max-w-none bg-white p-4 border rounded-xl" 
+                          dangerouslySetInnerHTML={{ __html: detailTicket.technicianNotes }}
+                        />
+                      )}
                     </div>
                   )}
 
@@ -1051,164 +1311,206 @@ export default function ServiceManager() {
       {/* New Ticket Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-theme shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">Yeni Servis Kaydı</h2>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-theme">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-150">
+              <h2 className="text-xl font-black text-gray-900 tracking-tight">Yeni Servis Kaydı Oluştur</h2>
+              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-xl">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Müşteri Adı *</label>
-                  <input
-                    type="text" value={newTicket.customerName}
-                    onChange={e => setNewTicket({ ...newTicket, customerName: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                    placeholder="Ad Soyad"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
-                  <input
-                    type="text" value={newTicket.customerPhone}
-                    onChange={e => setNewTicket({ ...newTicket, customerPhone: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                    placeholder="05XX XXX XX XX"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">E-Posta (Otomatik Bilgilendirme İçin)</label>
-                <input
-                  type="email" value={newTicket.customerEmail}
-                  onChange={e => setNewTicket({ ...newTicket, customerEmail: e.target.value })}
-                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                  placeholder="musteri@ornek.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Konu *</label>
-                <input
-                  type="text" value={newTicket.subject}
-                  onChange={e => setNewTicket({ ...newTicket, subject: e.target.value })}
-                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                  placeholder="Servis konusu..."
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cihaz Türü</label>
-                  <input
-                    type="text" value={newTicket.deviceType}
-                    onChange={e => setNewTicket({ ...newTicket, deviceType: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                    placeholder="Laptop"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Marka</label>
-                  <input
-                    type="text" value={newTicket.deviceBrand}
-                    onChange={e => setNewTicket({ ...newTicket, deviceBrand: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                    placeholder="Dell"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-                  <input
-                    type="text" value={newTicket.deviceModel}
-                    onChange={e => setNewTicket({ ...newTicket, deviceModel: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                    placeholder="XPS 15"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tür</label>
-                  <select value={newTicket.type} onChange={e => setNewTicket({ ...newTicket, type: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary">
-                    <option value="ariza">Arıza</option>
-                    <option value="destek">Destek</option>
-                    <option value="kurulum">Kurulum</option>
-                    <option value="bakim">Bakım</option>
-                    <option value="diger">Diğer</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Öncelik</label>
-                  <select value={newTicket.priority} onChange={e => setNewTicket({ ...newTicket, priority: e.target.value })}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary">
-                    <option value="dusuk">Düşük</option>
-                    <option value="normal">Normal</option>
-                    <option value="yuksek">Yüksek</option>
-                    <option value="acil">Acil</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* FAZ 2B: Bayi Entegrasyonu Seçimi */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Kanal / Kaynak</label>
-                  <select
-                    value={newTicket.source}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setNewTicket(prev => ({
-                        ...prev,
-                        source: val,
-                        dealerId: val !== 'dealer' ? '' : prev.dealerId
-                      }));
-                    }}
-                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="walk_in">Elden Teslim (Walk-in)</option>
-                    <option value="dealer">Bayi Kanalı</option>
-                    <option value="online">Online Başvuru</option>
-                    <option value="phone">Telefon</option>
-                  </select>
-                </div>
-                {newTicket.source === 'dealer' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Aracı Bayi</label>
-                    <select
-                      value={newTicket.dealerId}
-                      onChange={e => setNewTicket({ ...newTicket, dealerId: e.target.value })}
-                      className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="">Bayi Seçin...</option>
-                      {dealers.map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
+            
+            <div className="p-6 space-y-6 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Sol Sütun: Müşteri & Cihaz */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1.5 mb-3">Müşteri & Cihaz Bilgileri</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Adı *</label>
+                      <input
+                        type="text" value={newTicket.customerName}
+                        onChange={e => setNewTicket({ ...newTicket, customerName: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                        placeholder="Ad Soyad"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Telefon Numarası</label>
+                      <input
+                        type="text" value={newTicket.customerPhone}
+                        onChange={e => setNewTicket({ ...newTicket, customerPhone: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                        placeholder="05XX XXX XX XX"
+                      />
+                    </div>
                   </div>
-                )}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Adresi</label>
+                    <input
+                      type="email" value={newTicket.customerEmail}
+                      onChange={e => setNewTicket({ ...newTicket, customerEmail: e.target.value })}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      placeholder="musteri@eposta.com"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 pt-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Cihaz Türü</label>
+                      <input
+                        type="text" value={newTicket.deviceType}
+                        onChange={e => setNewTicket({ ...newTicket, deviceType: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="Örn: Laptop"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Marka</label>
+                      <input
+                        type="text" value={newTicket.deviceBrand}
+                        onChange={e => setNewTicket({ ...newTicket, deviceBrand: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="Örn: Asus"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Model</label>
+                      <input
+                        type="text" value={newTicket.deviceModel}
+                        onChange={e => setNewTicket({ ...newTicket, deviceModel: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="Örn: ROG Strix"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sağ Sütun: Servis Parametreleri */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1.5 mb-3">Servis Detayları</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Kanal / Kaynak</label>
+                      <select
+                        value={newTicket.source}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setNewTicket(prev => ({
+                            ...prev,
+                            source: val,
+                            dealerId: val !== 'dealer' ? '' : prev.dealerId
+                          }));
+                        }}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                      >
+                        <option value="walk_in">Elden Teslim (Walk-in)</option>
+                        <option value="dealer">Bayi Kanalı</option>
+                        <option value="online">Online Başvuru</option>
+                        <option value="phone">Telefon</option>
+                      </select>
+                    </div>
+                    {newTicket.source === 'dealer' ? (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Aracı Bayi</label>
+                        <select
+                          value={newTicket.dealerId}
+                          onChange={e => setNewTicket({ ...newTicket, dealerId: e.target.value })}
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        >
+                          <option value="">Bayi Seçin...</option>
+                          {dealers.map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Teslim Alan / Atanan Personel</label>
+                        <select
+                          value={newTicket.assignedTo}
+                          onChange={e => setNewTicket({ ...newTicket, assignedTo: e.target.value })}
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        >
+                          <option value="">Seçin...</option>
+                          {staffUsers.map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.firstName} {u.lastName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Servis Türü</label>
+                      <select value={newTicket.type} onChange={e => setNewTicket({ ...newTicket, type: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
+                        <option value="ariza">Arıza</option>
+                        <option value="destek">Destek</option>
+                        <option value="kurulum">Kurulum</option>
+                        <option value="bakim">Bakım</option>
+                        <option value="diger">Diğer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Öncelik Seviyesi</label>
+                      <select value={newTicket.priority} onChange={e => setNewTicket({ ...newTicket, priority: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
+                        <option value="dusuk">Düşük</option>
+                        <option value="normal">Normal</option>
+                        <option value="yuksek">Yüksek</option>
+                        <option value="acil">Acil</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cihazla Birlikte Alınan Emanetler (Aksesuarlar)</label>
+                    <input
+                      type="text"
+                      value={newTicket.accessories}
+                      onChange={e => setNewTicket({ ...newTicket, accessories: e.target.value })}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                      placeholder="Örn: Şarj aleti, kılıf, çanta..."
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama / Şikayet</label>
-                <textarea rows={3} value={newTicket.description}
-                  onChange={e => setNewTicket({ ...newTicket, description: e.target.value })}
-                  className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary resize-none"
-                  placeholder="Müşterinin bildirdiği arıza veya talep..."
+              {/* Açıklama / Şikayet */}
+              <div className="pt-4 border-t border-gray-150">
+                <label className="block text-sm font-bold text-gray-800 mb-2">Müşteri Şikayeti / Detaylı Açıklama (Zengin Metin)</label>
+                <RichTextEditor
+                  value={newTicket.description}
+                  onChange={val => setNewTicket({ ...newTicket, description: val })}
+                  placeholder="Arıza açıklaması, müşteri şikayetleri ve ilk tespitleri buraya yazın..."
+                  className="bg-white rounded-xl shadow-sm animate-in fade-in duration-200"
                 />
               </div>
             </div>
-            <div className="flex gap-3 p-6 border-t border-gray-100">
-              <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-theme font-semibold hover:bg-gray-50 transition-colors">
+
+            <div className="flex gap-3 p-6 border-t border-gray-150 bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition-colors"
+              >
                 İptal
               </button>
               <button
+                type="button"
                 onClick={handleCreate}
-                disabled={saving || !newTicket.subject || !newTicket.customerName}
-                className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-theme font-semibold transition-colors disabled:opacity-50 flex items-center justify-center"
+                disabled={saving || !newTicket.customerName}
+                className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-bold transition-colors disabled:opacity-50 flex items-center justify-center shadow-md shadow-primary/20"
               >
-                {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>}
-                Kayıt Oluştur
+                {saving ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                ) : null}
+                Kayıt ve Giriş Fişi Oluştur
               </button>
             </div>
           </div>

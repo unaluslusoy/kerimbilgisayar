@@ -1083,16 +1083,23 @@ async function startServer() {
   app.get('/api/tickets/:ticketNumber', async (req, res) => {
     try {
       const result = await db.select({
+        dbId: tickets.id,
         id: tickets.ticketNumber,
         status: tickets.status,
         brandModel: devices.name,
         deviceType: devices.deviceType,
+        deviceBrand: devices.brand,
+        deviceModel: devices.model,
         customerName: users.firstName,
         customerLastName: users.lastName,
+        customerPhone: users.phone,
+        customerEmail: users.email,
         issueDescription: tickets.description,
         createdAt: tickets.createdAt,
         updatedAt: tickets.updatedAt,
-        estimatedCost: tickets.cost
+        estimatedCost: tickets.cost,
+        laborCost: tickets.laborCost,
+        accessories: tickets.accessories
       }).from(tickets)
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
         .leftJoin(users, eq(tickets.userId, users.id))
@@ -1102,6 +1109,18 @@ async function startServer() {
       if (result.length === 0) return res.status(404).json({ error: 'Ticket not found' });
       
       const t = result[0];
+      
+      // Fetch parts
+      const partsList = await db.select({
+        id: ticketParts.id,
+        name: stockItems.name,
+        quantity: ticketParts.quantity,
+        unitPrice: ticketParts.unitPrice,
+        totalPrice: ticketParts.totalPrice
+      }).from(ticketParts)
+        .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
+        .where(eq(ticketParts.ticketId, t.dbId));
+
       const statusMapDb: any = {
         'yeni': 'pending',
         'isleme_alindi': 'diagnosing',
@@ -1109,20 +1128,119 @@ async function startServer() {
         'musteri_onayi_bekliyor': 'waiting_parts',
         'cozuldu': 'ready',
         'kapatildi': 'delivered',
-        'iptal': 'delivered'
+        'iptal': 'delivered',
+        'teslim_edildi': 'delivered'
       };
 
       res.json({
+        dbId: t.dbId,
         id: t.id,
         status: statusMapDb[t.status || 'yeni'] || 'pending',
+        rawStatus: t.status || 'yeni',
         brandModel: t.brandModel || 'Bilinmeyen Cihaz',
         deviceType: t.deviceType || 'Bilinmeyen',
+        deviceBrand: t.deviceBrand,
+        deviceModel: t.deviceModel,
         customerName: `${t.customerName || ''} ${t.customerLastName || ''}`.trim() || 'Müşteri',
+        customerPhone: t.customerPhone,
+        customerEmail: t.customerEmail,
         issueDescription: t.issueDescription,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
-        estimatedCost: t.estimatedCost ? parseFloat(t.estimatedCost) : null
+        estimatedCost: t.estimatedCost ? parseFloat(t.estimatedCost) : null,
+        laborCost: t.laborCost ? parseFloat(t.laborCost) : 0,
+        accessories: t.accessories || '',
+        parts: partsList
       });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Public Ticket Onaylama / Teklif Onayı
+  app.post('/api/tickets/:ticketNumber/approve', async (req, res) => {
+    try {
+      const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
+      if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
+      
+      await db.transaction(async (tx) => {
+        await tx.update(tickets).set({ status: 'isleme_alindi', updatedAt: new Date() }).where(eq(tickets.id, ticket[0].id));
+        await tx.insert(ticketMessages).values({
+          tenantId: 1,
+          ticketId: ticket[0].id,
+          message: 'Müşteri arıza/onarım teklifini onayladı. Cihaz onarım aşamasına alındı.',
+          isInternal: true,
+          senderName: 'Sistem (Müşteri Onayı)'
+        });
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Public Ticket Reddetme / Teklif Reddi
+  app.post('/api/tickets/:ticketNumber/decline', async (req, res) => {
+    try {
+      const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
+      if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
+      
+      await db.transaction(async (tx) => {
+        await tx.update(tickets).set({ status: 'iptal', updatedAt: new Date() }).where(eq(tickets.id, ticket[0].id));
+        await tx.insert(ticketMessages).values({
+          tenantId: 1,
+          ticketId: ticket[0].id,
+          message: 'Müşteri onarım teklifini reddetti. Cihaz iptal durumuna alındı.',
+          isInternal: true,
+          senderName: 'Sistem (Müşteri Reddi)'
+        });
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Public Ticket Ödeme Yapma / Havale Bildirimi
+  app.post('/api/tickets/:ticketNumber/pay', async (req, res) => {
+    try {
+      const { paymentMethod } = req.body;
+      if (!paymentMethod) return res.status(400).json({ error: 'Ödeme yöntemi belirtilmelidir' });
+      
+      const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
+      if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
+      
+      const tId = ticket[0].id;
+      // Compute total cost
+      const parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, tId));
+      const partsTotal = parts.reduce((sum, p) => sum + parseFloat(p.totalPrice || '0'), 0);
+      const laborCostVal = parseFloat(ticket[0].laborCost || '0');
+      const grandTotal = partsTotal + laborCostVal;
+
+      await db.transaction(async (tx) => {
+        // Insert payment record
+        await tx.insert(payments).values({
+          tenantId: 1,
+          ticketId: tId,
+          companyId: ticket[0].companyId,
+          amount: grandTotal.toFixed(2),
+          paymentMethod: paymentMethod === 'kredi_karti' ? 'kredi_karti' : paymentMethod === 'havale_eft' ? 'havale_eft' : 'nakit',
+          status: paymentMethod === 'havale_eft' ? 'bekliyor' : 'basarili',
+          notes: paymentMethod === 'kredi_karti' ? 'Müşteri online kredi kartı ile ödeme yaptı.' :
+                 paymentMethod === 'havale_eft' ? 'Müşteri havale ödeme bildirimi yaptı.' : 'Müşteri elden nakit ödeme seçti.',
+        } as any);
+
+        // Add internal message
+        await tx.insert(ticketMessages).values({
+          tenantId: 1,
+          ticketId: tId,
+          message: `Müşteri ödeme yöntemi olarak ${paymentMethod.toUpperCase()} seçti. Tutar: ${grandTotal.toFixed(2)} TL. Not: ${paymentMethod === 'havale_eft' ? 'Havale onayı bekleniyor.' : 'Ödeme başarılı.'}`,
+          isInternal: false,
+          senderName: 'Sistem (Ödeme)'
+        });
+      });
+
+      res.json({ success: true, grandTotal });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1509,6 +1627,8 @@ async function startServer() {
         laborCost: tickets.laborCost,
         dealerId: tickets.dealerId,
         dealerName: dealerAlias.name,
+        technicianNotes: tickets.technicianNotes,
+        accessories: tickets.accessories,
       }).from(tickets)
         .leftJoin(users, eq(tickets.userId, users.id))
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
@@ -1533,7 +1653,7 @@ async function startServer() {
 
   app.post('/api/admin/tickets', requireAdmin, async (req, res) => {
     try {
-      const { subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost, dealerId, source } = req.body;
+      const { subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost, dealerId, source, assignedTo, accessories, technicianNotes } = req.body;
       
       let userId: number | null = null;
       let deviceId: number | null = null;
@@ -1541,10 +1661,14 @@ async function startServer() {
       const ticketNumber = `SRV-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
 
       await db.transaction(async (tx) => {
-        // Create or find user
-        if (customerName && customerPhone) {
+        // Create or find user by phone or email (deduplication)
+        if (customerName && (customerPhone || customerEmail)) {
           const nameParts = customerName.split(' ');
-          const existingUser = await tx.select().from(users).where(eq(users.phone, customerPhone)).limit(1);
+          let existingUser = await tx.select().from(users).where(eq(users.phone, customerPhone)).limit(1);
+          if (existingUser.length === 0 && customerEmail) {
+            existingUser = await tx.select().from(users).where(eq(users.email, customerEmail)).limit(1);
+          }
+
           if (existingUser.length > 0) {
             userId = existingUser[0].id;
             if (!userEmailForMail && existingUser[0].email && !existingUser[0].email.includes('@noemail.local')) {
@@ -1574,8 +1698,8 @@ async function startServer() {
               tenantId: 1,
               firstName: nameParts[0] || customerName,
               lastName: nameParts.slice(1).join(' ') || '',
-              email: customerEmail || `${customerPhone}@noemail.local`,
-              phone: customerPhone,
+              email: customerEmail || `${customerPhone || Date.now()}@noemail.local`,
+              phone: customerPhone || '',
               roleType: 'customer'
             });
             userId = (newUser[0] as any).insertId;
@@ -1594,17 +1718,20 @@ async function startServer() {
         }
 
         // Create device if provided
-        if (deviceType) {
+        if (deviceType || deviceBrand || deviceModel) {
           const newDevice = await tx.insert(devices).values({
             tenantId: 1,
             userId: userId,
-            deviceType: deviceType,
-            brand: deviceBrand,
-            model: deviceModel,
-            name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType,
+            deviceType: deviceType || 'Bilinmeyen',
+            brand: deviceBrand || '',
+            model: deviceModel || '',
+            name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType || 'Cihaz',
           });
           deviceId = (newDevice[0] as any).insertId;
         }
+
+        // Auto-subject if omitted
+        const autoSubject = subject || `${deviceBrand || ''} ${deviceModel || ''} ${type === 'ariza' ? 'Arıza' : type === 'bakim' ? 'Bakım' : type === 'kurulum' ? 'Kurulum' : 'Destek'}`.trim() || 'Teknik Servis Talebi';
 
         // Create ticket
         await tx.insert(tickets).values({
@@ -1613,13 +1740,16 @@ async function startServer() {
           userId: userId,
           deviceId: deviceId,
           type: type || 'ariza',
-          subject: subject || 'Teknik Servis Talebi',
+          subject: autoSubject,
           description: description || '',
           priority: priority || 'normal',
           status: 'yeni',
           cost: cost || '0.00',
           dealerId: dealerId ? parseInt(dealerId as string) : null,
           source: source || 'walk_in',
+          assignedTo: assignedTo ? parseInt(assignedTo as string) : null,
+          accessories: accessories || '',
+          technicianNotes: technicianNotes || '',
         });
       });
 
@@ -1639,16 +1769,43 @@ async function startServer() {
 
   app.patch('/api/admin/tickets/:id', requireAdmin, async (req, res) => {
     try {
-      const { status, priority, cost, assignedTo, laborCost } = req.body;
+      const { status, priority, cost, assignedTo, laborCost, technicianNotes, accessories, customerName, customerPhone, customerEmail } = req.body;
       const updateData: any = { updatedAt: new Date() };
       if (status) updateData.status = status;
       if (priority) updateData.priority = priority;
       if (cost !== undefined) updateData.cost = cost;
       if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
       if (laborCost !== undefined) updateData.laborCost = laborCost;
+      if (technicianNotes !== undefined) updateData.technicianNotes = technicianNotes;
+      if (accessories !== undefined) updateData.accessories = accessories;
       if (status === 'cozuldu' || status === 'kapatildi') updateData.resolvedAt = new Date();
       
-      await db.update(tickets).set(updateData).where(eq(tickets.id, parseInt(req.params.id)));
+      const ticketId = parseInt(req.params.id);
+      
+      await db.transaction(async (tx) => {
+        // Update ticket fields
+        await tx.update(tickets).set(updateData).where(eq(tickets.id, ticketId));
+
+        // Update customer details if provided
+        if (customerName || customerPhone || customerEmail) {
+          const ticketRec = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+          if (ticketRec.length > 0 && ticketRec[0].userId) {
+            const uId = ticketRec[0].userId;
+            const userUpdate: any = {};
+            if (customerName) {
+              const parts = customerName.split(' ');
+              userUpdate.firstName = parts[0];
+              userUpdate.lastName = parts.slice(1).join(' ');
+            }
+            if (customerPhone !== undefined) userUpdate.phone = customerPhone;
+            if (customerEmail !== undefined) userUpdate.email = customerEmail;
+            
+            if (Object.keys(userUpdate).length > 0) {
+              await tx.update(users).set(userUpdate).where(eq(users.id, uId));
+            }
+          }
+        }
+      });
 
       // FAZ 2B: Bayi Borçlandırma Entegrasyonu
       if (status === 'teslim_edildi') {
@@ -1754,6 +1911,23 @@ async function startServer() {
         }
       }
 
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // DELETE ticket and all its attachments, parts, and messages
+  app.delete('/api/admin/tickets/:id', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      await db.transaction(async (tx) => {
+        // Delete dependent relations
+        await tx.delete(ticketParts).where(eq(ticketParts.ticketId, ticketId));
+        await tx.delete(ticketAttachments).where(eq(ticketAttachments.ticketId, ticketId));
+        await tx.delete(ticketMessages).where(eq(ticketMessages.ticketId, ticketId));
+        await tx.delete(tickets).where(eq(tickets.id, ticketId));
+      });
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

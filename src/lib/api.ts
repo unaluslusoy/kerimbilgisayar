@@ -167,6 +167,10 @@ export async function updateAdminTicket(id: number, data: any) {
   return adminRequest(`/api/admin/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
+export async function deleteAdminTicket(id: number) {
+  return adminRequest(`/api/admin/tickets/${id}`, { method: 'DELETE' });
+}
+
 export async function fetchTicketParts(ticketId: number) {
   return adminRequest(`/api/admin/tickets/${ticketId}/parts`);
 }
