@@ -102,6 +102,8 @@ export default function ServiceManager() {
   const [editDeviceBrand, setEditDeviceBrand] = useState('');
   const [editDeviceModel, setEditDeviceModel] = useState('');
   const [isDeletingTicket, setIsDeletingTicket] = useState(false);
+  const [newTicketPhotos, setNewTicketPhotos] = useState<any[]>([]);
+  const [newTicketPhotoUploading, setNewTicketPhotoUploading] = useState(false);
 
   const [newTicket, setNewTicket] = useState({
     subject: '',
@@ -170,12 +172,50 @@ export default function ServiceManager() {
     return matchStatus && matchSearch;
   });
 
+  const handleNewTicketPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    setNewTicketPhotoUploading(true);
+    try {
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch('/api/admin/media/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Yükleme başarısız');
+      const data = await res.json();
+      setNewTicketPhotos(prev => [...prev, {
+        fileName: file.name,
+        fileUrl: data.fileUrl,
+        fileType: file.type,
+        fileSize: file.size,
+      }]);
+    } catch (err: any) {
+      alert('Fotoğraf yüklenirken hata: ' + err.message);
+    } finally {
+      setNewTicketPhotoUploading(false);
+      e.target.value = '';
+    }
+  };
+
   const handleCreate = async () => {
     if (!newTicket.customerName) return;
     setSaving(true);
     try {
       const res = await createAdminTicket(newTicket);
+      
+      // Save photos if there are any
+      if (res && res.id && newTicketPhotos.length > 0) {
+        for (const photo of newTicketPhotos) {
+          await createTicketAttachment(res.id, photo);
+        }
+      }
+
       setShowModal(false);
+      setNewTicketPhotos([]);
       setNewTicket({
         subject: '',
         description: '',
@@ -212,14 +252,22 @@ export default function ServiceManager() {
       const file = e.target.files[0];
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('phase', 'teslim_alim');
-      const token = localStorage.getItem('adminToken');
-      const res = await fetch(`/api/admin/tickets/${detailTicket.id}/attachments`, {
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch('/api/admin/media/upload', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       if (!res.ok) throw new Error('Yükleme başarısız');
+      const mediaData = await res.json();
+      
+      await createTicketAttachment(detailTicket.id, {
+        fileName: file.name,
+        fileUrl: mediaData.fileUrl,
+        fileType: file.type,
+        fileSize: file.size,
+      });
+      
       const atts = await fetchTicketAttachments(detailTicket.id);
       setTicketAttachments(atts || []);
     } catch (err: any) {
@@ -1477,6 +1525,50 @@ export default function ServiceManager() {
                       className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
                       placeholder="Örn: Şarj aleti, kılıf, çanta..."
                     />
+                  </div>
+
+                  {/* Cihaz Fotoğrafları - Teslim Anı */}
+                  <div className="pt-2">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center justify-between">
+                      <span>Cihaz Fotoğrafları (Teslim Anı)</span>
+                      <span className="text-[10px] text-blue-650 hover:underline font-bold flex items-center gap-1 cursor-pointer">
+                        <Camera className="w-3.5 h-3.5" /> {newTicketPhotoUploading ? 'Yükleniyor...' : 'Fotoğraf Çek / Yükle'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handleNewTicketPhotoUpload}
+                          disabled={newTicketPhotoUploading}
+                          className="hidden"
+                        />
+                      </span>
+                    </label>
+                    
+                    {newTicketPhotos.length === 0 ? (
+                      <p className="text-[11px] text-gray-400 italic">Henüz teslim anı fotoğrafı eklenmedi.</p>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2 border border-gray-200 p-2 rounded-xl bg-gray-50/50">
+                        {newTicketPhotos.map((photo, index) => (
+                          <div key={index} className="relative group border border-gray-200 rounded-lg overflow-hidden aspect-video bg-white flex items-center justify-center">
+                            <img
+                              src={photo.fileUrl}
+                              alt={photo.fileName}
+                              className="w-full h-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewTicketPhotos(prev => prev.filter((_, idx) => idx !== index));
+                              }}
+                              className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-md shadow-md"
+                              title="Fotoğrafı Sil"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

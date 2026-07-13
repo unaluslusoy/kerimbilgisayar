@@ -1734,7 +1734,7 @@ async function startServer() {
         const autoSubject = subject || `${deviceBrand || ''} ${deviceModel || ''} ${type === 'ariza' ? 'Arıza' : type === 'bakim' ? 'Bakım' : type === 'kurulum' ? 'Kurulum' : 'Destek'}`.trim() || 'Teknik Servis Talebi';
 
         // Create ticket
-        await tx.insert(tickets).values({
+        const newTicketRecord = await tx.insert(tickets).values({
           tenantId: 1,
           ticketNumber,
           userId: userId,
@@ -1751,6 +1751,7 @@ async function startServer() {
           accessories: accessories || '',
           technicianNotes: technicianNotes || '',
         });
+        req.body.insertedTicketId = (newTicketRecord[0] as any).insertId;
       });
 
       // Send initial email
@@ -1761,7 +1762,7 @@ async function startServer() {
         sendTicketEmail(userEmailForMail, `Servis Kaydı Oluşturuldu: ${ticketNumber}`, html).catch(console.error);
       }
 
-      res.json({ success: true, ticketNumber });
+      res.json({ success: true, ticketNumber, id: req.body.insertedTicketId });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -3841,6 +3842,31 @@ async function startServer() {
     try {
       const { firstName, lastName, email, phone, password, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes } = req.body;
       
+      // Kayıtlı müşteri kontrolü (Ad-Soyad, Telefon veya E-Posta)
+      if (email) {
+        const existingByEmail = await db.select().from(users).where(eq(users.email, email)).limit(1);
+        if (existingByEmail.length > 0) {
+          return res.status(400).json({ error: 'Bu e-posta adresiyle kayıtlı bir müşteri zaten var.' });
+        }
+      }
+      if (phone) {
+        const existingByPhone = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+        if (existingByPhone.length > 0) {
+          return res.status(400).json({ error: 'Bu telefon numarasıyla kayıtlı bir müşteri zaten var.' });
+        }
+      }
+      if (firstName) {
+        const existingByName = await db.select().from(users).where(
+          and(
+            eq(users.firstName, firstName),
+            eq(users.lastName, lastName || '')
+          )
+        ).limit(1);
+        if (existingByName.length > 0) {
+          return res.status(400).json({ error: 'Bu ad ve soyad ile kayıtlı bir müşteri zaten var.' });
+        }
+      }
+
       await db.transaction(async (tx) => {
         let companyId: number | null = null;
 
