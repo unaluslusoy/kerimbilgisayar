@@ -1,5 +1,5 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock } from '../../lib/api';
@@ -84,6 +84,10 @@ export default function ServiceManager() {
   const [laborCostValue, setLaborCostValue] = useState('');
   const [isSavingLabor, setIsSavingLabor] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
+  // FAZ 2: Görünüm modu ve bayi
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [dealers, setDealers] = useState<any[]>([]);
+  const [cameraUploading, setCameraUploading] = useState(false);
 
   const [newTicket, setNewTicket] = useState({
     subject: '',
@@ -96,6 +100,8 @@ export default function ServiceManager() {
     deviceType: '',
     deviceBrand: '',
     deviceModel: '',
+    dealerId: '' as string | number,
+    source: 'walk_in',
   });
 
   const loadTickets = async () => {
@@ -111,14 +117,16 @@ export default function ServiceManager() {
 
   const loadDependencies = async () => {
     try {
-      const [users, stock] = await Promise.all([
+      const [users, stock, dealersData] = await Promise.all([
         fetchAdminUsers(),
-        fetchAdminStock()
+        fetchAdminStock(),
+        adminRequest('/api/admin/dealers').catch(() => [])
       ]);
       // Sadece admin ve teknisyenleri filtrele
       const staff = users.filter((u: any) => u.roleType === 'superadmin' || u.roleType === 'tenant_admin' || u.roleType === 'staff' || u.roleType === 'technician');
       setStaffUsers(staff);
       setStockItems(stock);
+      setDealers(Array.isArray(dealersData) ? dealersData : []);
     } catch (e) {
       console.error(e);
     }
@@ -151,12 +159,38 @@ export default function ServiceManager() {
     try {
       await createAdminTicket(newTicket);
       setShowModal(false);
-      setNewTicket({ subject: '', description: '', type: 'ariza', priority: 'normal', customerName: '', customerPhone: '', customerEmail: '', deviceType: '', deviceBrand: '', deviceModel: '' });
+      setNewTicket({ subject: '', description: '', type: 'ariza', priority: 'normal', customerName: '', customerPhone: '', customerEmail: '', deviceType: '', deviceBrand: '', deviceModel: '', dealerId: '', source: 'walk_in' });
       await loadTickets();
     } catch (e: any) {
       alert('Hata: ' + e.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // FAZ 2A: Kamera fotoğrafı yükleme
+  const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!detailTicket || !e.target.files?.[0]) return;
+    setCameraUploading(true);
+    try {
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('phase', 'teslim_alim');
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch(`/api/admin/tickets/${detailTicket.id}/attachments`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Yükleme başarısız');
+      const atts = await fetchTicketAttachments(detailTicket.id);
+      setTicketAttachments(atts || []);
+    } catch (err: any) {
+      alert('Fotoğraf yüklenirken hata: ' + err.message);
+    } finally {
+      setCameraUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -169,6 +203,7 @@ export default function ServiceManager() {
       alert('Hata: ' + e.message);
     }
   };
+
 
   const handleCostSave = async () => {
     if (!detailTicket) return;
@@ -403,32 +438,110 @@ export default function ServiceManager() {
             </button>
           ))}
         </div>
-        <div className="relative w-full md:w-56 shrink-0">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Kayıt no, müşteri, telefon..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-theme text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Görünüm modu toggle */}
+          <div className="flex rounded-theme border border-gray-200 overflow-hidden">
+            <button
+              onClick={() => setViewMode('list')}
+              title="Liste Görünümü"
+              className={cn('px-2.5 py-1.5 transition-colors', viewMode === 'list' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100')}
+            >
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              title="Kanban Görünümü"
+              className={cn('px-2.5 py-1.5 transition-colors', viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100')}
+            >
+              <Columns className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="relative w-full md:w-56">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Kayıt no, müşteri, telefon..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-theme text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
         </div>
       </div>
 
       {/* Main layout: list + detail panel */}
       <div className="flex gap-5 flex-1 overflow-hidden min-h-0">
-        {/* Ticket Grid (Always Full Width now) */}
         <div className="w-full overflow-y-auto pb-4">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="w-10 h-10 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : filtered.length === 0 && viewMode === 'list' ? (
             <div className="text-center py-16 text-gray-400">
               <p className="font-semibold text-lg">Kayıt bulunamadı</p>
               <p className="text-sm mt-1">Filtrelerinizi değiştirin veya yeni kayıt oluşturun.</p>
             </div>
+          ) : viewMode === 'kanban' ? (
+            /* KANBAN GÖRÜNÜMÜ — HTML5 native drag & drop */
+            <div className="flex gap-3 overflow-x-auto pb-4 min-h-[500px]">
+              {FILTER_TABS.filter(t => t.key !== 'all').map(col => {
+                const colTickets = tickets.filter(t => {
+                  const matchSearch = search === '' ||
+                    t.ticketNumber?.toLowerCase().includes(search.toLowerCase()) ||
+                    t.customerName?.toLowerCase().includes(search.toLowerCase()) ||
+                    t.subject?.toLowerCase().includes(search.toLowerCase());
+                  return t.status === col.key && matchSearch;
+                });
+                return (
+                  <div
+                    key={col.key}
+                    className="flex-shrink-0 w-64 bg-gray-50 rounded-xl border border-gray-200 flex flex-col"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={async e => {
+                      e.preventDefault();
+                      const ticketId = parseInt(e.dataTransfer.getData('ticketId'));
+                      if (ticketId) await handleStatusChange(ticketId, col.key);
+                    }}
+                  >
+                    <div className={cn('px-3 py-2 rounded-t-xl border-b border-gray-200 flex items-center justify-between', STATUS_COLORS[col.key])}>
+                      <span className="text-xs font-bold">{col.label}</span>
+                      <span className="text-xs font-bold bg-white/50 rounded-full px-2 py-0.5">{colTickets.length}</span>
+                    </div>
+                    <div className="flex flex-col gap-2 p-2 flex-1 overflow-y-auto max-h-[calc(100vh-280px)]">
+                      {colTickets.map(ticket => (
+                        <div
+                          key={ticket.id}
+                          draggable
+                          onDragStart={e => e.dataTransfer.setData('ticketId', String(ticket.id))}
+                          onClick={() => openDetail(ticket)}
+                          className={cn(
+                            'bg-white rounded-lg border p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all text-left',
+                            detailTicket?.id === ticket.id ? 'border-primary ring-1 ring-primary' : 'border-gray-200'
+                          )}
+                        >
+                          <div className="flex justify-between items-start mb-1.5">
+                            <span className="font-mono text-[10px] text-gray-400 font-bold">{ticket.ticketNumber}</span>
+                            <span className={cn('text-[10px] font-bold', PRIORITY_COLORS[ticket.priority || 'normal'])}>● {PRIORITY_LABELS[ticket.priority || 'normal']}</span>
+                          </div>
+                          <p className="text-xs font-semibold text-gray-800 line-clamp-2 mb-1">{ticket.subject}</p>
+                          <p className="text-[11px] text-gray-500">{ticket.customerName}</p>
+                          {ticket.assignedName && (
+                            <p className="text-[10px] text-blue-500 mt-1">👤 {ticket.assignedName}</p>
+                          )}
+                        </div>
+                      ))}
+                      {colTickets.length === 0 && (
+                        <div className="flex items-center justify-center h-16 text-gray-300 text-xs border-2 border-dashed border-gray-200 rounded-lg m-1">
+                          Buraya sürükle
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
+            /* LİSTE GÖRÜNÜMÜ */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filtered.map(ticket => (
                 <div
@@ -464,7 +577,10 @@ export default function ServiceManager() {
                   <h3 className="font-bold text-gray-900 mb-1 text-sm line-clamp-1">{ticket.subject}</h3>
                   <p className="text-xs text-gray-500 mb-0.5">{ticket.customerName}</p>
                   {ticket.customerPhone && (
-                    <p className="text-xs text-gray-400 mb-2">{ticket.customerPhone}</p>
+                    <p className="text-xs text-gray-400 mb-1">{ticket.customerPhone}</p>
+                  )}
+                  {ticket.dealerName && (
+                    <p className="text-xs text-blue-500 flex items-center gap-1 mb-1"><Building2 className="w-3 h-3" /> {ticket.dealerName}</p>
                   )}
                   <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-100 text-xs text-gray-400">
                     <span className={cn('font-semibold', PRIORITY_COLORS[ticket.priority || 'normal'])}>
@@ -770,12 +886,25 @@ export default function ServiceManager() {
                       <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
                         <ImageIcon className="w-3.5 h-3.5 text-blue-500" /> Cihaz Görselleri ({ticketAttachments.length})
                       </p>
-                      <button
-                        onClick={() => setIsMediaPickerOpen(true)}
-                        className="text-xs text-blue-600 hover:underline font-bold flex items-center gap-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Fotoğraf Ekle
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <label className="text-xs text-blue-600 hover:underline font-bold flex items-center gap-1 cursor-pointer">
+                          <Camera className="w-3.5 h-3.5" /> {cameraUploading ? 'Yükleniyor...' : 'Kamerayı Aç'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleCameraCapture}
+                            disabled={cameraUploading}
+                            className="hidden"
+                          />
+                        </label>
+                        <button
+                          onClick={() => setIsMediaPickerOpen(true)}
+                          className="text-xs text-blue-600 hover:underline font-bold flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Fotoğraf Ekle
+                        </button>
+                      </div>
                     </div>
 
                     {ticketAttachments.length === 0 ? (
@@ -1020,6 +1149,46 @@ export default function ServiceManager() {
                   </select>
                 </div>
               </div>
+
+              {/* FAZ 2B: Bayi Entegrasyonu Seçimi */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kanal / Kaynak</label>
+                  <select
+                    value={newTicket.source}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setNewTicket(prev => ({
+                        ...prev,
+                        source: val,
+                        dealerId: val !== 'dealer' ? '' : prev.dealerId
+                      }));
+                    }}
+                    className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="walk_in">Elden Teslim (Walk-in)</option>
+                    <option value="dealer">Bayi Kanalı</option>
+                    <option value="online">Online Başvuru</option>
+                    <option value="phone">Telefon</option>
+                  </select>
+                </div>
+                {newTicket.source === 'dealer' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Aracı Bayi</label>
+                    <select
+                      value={newTicket.dealerId}
+                      onChange={e => setNewTicket({ ...newTicket, dealerId: e.target.value })}
+                      className="w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">Bayi Seçin...</option>
+                      {dealers.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama / Şikayet</label>
                 <textarea rows={3} value={newTicket.description}

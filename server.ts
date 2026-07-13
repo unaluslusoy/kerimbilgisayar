@@ -84,6 +84,9 @@ import {
   blockedIps,
   shipments,
   expenses,
+  invoices,
+  invoiceItems,
+  payments,
   // FAZ 1 Yeni Tablolar:
   dealerLedger,
   exchangeRates,
@@ -1483,6 +1486,7 @@ async function startServer() {
   app.get('/api/admin/tickets', requireAdmin, async (req, res) => {
     try {
       const { status } = req.query;
+      const dealerAlias = alias(companies, 'dealer');
       let query = db.select({
         id: tickets.id,
         ticketNumber: tickets.ticketNumber,
@@ -1503,10 +1507,14 @@ async function startServer() {
         deviceModel: devices.model,
         assignedTo: tickets.assignedTo,
         laborCost: tickets.laborCost,
+        dealerId: tickets.dealerId,
+        dealerName: dealerAlias.name,
       }).from(tickets)
         .leftJoin(users, eq(tickets.userId, users.id))
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
+        .leftJoin(dealerAlias, eq(tickets.dealerId, dealerAlias.id))
         .orderBy(desc(tickets.createdAt));
+
       
       const results = await query;
       
@@ -1525,7 +1533,7 @@ async function startServer() {
 
   app.post('/api/admin/tickets', requireAdmin, async (req, res) => {
     try {
-      const { subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost } = req.body;
+      const { subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost, dealerId, source } = req.body;
       
       let userId: number | null = null;
       let deviceId: number | null = null;
@@ -1609,7 +1617,9 @@ async function startServer() {
           description: description || '',
           priority: priority || 'normal',
           status: 'yeni',
-          cost: cost || '0.00'
+          cost: cost || '0.00',
+          dealerId: dealerId ? parseInt(dealerId as string) : null,
+          source: source || 'walk_in',
         });
       });
 
@@ -1639,6 +1649,47 @@ async function startServer() {
       if (status === 'cozuldu' || status === 'kapatildi') updateData.resolvedAt = new Date();
       
       await db.update(tickets).set(updateData).where(eq(tickets.id, parseInt(req.params.id)));
+
+      // FAZ 2B: Bayi Borçlandırma Entegrasyonu
+      if (status === 'teslim_edildi') {
+        const ticketId = parseInt(req.params.id);
+        const ticket = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+        if (ticket.length > 0 && ticket[0].dealerId) {
+          const dealerId = ticket[0].dealerId;
+          const parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, ticketId));
+          const partsTotal = parts.reduce((sum, p) => sum + parseFloat(p.totalPrice || '0'), 0);
+          const laborCostVal = parseFloat(ticket[0].laborCost || '0');
+          const grandTotal = partsTotal + laborCostVal;
+
+          if (grandTotal > 0) {
+            const existing = await db.select().from(dealerLedger)
+              .where(and(
+                eq(dealerLedger.ticketId, ticketId),
+                eq(dealerLedger.type, 'debit'),
+                eq(dealerLedger.isReversed, false)
+              )).limit(1);
+
+            if (existing.length === 0) {
+              const company = await db.select().from(companies).where(eq(companies.id, dealerId)).limit(1);
+              const dueDays = company[0]?.dealerDueDays || 0;
+              const dueDate = new Date();
+              dueDate.setDate(dueDate.getDate() + dueDays);
+
+              await db.insert(dealerLedger).values({
+                tenantId: 1,
+                dealerCompanyId: dealerId,
+                ticketId,
+                type: 'debit',
+                amount: grandTotal.toFixed(2),
+                currency: 'TRY',
+                description: `${ticket[0].ticketNumber} nolu cihaz teslim edildi. (İşçilik: ${laborCostVal.toFixed(2)} TL, Parça: ${partsTotal.toFixed(2)} TL)`,
+                dueDate: dueDate,
+              });
+            }
+          }
+        }
+      }
+
 
       // Send status change email & WhatsApp
       if (status) {
