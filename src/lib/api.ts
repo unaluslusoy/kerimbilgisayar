@@ -167,6 +167,18 @@ export async function updateAdminTicket(id: number, data: any) {
   return adminRequest(`/api/admin/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
+export async function fetchTicketParts(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/parts`);
+}
+
+export async function addTicketPart(ticketId: number, data: { stockItemId: number; quantity: number; unitPrice: number }) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/parts`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function deleteTicketPart(partId: number) {
+  return adminRequest(`/api/admin/tickets/parts/${partId}`, { method: 'DELETE' });
+}
+
 // Stock
 export async function fetchAdminStock() {
   return adminRequest('/api/admin/stock');

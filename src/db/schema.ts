@@ -68,6 +68,12 @@ export const companies = mysqlTable('companies', {
   website: varchar('website', { length: 255 }),
   sector: varchar('sector', { length: 100 }),
   type: mysqlEnum('type', ['lead', 'customer', 'partner', 'vendor']).default('lead'),
+  // --- FAZ 1B: Bayi (Dealer) Genişletmesi ---
+  dealerType: mysqlEnum('dealer_type', ['none', 'dealer']).default('none'),
+  dealerRiskLimit: decimal('dealer_risk_limit', { precision: 15, scale: 2 }),
+  dealerDueDays: int('dealer_due_days').default(0),
+  dealerDiscountRate: decimal('dealer_discount_rate', { precision: 5, scale: 2 }).default('0.00'),
+  dealerPriceListNote: text('dealer_price_list_note'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
@@ -98,9 +104,17 @@ export const users = mysqlTable('users', {
   passwordHash: varchar('password_hash', { length: 255 }),
   phone: varchar('phone', { length: 20 }),
   avatarUrl: varchar('avatar_url', { length: 500 }),
-  roleType: mysqlEnum('role_type', ['superadmin', 'tenant_admin', 'staff', 'technician', 'customer']).default('customer'),
+  roleType: mysqlEnum('role_type', ['superadmin', 'tenant_admin', 'staff', 'technician', 'customer', 'dealer_user']).default('customer'),
   isActive: boolean('is_active').default(true),
   lastLoginAt: timestamp('last_login_at'),
+  // --- FAZ 1A: Cari Alan Genişletmesi (tümü nullable - migration güvenli) ---
+  taxNumber: varchar('tax_number', { length: 50 }),
+  taxOffice: varchar('tax_office', { length: 100 }),
+  tcNo: varchar('tc_no', { length: 11 }),
+  kvkkConsent: boolean('kvkk_consent').default(false),
+  kvkkConsentAt: timestamp('kvkk_consent_at'),
+  currency: varchar('currency', { length: 10 }).default('TRY'),
+  userNotes: text('user_notes'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 }, (t) => ({
@@ -118,6 +132,10 @@ export const customers = mysqlTable('customers', {
   creditLimit: decimal('credit_limit', { precision: 10, scale: 2 }).default('0.00'),
   notes: text('notes'),
   isActive: boolean('is_active').default(true),
+  // --- FAZ 1A: Cari Finansal Alanlar ---
+  riskLimit: decimal('risk_limit', { precision: 15, scale: 2 }),
+  defaultDueDays: int('default_due_days').default(0),
+  discountRate: decimal('discount_rate', { precision: 5, scale: 2 }).default('0.00'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 }, (t) => ({
@@ -255,6 +273,9 @@ export const tickets = mysqlTable('tickets', {
   deliveredAt: timestamp('delivered_at'),
   customerSignature: text('customer_signature'),
   deliverySignature: text('delivery_signature'),
+  // --- FAZ 1B: Bayi Entegrasyonu ---
+  dealerId: int('dealer_id').references(() => companies.id),
+  source: mysqlEnum('source', ['walk_in', 'dealer', 'online', 'phone']).default('walk_in'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
   resolvedAt: timestamp('resolved_at'),
@@ -263,6 +284,7 @@ export const tickets = mysqlTable('tickets', {
   userIdx: index('idx_tickets_user').on(t.userId),
   statusIdx: index('idx_tickets_status').on(t.status),
   deviceIdx: index('idx_tickets_device').on(t.deviceId),
+  dealerIdx: index('idx_tickets_dealer').on(t.dealerId),
 }));
 
 export const ticketMessages = mysqlTable('ticket_messages', {
@@ -373,12 +395,17 @@ export const payments = mysqlTable('payments', {
   tenantId: int('tenant_id').references(() => tenants.id),
   invoiceId: int('invoice_id').references(() => invoices.id),
   companyId: int('company_id').references(() => companies.id),
+  ticketId: int('ticket_id').references(() => tickets.id),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   paymentMethod: mysqlEnum('payment_method', ['kredi_karti', 'havale_eft', 'nakit', 'diger']).notNull(),
-  status: mysqlEnum('status', ['basarili', 'basarisiz', 'bekliyor', 'iade']).default('basarili'),
+  status: mysqlEnum('status', ['basarili', 'basarisiz', 'bekliyor', 'iade', 'iptal']).default('basarili'),
   transactionId: varchar('transaction_id', { length: 100 }),
   notes: text('notes'),
   paymentDate: timestamp('payment_date').defaultNow(),
+  // --- FAZ 3A: Ters Kayit (Reversal) Pattern ---
+  reversalOfId: int('reversal_of_id'),
+  reversedAt: timestamp('reversed_at'),
+  reversedByUserId: int('reversed_by_user_id').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -848,4 +875,80 @@ export const expenses = mysqlTable('expenses', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
+
+// ============================================================
+// FAZ 1B — BAYİ DEFTERİ (Dealer Ledger)
+// ============================================================
+// Bayi cari hareketleri: DEBIT (borç - teslim), CREDIT (alacak - ödeme)
+export const dealerLedger = mysqlTable('dealer_ledger', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  dealerCompanyId: int('dealer_company_id').references(() => companies.id).notNull(),
+  ticketId: int('ticket_id').references(() => tickets.id),
+  paymentId: int('payment_id').references(() => payments.id),
+  type: mysqlEnum('type', ['debit', 'credit']).notNull(), // debit=borçlandırma, credit=ödeme
+  amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+  currency: varchar('currency', { length: 10 }).default('TRY'),
+  description: varchar('description', { length: 500 }),
+  dueDate: date('due_date'),
+  // Ters kayıt için:
+  reversalOfId: int('reversal_of_id'),
+  isReversed: boolean('is_reversed').default(false),
+  // FIFO mahsup referansı:
+  reconciledWith: int('reconciled_with'),
+  reconciledAmount: decimal('reconciled_amount', { precision: 15, scale: 2 }),
+  createdByUserId: int('created_by_user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  dealerIdx: index('idx_dealer_ledger_company').on(t.dealerCompanyId),
+  ticketIdx: index('idx_dealer_ledger_ticket').on(t.ticketId),
+}));
+
+// ============================================================
+// FAZ 1D — DÖVİZ KURLARI (Exchange Rates)
+// ============================================================
+export const exchangeRates = mysqlTable('exchange_rates', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  baseCurrency: varchar('base_currency', { length: 10 }).notNull().default('TRY'),
+  targetCurrency: varchar('target_currency', { length: 10 }).notNull(),
+  rate: decimal('rate', { precision: 15, scale: 6 }).notNull(),
+  source: mysqlEnum('source', ['tcmb', 'manual', 'carried_over']).default('tcmb'),
+  rateDate: date('rate_date').notNull(), // Hangi güne ait kur
+  fetchedAt: timestamp('fetched_at').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  dateIdx: index('idx_exchange_rates_date').on(t.rateDate),
+  currencyIdx: index('idx_exchange_rates_currency').on(t.targetCurrency),
+}));
+
+// ============================================================
+// FAZ 1D — DÖNEM KİLİTLERİ (Period Locks)
+// ============================================================
+export const periodLocks = mysqlTable('period_locks', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  year: int('year').notNull(),
+  month: int('month').notNull(), // 1-12
+  lockedAt: timestamp('locked_at').defaultNow(),
+  lockedByUserId: int('locked_by_user_id').references(() => users.id),
+  notes: text('notes'),
+}, (t) => ({
+  periodIdx: index('idx_period_locks_period').on(t.year, t.month),
+}));
+
+// ============================================================
+// FAZ 2A — FİŞ FOTOĞRAF FAZLARI (ticketAttachments genişletmesi)
+// NOT: ticketAttachments tablosuna doğrudan alan eklenemez (FK constraint var)
+// Bu nedenle ayrı bir meta tablo kullanıyoruz
+// ============================================================
+export const ticketAttachmentMeta = mysqlTable('ticket_attachment_meta', {
+  id: int('id').autoincrement().primaryKey(),
+  attachmentId: int('attachment_id').references(() => ticketAttachments.id).notNull(),
+  phase: mysqlEnum('phase', ['teslim_alim', 'tamir', 'teslim', 'genel']).default('genel'),
+  isLocked: boolean('is_locked').default(false), // Teslim alım fazı kilitlenir
+  lockedAt: timestamp('locked_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 

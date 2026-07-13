@@ -53,6 +53,7 @@ import {
   tickets,
   ticketMessages,
   ticketAttachments,
+  ticketParts,
   stockItems,
   leads,
   forms,
@@ -82,7 +83,12 @@ import {
   serializedItems,
   blockedIps,
   shipments,
-  expenses
+  expenses,
+  // FAZ 1 Yeni Tablolar:
+  dealerLedger,
+  exchangeRates,
+  periodLocks,
+  ticketAttachmentMeta,
 } from './src/db/schema';
 
 import { eq, desc, and, sql, asc, like } from 'drizzle-orm';
@@ -1495,6 +1501,8 @@ async function startServer() {
         deviceType: devices.deviceType,
         deviceBrand: devices.brand,
         deviceModel: devices.model,
+        assignedTo: tickets.assignedTo,
+        laborCost: tickets.laborCost,
       }).from(tickets)
         .leftJoin(users, eq(tickets.userId, users.id))
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
@@ -1621,11 +1629,13 @@ async function startServer() {
 
   app.patch('/api/admin/tickets/:id', requireAdmin, async (req, res) => {
     try {
-      const { status, priority, cost } = req.body;
+      const { status, priority, cost, assignedTo, laborCost } = req.body;
       const updateData: any = { updatedAt: new Date() };
       if (status) updateData.status = status;
       if (priority) updateData.priority = priority;
       if (cost !== undefined) updateData.cost = cost;
+      if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
+      if (laborCost !== undefined) updateData.laborCost = laborCost;
       if (status === 'cozuldu' || status === 'kapatildi') updateData.resolvedAt = new Date();
       
       await db.update(tickets).set(updateData).where(eq(tickets.id, parseInt(req.params.id)));
@@ -1749,6 +1759,434 @@ async function startServer() {
       res.status(500).json({ error: e.message });
     }
   });
+
+  // ============================================================
+  // TICKET PARTS (Servis Yedek Parça & İşlemler)
+  // ============================================================
+
+  app.get('/api/admin/tickets/:id/parts', requireAdmin, async (req, res) => {
+    try {
+      const parts = await db.select({
+        id: ticketParts.id,
+        ticketId: ticketParts.ticketId,
+        stockItemId: ticketParts.stockItemId,
+        quantity: ticketParts.quantity,
+        unitPrice: ticketParts.unitPrice,
+        totalPrice: ticketParts.totalPrice,
+        createdAt: ticketParts.createdAt,
+        stockItemName: stockItems.name,
+        stockItemSku: stockItems.sku
+      }).from(ticketParts)
+        .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
+        .where(eq(ticketParts.ticketId, parseInt(req.params.id)))
+        .orderBy(desc(ticketParts.createdAt));
+        
+      res.json(parts);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/tickets/:id/parts', requireAdmin, async (req, res) => {
+    try {
+      const { stockItemId, quantity, unitPrice } = req.body;
+      const q = parseInt(quantity) || 1;
+      const price = parseFloat(unitPrice) || 0;
+      const total = q * price;
+      
+      await db.transaction(async (tx) => {
+        // Add to ticketParts
+        await tx.insert(ticketParts).values({
+          tenantId: 1,
+          ticketId: parseInt(req.params.id),
+          stockItemId: parseInt(stockItemId),
+          quantity: q,
+          unitPrice: price.toString(),
+          totalPrice: total.toString()
+        });
+
+        // Deduct from stock
+        const item = await tx.select().from(stockItems).where(eq(stockItems.id, parseInt(stockItemId))).limit(1);
+        if (item.length > 0) {
+          const newStock = (item[0].currentStock || 0) - q;
+          await tx.update(stockItems).set({ currentStock: newStock }).where(eq(stockItems.id, parseInt(stockItemId)));
+        }
+      });
+      
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/tickets/parts/:partId', requireAdmin, async (req, res) => {
+    try {
+      await db.transaction(async (tx) => {
+        const part = await tx.select().from(ticketParts).where(eq(ticketParts.id, parseInt(req.params.partId))).limit(1);
+        if (part.length > 0) {
+          // Restore stock
+          const item = await tx.select().from(stockItems).where(eq(stockItems.id, part[0].stockItemId)).limit(1);
+          if (item.length > 0) {
+            const newStock = (item[0].currentStock || 0) + part[0].quantity;
+            await tx.update(stockItems).set({ currentStock: newStock }).where(eq(stockItems.id, part[0].stockItemId));
+          }
+          // Delete part
+          await tx.delete(ticketParts).where(eq(ticketParts.id, parseInt(req.params.partId)));
+        }
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+
+  // ============================================================
+  // FAZ 1B — BAYİ YÖNETİMİ (Dealer Management)
+  // ============================================================
+
+  // Tüm bayileri getir
+  app.get('/api/admin/dealers', requireAdmin, async (req, res) => {
+    try {
+      const dealers = await db.select().from(companies)
+        .where(eq(companies.dealerType, 'dealer'))
+        .orderBy(companies.name);
+      res.json(dealers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bayi cari bakiyesini hesapla
+  app.get('/api/admin/dealers/:id/balance', requireAdmin, async (req, res) => {
+    try {
+      const dealerId = parseInt(req.params.id);
+      const ledgerRows = await db.select().from(dealerLedger)
+        .where(and(eq(dealerLedger.dealerCompanyId, dealerId), eq(dealerLedger.isReversed, false)));
+      
+      let balance = 0;
+      for (const row of ledgerRows) {
+        const amt = parseFloat(row.amount as string);
+        if (row.type === 'debit') balance += amt;   // Borç (bize borçlu)
+        else balance -= amt;                          // Ödeme (borç azaldı)
+      }
+      
+      const company = await db.select().from(companies).where(eq(companies.id, dealerId)).limit(1);
+      res.json({
+        dealerId,
+        companyName: company[0]?.name || '—',
+        balance: balance.toFixed(2),
+        riskLimit: company[0]?.dealerRiskLimit || null,
+        dueDays: company[0]?.dealerDueDays || 0,
+        ledgerCount: ledgerRows.length,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bayi cari hareketleri
+  app.get('/api/admin/dealers/:id/ledger', requireAdmin, async (req, res) => {
+    try {
+      const dealerId = parseInt(req.params.id);
+      const rows = await db.select({
+        id: dealerLedger.id,
+        type: dealerLedger.type,
+        amount: dealerLedger.amount,
+        currency: dealerLedger.currency,
+        description: dealerLedger.description,
+        dueDate: dealerLedger.dueDate,
+        isReversed: dealerLedger.isReversed,
+        createdAt: dealerLedger.createdAt,
+        ticketId: dealerLedger.ticketId,
+        ticketNumber: tickets.ticketNumber,
+      }).from(dealerLedger)
+        .leftJoin(tickets, eq(dealerLedger.ticketId, tickets.id))
+        .where(eq(dealerLedger.dealerCompanyId, dealerId))
+        .orderBy(desc(dealerLedger.createdAt))
+        .limit(200);
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Manuel bayi ledger kaydı (ödeme, düzeltme)
+  app.post('/api/admin/dealers/:id/ledger', requireAdmin, async (req, res) => {
+    try {
+      const dealerId = parseInt(req.params.id);
+      const { type, amount, description, dueDate, currency } = req.body;
+      const adminUser = (req as any).adminUser;
+      if (!type || !amount) return res.status(400).json({ error: 'type ve amount zorunlu' });
+      await db.insert(dealerLedger).values({
+        tenantId: 1,
+        dealerCompanyId: dealerId,
+        type,
+        amount: parseFloat(amount).toFixed(2),
+        currency: currency || 'TRY',
+        description,
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        createdByUserId: adminUser?.userId,
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bayi ledger kaydı iptal (ters kayıt)
+  app.post('/api/admin/dealers/ledger/:entryId/reverse', requireAdmin, async (req, res) => {
+    try {
+      const entryId = parseInt(req.params.entryId);
+      const adminUser = (req as any).adminUser;
+      const entry = await db.select().from(dealerLedger).where(eq(dealerLedger.id, entryId)).limit(1);
+      if (!entry.length) return res.status(404).json({ error: 'Kayıt bulunamadı' });
+      if (entry[0].isReversed) return res.status(400).json({ error: 'Bu kayıt zaten iptal edildi' });
+
+      await db.transaction(async (tx) => {
+        // Orijinali "iptal edildi" olarak işaretle
+        await tx.update(dealerLedger).set({ isReversed: true }).where(eq(dealerLedger.id, entryId));
+        // Ters kayıt oluştur
+        await tx.insert(dealerLedger).values({
+          tenantId: entry[0].tenantId || 1,
+          dealerCompanyId: entry[0].dealerCompanyId,
+          type: entry[0].type === 'debit' ? 'credit' : 'debit',
+          amount: entry[0].amount,
+          currency: entry[0].currency || 'TRY',
+          description: `İPTAL - ${entry[0].description || `Kayıt #${entryId}`}`,
+          reversalOfId: entryId,
+          createdByUserId: adminUser?.userId,
+        });
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bayiyi companies üzerinden düzenle
+  app.patch('/api/admin/dealers/:id', requireAdmin, async (req, res) => {
+    try {
+      const { dealerType, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote, name } = req.body;
+      const updateData: any = { updatedAt: new Date() };
+      if (dealerType !== undefined) updateData.dealerType = dealerType;
+      if (dealerRiskLimit !== undefined) updateData.dealerRiskLimit = dealerRiskLimit;
+      if (dealerDueDays !== undefined) updateData.dealerDueDays = dealerDueDays;
+      if (dealerDiscountRate !== undefined) updateData.dealerDiscountRate = dealerDiscountRate;
+      if (dealerPriceListNote !== undefined) updateData.dealerPriceListNote = dealerPriceListNote;
+      if (name !== undefined) updateData.name = name;
+      await db.update(companies).set(updateData).where(eq(companies.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // FAZ 1D — DÖVİZ KURLARI (Exchange Rates)
+  // ============================================================
+
+  // Belirli bir tarih/para birimi için kur
+  app.get('/api/admin/rates', requireAdmin, async (req, res) => {
+    try {
+      const { currency, date } = req.query;
+      let query = db.select().from(exchangeRates);
+      if (currency) (query as any).where(eq(exchangeRates.targetCurrency, String(currency)));
+      const rates = await db.select().from(exchangeRates)
+        .where(currency ? eq(exchangeRates.targetCurrency, String(currency)) : sql`1=1`)
+        .orderBy(desc(exchangeRates.rateDate))
+        .limit(30);
+      res.json(rates);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // TCMB'den kur çek (manuel tetikleme)
+  app.post('/api/admin/rates/fetch-tcmb', requireAdmin, async (req, res) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      // TCMB XML endpoint
+      const response = await fetch('https://www.tcmb.gov.tr/kurlar/today.xml');
+      if (!response.ok) return res.status(502).json({ error: 'TCMB bağlantı hatası' });
+      const xmlText = await response.text();
+      
+      // Basit XML parse (regex) — USD, EUR, GBP çek
+      const currencies = ['USD', 'EUR', 'GBP'];
+      const results: any[] = [];
+
+      for (const curr of currencies) {
+        const forexBuying = xmlText.match(new RegExp(`<Currency CurrencyCode="${curr}">[^]*?<ForexBuying>([^<]+)<`, 'i'));
+        const forexSelling = xmlText.match(new RegExp(`<Currency CurrencyCode="${curr}">[^]*?<ForexSelling>([^<]+)<`, 'i'));
+        if (forexSelling && forexSelling[1]) {
+          const rate = parseFloat(forexSelling[1].replace(',', '.'));
+          if (rate > 0) {
+            // Bugünkü kur zaten varsa güncelle, yoksa ekle
+            const existing = await db.select().from(exchangeRates)
+              .where(and(eq(exchangeRates.targetCurrency, curr), eq(exchangeRates.rateDate, today as any)))
+              .limit(1);
+            
+            if (existing.length > 0) {
+              await db.update(exchangeRates).set({ rate: rate.toString(), fetchedAt: new Date(), source: 'tcmb' })
+                .where(eq(exchangeRates.id, existing[0].id));
+            } else {
+              await db.insert(exchangeRates).values({
+                tenantId: 1,
+                baseCurrency: 'TRY',
+                targetCurrency: curr,
+                rate: rate.toString(),
+                source: 'tcmb',
+                rateDate: today as any,
+              });
+            }
+            results.push({ currency: curr, rate });
+          }
+        }
+      }
+      res.json({ success: true, fetched: results, date: today });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Manuel kur girişi
+  app.post('/api/admin/rates', requireAdmin, async (req, res) => {
+    try {
+      const { targetCurrency, rate, rateDate } = req.body;
+      if (!targetCurrency || !rate || !rateDate) return res.status(400).json({ error: 'targetCurrency, rate ve rateDate zorunlu' });
+      
+      const existing = await db.select().from(exchangeRates)
+        .where(and(eq(exchangeRates.targetCurrency, targetCurrency), eq(exchangeRates.rateDate, rateDate)))
+        .limit(1);
+      
+      if (existing.length > 0) {
+        await db.update(exchangeRates).set({ rate: String(rate), source: 'manual' }).where(eq(exchangeRates.id, existing[0].id));
+      } else {
+        await db.insert(exchangeRates).values({ tenantId: 1, baseCurrency: 'TRY', targetCurrency, rate: String(rate), source: 'manual', rateDate });
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // FAZ 1D — DÖNEM KİLİTLERİ (Period Locks)
+  // ============================================================
+
+  // Tüm dönem kilitlerini getir
+  app.get('/api/admin/period-locks', requireAdmin, async (req, res) => {
+    try {
+      const locks = await db.select().from(periodLocks).orderBy(desc(periodLocks.year), desc(periodLocks.month));
+      res.json(locks);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Dönem kilitle
+  app.post('/api/admin/period-locks', requireAdmin, async (req, res) => {
+    try {
+      const { year, month, notes } = req.body;
+      const adminUser = (req as any).adminUser;
+      if (!year || !month) return res.status(400).json({ error: 'year ve month zorunlu' });
+
+      // Zaten kilitli mi?
+      const existing = await db.select().from(periodLocks)
+        .where(and(eq(periodLocks.year, parseInt(year)), eq(periodLocks.month, parseInt(month))))
+        .limit(1);
+      if (existing.length > 0) return res.status(409).json({ error: 'Bu dönem zaten kilitli' });
+
+      await db.insert(periodLocks).values({
+        tenantId: 1,
+        year: parseInt(year),
+        month: parseInt(month),
+        notes,
+        lockedByUserId: adminUser?.userId,
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Dönem kilidini kaldır (sadece superadmin)
+  app.delete('/api/admin/period-locks/:id', requireAdmin, async (req, res) => {
+    try {
+      const adminUser = (req as any).adminUser;
+      if (adminUser?.role !== 'superadmin' && adminUser?.role !== 'tenant_admin') {
+        return res.status(403).json({ error: 'Bu işlem için süper yönetici yetkisi gerekli' });
+      }
+      await db.delete(periodLocks).where(eq(periodLocks.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // FAZ 3A — ÖDEME TERS KAYIT (Payment Reversal)
+  // ============================================================
+
+  app.post('/api/admin/payments/:id/reverse', requireAdmin, async (req, res) => {
+    try {
+      const paymentId = parseInt(req.params.id);
+      const adminUser = (req as any).adminUser;
+      const payment = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
+      if (!payment.length) return res.status(404).json({ error: 'Ödeme bulunamadı' });
+      if (payment[0].status === 'iptal') return res.status(400).json({ error: 'Bu ödeme zaten iptal edilmiş' });
+      if (payment[0].reversalOfId) return res.status(400).json({ error: 'Bu kayıt zaten bir ters kayıttır' });
+
+      await db.transaction(async (tx) => {
+        // Mevcut ödemeyi iptal et
+        await tx.update(payments).set({
+          status: 'iptal',
+          reversedAt: new Date(),
+          reversedByUserId: adminUser?.userId,
+        }).where(eq(payments.id, paymentId));
+
+        // Ters kayıt oluştur (negatif)
+        await tx.insert(payments).values({
+          tenantId: payment[0].tenantId || 1,
+          invoiceId: payment[0].invoiceId,
+          companyId: payment[0].companyId,
+          ticketId: (payment[0] as any).ticketId || null,
+          amount: payment[0].amount,
+          paymentMethod: payment[0].paymentMethod,
+          status: 'iptal' as any,
+          notes: `TERS KAYIT - Orijinal ödeme #${paymentId} iptal edildi`,
+          reversalOfId: paymentId,
+          reversedByUserId: adminUser?.userId,
+          reversedAt: new Date(),
+        } as any);
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Ödemeleri listele (ticketId filter desteği eklendi)
+  app.get('/api/admin/payments', requireAdmin, async (req, res) => {
+    try {
+      const { ticketId } = req.query;
+      let rows;
+      if (ticketId) {
+        rows = await db.select().from(payments)
+          .where(eq((payments as any).ticketId, parseInt(String(ticketId))))
+          .orderBy(desc(payments.createdAt));
+      } else {
+        rows = await db.select().from(payments).orderBy(desc(payments.createdAt)).limit(100);
+      }
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // FAZ 3C — AUDİT LOG HELPER (Merkezi log fonksiyonu)
+  // ============================================================
 
   // ============================================================
   // ADMIN API — NOTIFICATIONS (Sistem Bildirimleri)

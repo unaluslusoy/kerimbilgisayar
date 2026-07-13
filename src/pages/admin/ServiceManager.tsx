@@ -2,7 +2,7 @@ import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, 
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import { mediaUrl } from '../../lib/media';
 
@@ -73,6 +73,18 @@ export default function ServiceManager() {
   const [costValue, setCostValue] = useState('');
   const [costSaving, setCostSaving] = useState(false);
 
+  // Yeni Özellikler: Personel, Yedek Parça, İşçilik
+  const [staffUsers, setStaffUsers] = useState<any[]>([]);
+  const [stockItems, setStockItems] = useState<any[]>([]);
+  const [ticketParts, setTicketParts] = useState<any[]>([]);
+  const [isAddingPart, setIsAddingPart] = useState(false);
+  const [selectedStockId, setSelectedStockId] = useState('');
+  const [partQuantity, setPartQuantity] = useState('1');
+  const [partUnitPrice, setPartUnitPrice] = useState('');
+  const [laborCostValue, setLaborCostValue] = useState('');
+  const [isSavingLabor, setIsSavingLabor] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
+
   const [newTicket, setNewTicket] = useState({
     subject: '',
     description: '',
@@ -97,7 +109,25 @@ export default function ServiceManager() {
     }
   };
 
-  useEffect(() => { loadTickets(); }, []);
+  const loadDependencies = async () => {
+    try {
+      const [users, stock] = await Promise.all([
+        fetchAdminUsers(),
+        fetchAdminStock()
+      ]);
+      // Sadece admin ve teknisyenleri filtrele
+      const staff = users.filter((u: any) => u.roleType === 'superadmin' || u.roleType === 'tenant_admin' || u.roleType === 'staff' || u.roleType === 'technician');
+      setStaffUsers(staff);
+      setStockItems(stock);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => { 
+    loadTickets(); 
+    loadDependencies();
+  }, []);
 
   // Filter counts
   const statusCounts: Record<string, number> = { all: tickets.length };
@@ -159,8 +189,17 @@ export default function ServiceManager() {
   const openDetail = async (ticket: any) => {
     setDetailTicket(ticket);
     setCostValue(ticket.cost || '');
+    setLaborCostValue(ticket.laborCost || '');
     setEditingCost(false);
     setNoteText('');
+    
+    try {
+      const parts = await fetchTicketParts(ticket.id);
+      setTicketParts(parts || []);
+    } catch (e) {
+      setTicketParts([]);
+    }
+
     try {
       const msgs = await fetchTicketMessages(ticket.id);
       setTicketNotes(msgs);
@@ -253,7 +292,67 @@ export default function ServiceManager() {
       setIsCreatingShipment(false);
     }
   };
+  const handleAssignUser = async (userId: string) => {
+    if (!detailTicket) return;
+    setIsAssigning(true);
+    try {
+      await updateAdminTicket(detailTicket.id, { assignedTo: userId ? parseInt(userId) : null });
+      setDetailTicket((prev: any) => ({ ...prev, assignedTo: userId ? parseInt(userId) : null }));
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, assignedTo: userId ? parseInt(userId) : null } : t));
+    } catch (e: any) {
+      alert('Atama hatası: ' + e.message);
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
+  const handleAddPart = async () => {
+    if (!detailTicket || !selectedStockId) return;
+    setIsAddingPart(true);
+    try {
+      await addTicketPart(detailTicket.id, {
+        stockItemId: parseInt(selectedStockId),
+        quantity: parseInt(partQuantity) || 1,
+        unitPrice: parseFloat(partUnitPrice) || 0
+      });
+      const parts = await fetchTicketParts(detailTicket.id);
+      setTicketParts(parts || []);
+      setSelectedStockId('');
+      setPartQuantity('1');
+      setPartUnitPrice('');
+      alert('Parça/İşlem başarıyla eklendi.');
+    } catch (e: any) {
+      alert('Parça eklenirken hata: ' + e.message);
+    } finally {
+      setIsAddingPart(false);
+    }
+  };
+
+  const handleRemovePart = async (partId: number) => {
+    if (!window.confirm('Bu parçayı/işlemi silmek istediğinize emin misiniz? Stok iade edilecektir.')) return;
+    try {
+      await deleteTicketPart(partId);
+      const parts = await fetchTicketParts(detailTicket?.id);
+      setTicketParts(parts || []);
+    } catch (e: any) {
+      alert('Silme hatası: ' + e.message);
+    }
+  };
+
+  const handleSaveLabor = async () => {
+    if (!detailTicket) return;
+    setIsSavingLabor(true);
+    try {
+      const laborCost = parseFloat(laborCostValue) || 0;
+      await updateAdminTicket(detailTicket.id, { laborCost });
+      setDetailTicket((prev: any) => ({ ...prev, laborCost }));
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, laborCost } : t));
+    } catch (e: any) {
+      alert('İşçilik kaydedilirken hata: ' + e.message);
+    } finally {
+      setIsSavingLabor(false);
+    }
+  };
   const FILTER_TABS = [
     { key: 'all', label: 'Tümü' },
     { key: 'yeni', label: 'Servise Alındı' },
@@ -493,54 +592,147 @@ export default function ServiceManager() {
                     </div>
                   </div>
 
-                  {/* Maliyet */}
-                  <div className="border border-gray-200 rounded-2xl p-4 bg-slate-50/30">
+                  {/* Personel Atama */}
+                  <div className="border border-gray-200 rounded-2xl p-4 bg-blue-50/30">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1">
-                        <DollarSign className="w-3.5 h-3.5" /> Servis Ücreti / Maliyet
-                      </p>
-                      {!editingCost && (
-                        <button
-                          onClick={() => { setEditingCost(true); setCostValue(detailTicket.cost || ''); }}
-                          className="text-xs text-blue-600 hover:underline font-bold"
-                        >
-                          Düzenle
-                        </button>
-                      )}
+                      <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">İlgilenen Personel / Teknisyen</p>
                     </div>
-                    {editingCost ? (
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">₺</span>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={detailTicket.assignedTo || ''}
+                        onChange={e => handleAssignUser(e.target.value)}
+                        disabled={isAssigning}
+                        className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none disabled:opacity-50"
+                      >
+                        <option value="">Atanmadı</option>
+                        {staffUsers.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.firstName} {u.lastName} ({u.roleType === 'technician' ? 'Teknisyen' : 'Personel'})
+                          </option>
+                        ))}
+                      </select>
+                      {isAssigning && <span className="text-xs text-gray-500">Kaydediliyor...</span>}
+                    </div>
+                  </div>
+
+                  {/* İşlem ve Maliyetler (Parça & İşçilik) */}
+                  <div className="border border-gray-200 rounded-2xl p-4 bg-slate-50/30">
+                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1 mb-4">
+                      <DollarSign className="w-3.5 h-3.5" /> İşlem ve Maliyetler (Parça & İşçilik)
+                    </p>
+                    
+                    {/* Parça Ekleme Alanı */}
+                    <div className="bg-white p-3 rounded-xl border border-gray-200 mb-4 shadow-sm flex flex-col md:flex-row gap-2">
+                      <select
+                        value={selectedStockId}
+                        onChange={e => {
+                          setSelectedStockId(e.target.value);
+                          const item = stockItems.find(s => s.id === parseInt(e.target.value));
+                          if (item) setPartUnitPrice(item.sellingPrice || item.costPrice || '0');
+                        }}
+                        className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                      >
+                        <option value="">Stoktan Parça / Hizmet Seçin...</option>
+                        {stockItems.map(s => (
+                          <option key={s.id} value={s.id} disabled={s.currentStock <= 0}>
+                            {s.sku} - {s.name} (Stok: {s.currentStock} {s.unit})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        value={partQuantity}
+                        onChange={e => setPartQuantity(e.target.value)}
+                        min="1"
+                        className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="Miktar"
+                      />
+                      <div className="relative w-24">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₺</span>
+                        <input
+                          type="number"
+                          value={partUnitPrice}
+                          onChange={e => setPartUnitPrice(e.target.value)}
+                          className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="B.Fiyat"
+                        />
+                      </div>
+                      <button
+                        onClick={handleAddPart}
+                        disabled={isAddingPart || !selectedStockId}
+                        className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {isAddingPart ? '...' : 'Ekle'}
+                      </button>
+                    </div>
+
+                    {/* Eklenen Parçalar Listesi */}
+                    {ticketParts.length > 0 && (
+                      <div className="mb-4 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                            <tr>
+                              <th className="px-3 py-2 font-semibold">Parça/İşlem</th>
+                              <th className="px-3 py-2 font-semibold text-right">B.Fiyat</th>
+                              <th className="px-3 py-2 font-semibold text-center">Adet</th>
+                              <th className="px-3 py-2 font-semibold text-right">Toplam</th>
+                              <th className="px-3 py-2 text-center"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {ticketParts.map((p, i) => (
+                              <tr key={i} className="hover:bg-gray-50">
+                                <td className="px-3 py-2">
+                                  <p className="font-bold text-gray-800">{p.stockItemName}</p>
+                                  <p className="text-[10px] text-gray-400 font-mono">{p.stockItemSku}</p>
+                                </td>
+                                <td className="px-3 py-2 text-right">₺{parseFloat(p.unitPrice).toLocaleString('tr-TR')}</td>
+                                <td className="px-3 py-2 text-center font-bold">{p.quantity}</td>
+                                <td className="px-3 py-2 text-right font-black text-gray-900">₺{parseFloat(p.totalPrice).toLocaleString('tr-TR')}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <button onClick={() => handleRemovePart(p.id)} className="text-red-500 hover:text-red-700 p-1">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* İşçilik ve Genel Toplam */}
+                    <div className="flex flex-col gap-2 items-end mt-4 pt-4 border-t border-gray-200">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-gray-500">İşçilik Maliyeti:</span>
+                        <div className="relative w-32">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">₺</span>
                           <input
                             type="number"
-                            value={costValue}
-                            onChange={e => setCostValue(e.target.value)}
+                            value={laborCostValue}
+                            onChange={e => setLaborCostValue(e.target.value)}
+                            onBlur={handleSaveLabor}
+                            className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-sm font-bold focus:ring-1 focus:ring-primary outline-none"
                             placeholder="0.00"
-                            className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none"
                           />
                         </div>
-                        <button
-                          onClick={handleCostSave}
-                          disabled={costSaving}
-                          className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-secondary disabled:opacity-50"
-                        >
-                          {costSaving ? '...' : 'Kaydet'}
-                        </button>
-                        <button
-                          onClick={() => setEditingCost(false)}
-                          className="px-3 py-2 border border-gray-200 text-gray-500 text-xs rounded-xl hover:bg-gray-150"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        {isSavingLabor && <span className="text-[10px] text-blue-500">Kaydediliyor...</span>}
                       </div>
-                    ) : (
-                      <p className={`text-lg font-black ${parseFloat(detailTicket.cost || 0) > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                        {parseFloat(detailTicket.cost || 0) > 0
-                          ? `₺${parseFloat(detailTicket.cost).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
-                          : 'Belirtilmedi'}
-                      </p>
-                    )}
+                      
+                      <div className="flex items-center gap-3 mt-2 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
+                        <span className="text-sm font-bold text-green-800">Genel Toplam:</span>
+                        <span className="text-xl font-black text-green-900">
+                          ₺{(
+                            (parseFloat(detailTicket.laborCost) || 0) + 
+                            ticketParts.reduce((sum, p) => sum + parseFloat(p.totalPrice), 0)
+                          ).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      
+                      {parseFloat(detailTicket.cost || 0) > 0 && (
+                        <p className="text-[10px] text-gray-400 mt-1">Eski / Manuel Girilen Fiyat: ₺{detailTicket.cost}</p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Durum Değiştir */}
