@@ -144,6 +144,50 @@ export default function ServiceManager() {
     address: '',
   });
 
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [duplicateCustomers, setDuplicateCustomers] = useState<any[]>([]);
+
+  // Müşteri bilgileri girildikçe yinelenen kayıtları bul
+  const checkDuplicateCustomers = (field: 'name' | 'phone' | 'email', value: string) => {
+    if (!value || value.length < 3) {
+      setDuplicateCustomers([]);
+      return;
+    }
+    const valLower = value.toLowerCase();
+    const matched = allUsers.filter(u => {
+      // Sadece müşteri rolündekiler (customer)
+      if (u.roleType !== 'customer' && u.roleType !== 'user') return false;
+      
+      if (field === 'name') {
+        const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
+        return fullName.includes(valLower) || (u.companyName && u.companyName.toLowerCase().includes(valLower));
+      }
+      if (field === 'phone') {
+        return (u.phone || '').includes(value);
+      }
+      if (field === 'email') {
+        return (u.email || '').toLowerCase().includes(valLower);
+      }
+      return false;
+    });
+    setDuplicateCustomers(matched);
+  };
+
+  const selectExistingCustomer = (c: any) => {
+    setNewTicket(prev => ({
+      ...prev,
+      customerName: `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+      customerPhone: c.phone || '',
+      customerEmail: c.email || '',
+      customerType: c.companyName ? 'kurumsal' : 'bireysel',
+      companyName: c.companyName || '',
+      taxOffice: c.taxOffice || '',
+      taxId: c.taxId || '',
+      address: c.address || '',
+    }));
+    setDuplicateCustomers([]);
+  };
+
   const loadTickets = async () => {
     try {
       const data = await fetchAdminTickets();
@@ -165,6 +209,7 @@ export default function ServiceManager() {
       // Sadece admin ve teknisyenleri filtrele
       const staff = users.filter((u: any) => u.roleType === 'superadmin' || u.roleType === 'tenant_admin' || u.roleType === 'staff' || u.roleType === 'technician');
       setStaffUsers(staff);
+      setAllUsers(users);
       setStockItems(stock);
       setDealers(Array.isArray(dealersData) ? dealersData : []);
     } catch (e) {
@@ -1563,17 +1608,17 @@ export default function ServiceManager() {
             {/* Tabs */}
             <div className="flex border-b border-gray-100 px-6 bg-white">
               {([
-                { key: 'musteri', label: 'Müşteri Bilgileri' },
-                { key: 'cihaz', label: 'Cihaz Bilgileri' },
-                { key: 'servis', label: 'Servis Detayları' },
-                { key: 'medya', label: 'Medya / Dosyalar' },
+                { key: 'musteri', label: '👤 Müşteri & Cari Bilgileri' },
+                { key: 'cihaz', label: '💻 Cihaz & Erişim Bilgileri' },
+                { key: 'servis', label: '🔧 Servis Kabul & Detayları' },
+                { key: 'medya', label: '📸 Teslim Fotoğrafları & Ekler' },
               ] as const).map(tab => (
                 <button
                   key={tab.key}
                   type="button"
                   onClick={() => setModalTab(tab.key)}
                   className={cn(
-                    'px-5 py-3 text-sm font-bold border-b-2 transition-colors',
+                    'px-5 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5',
                     modalTab === tab.key
                       ? 'border-primary text-primary'
                       : 'border-transparent text-gray-500 hover:text-gray-800'
@@ -1599,11 +1644,11 @@ export default function ServiceManager() {
                       <button type="button"
                         onClick={() => setNewTicket({ ...newTicket, customerType: 'bireysel' })}
                         className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all ${newTicket.customerType === 'bireysel' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                      >👤 Bireysel</button>
+                      >👤 Bireysel Müşteri</button>
                       <button type="button"
                         onClick={() => setNewTicket({ ...newTicket, customerType: 'kurumsal' })}
                         className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all ${newTicket.customerType === 'kurumsal' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                      >🏢 Kurumsal (Firma)</button>
+                      >🏢 Kurumsal Müşteri (Cari)</button>
                     </div>
                   </div>
 
@@ -1612,7 +1657,10 @@ export default function ServiceManager() {
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ünvanı *</label>
                         <input type="text" value={newTicket.companyName}
-                          onChange={e => setNewTicket({ ...newTicket, companyName: e.target.value })}
+                          onChange={e => {
+                            setNewTicket({ ...newTicket, companyName: e.target.value });
+                            checkDuplicateCustomers('name', e.target.value);
+                          }}
                           className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
                           placeholder="Firma Adı / Ticari Ünvan" />
                       </div>
@@ -1641,14 +1689,20 @@ export default function ServiceManager() {
                         {newTicket.customerType === 'kurumsal' ? 'Yetkili Adı Soyadı *' : 'Müşteri Adı Soyadı *'}
                       </label>
                       <input type="text" value={newTicket.customerName}
-                        onChange={e => setNewTicket({ ...newTicket, customerName: e.target.value })}
+                        onChange={e => {
+                          setNewTicket({ ...newTicket, customerName: e.target.value });
+                          checkDuplicateCustomers('name', e.target.value);
+                        }}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
                         placeholder="Ad Soyad" required />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Telefon Numarası</label>
                       <input type="tel" value={newTicket.customerPhone}
-                        onChange={e => setNewTicket({ ...newTicket, customerPhone: e.target.value })}
+                        onChange={e => {
+                          setNewTicket({ ...newTicket, customerPhone: e.target.value });
+                          checkDuplicateCustomers('phone', e.target.value);
+                        }}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
                         placeholder="05XX XXX XX XX" />
                     </div>
@@ -1657,10 +1711,40 @@ export default function ServiceManager() {
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Adresi</label>
                     <input type="email" value={newTicket.customerEmail}
-                      onChange={e => setNewTicket({ ...newTicket, customerEmail: e.target.value })}
+                      onChange={e => {
+                        setNewTicket({ ...newTicket, customerEmail: e.target.value });
+                        checkDuplicateCustomers('email', e.target.value);
+                      }}
                       className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
                       placeholder="musteri@eposta.com" />
                   </div>
+
+                  {/* Yinelenen / Kayıtlı Müşteri Uyarı Alanı */}
+                  {duplicateCustomers.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 space-y-2 animate-in fade-in duration-200">
+                      <p className="text-xs font-extrabold text-amber-800 flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4 text-amber-600" /> Kayıtlı Müşteri Bulundu ({duplicateCustomers.length})
+                      </p>
+                      <div className="max-h-28 overflow-y-auto space-y-1.5">
+                        {duplicateCustomers.map(c => (
+                          <div
+                            key={c.id}
+                            onClick={() => selectExistingCustomer(c)}
+                            className="bg-white border border-gray-200 hover:border-primary p-2 rounded-xl text-xs flex justify-between items-center cursor-pointer transition-all hover:shadow-sm"
+                          >
+                            <div>
+                              <p className="font-bold text-gray-900">{c.firstName} {c.lastName}</p>
+                              {c.companyName && <p className="text-[10px] text-gray-450">{c.companyName}</p>}
+                            </div>
+                            <div className="text-right text-[10px] text-gray-500">
+                              <p>{c.phone}</p>
+                              <p>{c.email}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Adresi</label>

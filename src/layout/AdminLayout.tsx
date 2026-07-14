@@ -74,58 +74,147 @@ export default function AdminLayout() {
     return <Navigate to="/admin/login" replace />;
   }
 
-  let navItems: any[] = [
-    { separator: true, name: 'Yönetim & Takip' },
-    { name: 'Başlangıç', path: '/admin', icon: LayoutDashboard },
-    { name: 'Servis Kayıtları', path: '/admin/servis', icon: Wrench },
-    { name: 'Kargo Takibi', path: '/admin/kargo', icon: Truck },
-    { name: 'Başvurular', path: '/admin/basvurular', icon: Inbox },
-    { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare },
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
-    { separator: true, name: 'Ticari & Finans' },
-    { name: 'POS Satış (POS)', path: '/admin/satis-pos', icon: Store },
-    { name: 'Gider & Masraflar', path: '/admin/masraflar', icon: DollarSign },
-    { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
-    { name: 'Abonelik Paketleri', path: '/admin/abonelik-paketleri', icon: Tag },
+  const toggleMenu = (menuName: string) => {
+    setOpenMenus(prev => ({
+      ...prev,
+      [menuName]: !prev[menuName]
+    }));
+  };
 
-    { separator: true, name: 'Müşteri & CRM' },
-    { name: 'Müşteriler', path: '/admin/musteriler', icon: Users },
-    { name: 'Kullanıcılar', path: '/admin/kullanicilar', icon: Users },
-
-    { separator: true, name: 'İçerik Yönetimi (CMS)' },
-    { name: 'Hizmetlerimiz', path: '/admin/hizmetler', icon: Wrench },
-    { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri', icon: Tag },
-    { name: 'Ortam Kütüphanesi', path: '/admin/ortam', icon: ImageIcon },
-    { name: 'Sayfalar', path: '/admin/sayfalar', icon: BookOpen },
-    { name: 'Blog Yazıları', path: '/admin/blog', icon: BookOpen },
-    { name: 'Kategoriler', path: '/admin/kategoriler', icon: Tag },
-    { name: 'Müşteri Yorumları', path: '/admin/musteri-yorumlari', icon: MessageSquareQuote },
-    { name: 'Kampanyalar', path: '/admin/kampanyalar', icon: Tag },
-    { name: 'SSS / Yardım', path: '/admin/sss', icon: HelpCircle },
-
-    { separator: true, name: 'Görünüm & Tasarım' },
-    { name: 'Özelleştir', path: '/admin/ozellestir', icon: Layout },
-    { name: 'Temalar', path: '/admin/temalar', icon: Palette },
-    { name: 'Menüler', path: '/admin/menuler', icon: Menu },
-
-    { separator: true, name: 'Sistem & Ayarlar' },
-    { name: 'Ayarlar', path: '/admin/ayarlar', icon: Settings },
-    { name: 'Dil Yönetimi', path: '/admin/diller', icon: BookOpen },
-    { name: 'Eklentiler', path: '/admin/eklentiler', icon: Puzzle },
-    { name: 'Guvenlik', path: '/admin/guvenlik', icon: Shield },
-    { name: 'API Anahtarları', path: '/admin/api-anahtarlari', icon: Key },
-    { name: 'Webhooks', path: '/admin/webhooks', icon: Webhook },
+  const menuGroups = [
+    {
+      title: 'Yönetim & Takip',
+      items: [
+        { name: 'Başlangıç', path: '/admin', icon: LayoutDashboard },
+        {
+          name: 'Servis İşlemleri',
+          icon: Wrench,
+          subItems: [
+            { name: 'Servis Kayıtları', path: '/admin/servis' },
+            { name: 'Kargo Takibi', path: '/admin/kargo' },
+            { name: 'Servis Başvuruları', path: '/admin/basvurular' }
+          ]
+        },
+        { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare }
+      ]
+    },
+    {
+      title: 'Ticari & Finans',
+      items: [
+        { name: 'POS Hızlı Satış', path: '/admin/satis-pos', icon: Store },
+        { name: 'Gider & Masraflar', path: '/admin/masraflar', icon: DollarSign },
+        { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
+        { name: 'Abonelik Paketleri', path: '/admin/abonelik-paketleri', icon: Tag }
+      ]
+    },
+    {
+      title: 'Müşteri & CRM',
+      items: [
+        {
+          name: 'Kullanıcı Yönetimi',
+          icon: Users,
+          subItems: [
+            { name: 'Müşteriler (Cariler)', path: '/admin/musteriler' },
+            { name: 'Personel Listesi', path: '/admin/kullanicilar' }
+          ]
+        }
+      ]
+    },
+    {
+      title: 'İçerik Yönetimi (CMS)',
+      items: [
+        {
+          name: 'Web Sitesi İçerik',
+          icon: BookOpen,
+          subItems: [
+            { name: 'Hizmetlerimiz', path: '/admin/hizmetler' },
+            { name: 'Hizmet Kategorileri', path: '/admin/hizmet-kategorileri' },
+            { name: 'Ortam Kütüphanesi', path: '/admin/ortam' },
+            { name: 'Sayfalar', path: '/admin/sayfalar' },
+            { name: 'Blog Yazıları', path: '/admin/blog' },
+            { name: 'Yazı Kategorileri', path: '/admin/kategoriler' },
+            { name: 'Müşteri Yorumları', path: '/admin/musteri-yorumlari' },
+            { name: 'Kampanyalar', path: '/admin/kampanyalar' },
+            { name: 'SSS / Yardım', path: '/admin/sss' }
+          ]
+        }
+      ]
+    },
+    {
+      title: 'Tasarım & Görünüm',
+      items: [
+        {
+          name: 'Tema & Tasarım',
+          icon: Palette,
+          subItems: [
+            { name: 'Özelleştir', path: '/admin/ozellestir' },
+            { name: 'Temalar', path: '/admin/temalar' },
+            { name: 'Menü Yönetimi', path: '/admin/menuler' }
+          ]
+        }
+      ]
+    },
+    {
+      title: 'Sistem & Ayarlar',
+      items: [
+        {
+          name: 'Sistem Ayarları',
+          icon: Settings,
+          subItems: [
+            { name: 'Genel Ayarlar', path: '/admin/ayarlar' },
+            { name: 'Dil Yönetimi', path: '/admin/diller' },
+            { name: 'Eklentiler', path: '/admin/eklentiler' },
+            { name: 'Güvenlik', path: '/admin/guvenlik' },
+            { name: 'API Anahtarları', path: '/admin/api-anahtarlari' },
+            { name: 'Webhooks', path: '/admin/webhooks' }
+          ]
+        }
+      ]
+    }
   ];
 
+  // Auto-open menus that have active paths inside them
+  useEffect(() => {
+    const activeMenus: Record<string, boolean> = {};
+    menuGroups.forEach(group => {
+      group.items.forEach(item => {
+        if (item.subItems) {
+          const hasActive = item.subItems.some(sub => location.pathname === sub.path || location.pathname.startsWith(sub.path));
+          if (hasActive) {
+            activeMenus[item.name] = true;
+          }
+        }
+      });
+    });
+    if (isGoogleBusinessActive) {
+      const googleActive = location.pathname.startsWith('/admin/google');
+      if (googleActive) {
+        activeMenus['Google İşletme'] = true;
+      }
+    }
+    setOpenMenus(prev => ({ ...activeMenus, ...prev }));
+  }, [location.pathname, isGoogleBusinessActive]);
+
+  let finalMenuGroups = [...menuGroups];
   if (isGoogleBusinessActive) {
-    navItems = navItems.concat([
-      { name: 'Google İşletme', separator: true },
-      { name: 'Genel Bakış', path: '/admin/google', icon: LayoutGrid as any },
-      { name: 'Yayınlar (Posts)', path: '/admin/google/posts', icon: Megaphone as any },
-      { name: 'Yorumlar', path: '/admin/google/reviews', icon: MessageSquareQuote as any },
-      { name: 'İşletme & Medya', path: '/admin/google/info', icon: Store as any },
-      { name: 'İstatistikler', path: '/admin/google/insights', icon: BarChart3 as any },
-    ] as any);
+    finalMenuGroups.push({
+      title: 'Google Entegrasyonu',
+      items: [
+        {
+          name: 'Google İşletme',
+          icon: LayoutGrid as any,
+          subItems: [
+            { name: 'Genel Bakış', path: '/admin/google' },
+            { name: 'Yayınlar (Posts)', path: '/admin/google/posts' },
+            { name: 'Yorumlar', path: '/admin/google/reviews' },
+            { name: 'İşletme & Medya', path: '/admin/google/info' },
+            { name: 'İstatistikler', path: '/admin/google/insights' }
+          ]
+        }
+      ]
+    });
   }
 
   return (
@@ -209,43 +298,91 @@ export default function AdminLayout() {
 
         {/* Sidebar (WordPress Style) */}
         <aside className={cn(
-          "fixed inset-y-0 left-0 z-40 w-40 md:w-48 bg-[#1d2327] text-[#f0f0f1] transform transition-transform duration-300 md:translate-x-0 md:static md:inset-0 flex flex-col pt-2 pb-10",
+          "fixed inset-y-0 left-0 z-40 w-44 md:w-52 bg-[#1d2327] text-[#f0f0f1] transform transition-transform duration-300 md:translate-x-0 md:static md:inset-0 flex flex-col pt-2 pb-10",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}>
           
           <nav className="flex-1 overflow-y-auto w-full">
-            <ul className="space-y-0 text-[13px]">
-              {navItems.map((item: any, idx) => {
-                if (item.separator) {
-                  return (
-                    <li key={idx} className="mt-4 mb-2 px-3">
-                      <div className="text-[11px] font-semibold text-[#a7aaad] uppercase tracking-wider">{item.name}</div>
-                    </li>
-                  );
-                }
-                const exactPaths = ['/admin', '/admin/google'];
-                const isActive = location.pathname === item.path ||
-                  (!exactPaths.includes(item.path) && location.pathname.startsWith(item.path));
-                return (
-                  <li key={item.path} className="relative group">
-                    {isActive && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
-                    )}
-                    <Link
-                      to={item.path}
-                      onClick={() => setSidebarOpen(false)}
-                      className={cn(
-                        "flex items-center px-3 py-2 transition-colors",
-                        isActive ? "bg-[#2c3338] text-white" : "text-[#f0f0f1] hover:text-[#72aee6] hover:bg-[#1d2327]"
-                      )}
-                    >
-                      <item.icon className={cn("w-4 h-4 mr-2.5 shrink-0", isActive ? "text-[#72aee6]" : "text-[#a7aaad] group-hover:text-[#72aee6]")} />
-                      <span className="truncate leading-tight">{item.name}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            {finalMenuGroups.map((group, idx) => (
+              <div key={idx} className="mb-4">
+                <div className="text-[10px] font-extrabold text-[#72aee6] uppercase tracking-wider px-3 mb-1.5 opacity-90">
+                  {group.title}
+                </div>
+                <ul className="space-y-0.5 text-[13px]">
+                  {group.items.map((item: any) => {
+                    const hasSubmenu = !!item.subItems;
+                    const isOpen = !!openMenus[item.name];
+                    
+                    if (!hasSubmenu) {
+                      const isActive = location.pathname === item.path ||
+                        (item.path !== '/admin' && location.pathname.startsWith(item.path));
+                      return (
+                        <li key={item.path} className="relative group">
+                          {isActive && (
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+                          )}
+                          <Link
+                            to={item.path}
+                            onClick={() => setSidebarOpen(false)}
+                            className={cn(
+                              "flex items-center px-3.5 py-2 transition-colors",
+                              isActive ? "bg-[#2c3338] text-white font-bold" : "text-[#f0f0f1] hover:text-[#72aee6] hover:bg-[#1d2327]/40"
+                            )}
+                          >
+                            <item.icon className={cn("w-4 h-4 mr-2.5 shrink-0", isActive ? "text-[#72aee6]" : "text-[#a7aaad] group-hover:text-[#72aee6]")} />
+                            <span className="truncate leading-tight">{item.name}</span>
+                          </Link>
+                        </li>
+                      );
+                    } else {
+                      const isAnySubActive = item.subItems.some((sub: any) => location.pathname === sub.path || location.pathname.startsWith(sub.path));
+                      return (
+                        <li key={item.name} className="relative">
+                          <button
+                            onClick={() => toggleMenu(item.name)}
+                            className={cn(
+                              "w-full flex items-center justify-between px-3.5 py-2 transition-colors text-left",
+                              isAnySubActive ? "text-[#72aee6] font-bold" : "text-[#f0f0f1] hover:text-[#72aee6]"
+                            )}
+                          >
+                            <span className="flex items-center">
+                              <item.icon className="w-4 h-4 mr-2.5 shrink-0 text-[#a7aaad]" />
+                              <span className="truncate leading-tight">{item.name}</span>
+                            </span>
+                            <span className="text-[10px] transform transition-transform duration-200 opacity-60 ml-2">
+                              {isOpen ? '▼' : '▶'}
+                            </span>
+                          </button>
+                          
+                          {/* Accordion Submenu Items */}
+                          {isOpen && (
+                            <ul className="bg-[#101417]/40 py-1 space-y-0.5 border-l-2 border-[#2c3338]/60 ml-4 animate-in slide-in-from-top-1 duration-200">
+                              {item.subItems.map((sub: any) => {
+                                const isSubActive = location.pathname === sub.path || location.pathname.startsWith(sub.path);
+                                return (
+                                  <li key={sub.path}>
+                                    <Link
+                                      to={sub.path}
+                                      onClick={() => setSidebarOpen(false)}
+                                      className={cn(
+                                        "block pl-5 pr-3 py-1.5 text-[12.5px] transition-colors",
+                                        isSubActive ? "text-white font-bold bg-[#2c3338]/50" : "text-[#c3c4c7] hover:text-[#72aee6]"
+                                      )}
+                                    >
+                                      {sub.name}
+                                    </Link>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    }
+                  })}
+                </ul>
+              </div>
+            ))}
           </nav>
 
           <div className="w-full mt-auto">
