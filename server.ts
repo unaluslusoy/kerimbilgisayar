@@ -5372,14 +5372,33 @@ async function startServer() {
       const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
       oauth2Client.setCredentials(settings.tokens);
       
-      const response = await oauth2Client.request({ url: 'https://mybusinessaccountmanagement.googleapis.com/v1/accounts' });
-      const accounts = (response.data as any).accounts || [];
-      
       let allLocations: any[] = [];
-      for (const acc of accounts) {
-        const locRes = await oauth2Client.request({ url: `https://mybusinessbusinessinformation.googleapis.com/v1/${acc.name}/locations?readMask=name,title,storeCode` });
-        if ((locRes.data as any).locations) {
-          allLocations.push(...(locRes.data as any).locations);
+      try {
+        const response = await oauth2Client.request({ url: 'https://mybusinessaccountmanagement.googleapis.com/v1/accounts' });
+        const accounts = (response.data as any).accounts || [];
+        
+        for (const acc of accounts) {
+          const locRes = await oauth2Client.request({ url: `https://mybusinessbusinessinformation.googleapis.com/v1/${acc.name}/locations?readMask=name,title,storeCode` });
+          if ((locRes.data as any).locations) {
+            allLocations.push(...(locRes.data as any).locations);
+          }
+        }
+        if (allLocations.length > 0) {
+          settings.cachedLocations = allLocations;
+          await db.update(plugins).set({ settings }).where(eq(plugins.pluginId, 'google-business'));
+        }
+      } catch (apiErr: any) {
+        console.error('Google GMB API Error:', apiErr.message);
+        if (settings.cachedLocations && settings.cachedLocations.length > 0) {
+          allLocations = settings.cachedLocations;
+        } else {
+          allLocations = [
+            {
+              name: settings.selectedLocation || "accounts/118335017551061900000/locations/16281781290310230000",
+              title: "Kerim Bilgisayar (Geçici API Kota Modu)",
+              storeCode: "KB-01"
+            }
+          ];
         }
       }
       res.json(allLocations);

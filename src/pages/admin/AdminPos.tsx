@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, Barcode, ShoppingCart, User, Plus, X, Trash2, 
-  CreditCard, Banknote, Landmark, FileText, CheckCircle, Printer, RefreshCw, ChevronRight, Layers, Eye
+  CreditCard, Banknote, Landmark, FileText, CheckCircle, Printer, RefreshCw, ChevronRight, Layers, Eye,
+  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { mediaUrl } from '../../lib/media';
 import { 
   fetchAdminStock, fetchAdminCustomers, createAdminCustomer, 
   createAdminSale, fetchAdminSales, fetchAdminSaleDetails 
@@ -341,32 +344,60 @@ export default function AdminPos() {
   });
 
   return (
-    <div className="flex flex-col h-[calc(100vh-100px)] gap-4 select-none">
-      {/* Header and navigation */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-primary/10 rounded-xl text-primary">
-            <ShoppingCart className="w-6 h-6" />
+    <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col select-none overflow-hidden animate-in fade-in duration-200">
+      {/* Standalone Application Bar */}
+      <div className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between shadow-md border-b border-slate-950 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/20 rounded-xl text-primary-light border border-primary/30">
+            <ShoppingCart className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Perakende POS Satış Ekranı</h1>
-            <p className="text-xs text-gray-500">Stoktan hızlı satış, ödeme ve barkodlu fiş yazıcı entegrasyonu.</p>
+            <h1 className="text-sm font-black uppercase tracking-wider flex items-center gap-2 text-white">
+              Kerim Bilgisayar <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-mono font-bold">POS v1.4</span>
+            </h1>
+            <p className="text-[9px] text-slate-400 font-semibold">Hızlı Satış & Kasa İşlemleri</p>
           </div>
         </div>
-        
-        <div className="flex gap-2">
-          <button 
-            onClick={() => { setActiveTab('pos'); loadData(); }}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all cursor-pointer ${activeTab === 'pos' ? 'bg-primary text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+
+        {/* Short-cut Quick Navigation Links */}
+        <div className="hidden lg:flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+          <Link to="/admin" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+            <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
+          </Link>
+          <Link to="/admin/servis" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+            <Wrench className="w-3.5 h-3.5" /> Servis Kayıtları
+          </Link>
+          <Link to="/admin/stok" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+            <Layers className="w-3.5 h-3.5" /> Stok Yönetimi
+          </Link>
+          <Link to="/admin/musteriler" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+            <Users className="w-3.5 h-3.5" /> Müşteriler
+          </Link>
+        </div>
+
+        {/* Active Tab and Exit Button */}
+        <div className="flex items-center gap-3">
+          <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
+            <button 
+              onClick={() => { setActiveTab('pos'); loadData(); }}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${activeTab === 'pos' ? 'bg-primary text-white shadow' : 'text-slate-300 hover:text-white'}`}
+            >
+              Satış Ekranı
+            </button>
+            <button 
+              onClick={() => { setActiveTab('history'); loadData(); }}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${activeTab === 'history' ? 'bg-primary text-white shadow' : 'text-slate-300 hover:text-white'}`}
+            >
+              Geçmiş Satışlar
+            </button>
+          </div>
+
+          <Link 
+            to="/admin" 
+            className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-750 text-white rounded-xl text-[10px] font-extrabold transition-all shadow-md shadow-red-900/30 cursor-pointer"
           >
-            Satış Terminali
-          </button>
-          <button 
-            onClick={() => { setActiveTab('history'); loadData(); }}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all cursor-pointer ${activeTab === 'history' ? 'bg-primary text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-          >
-            Satış Geçmişi
-          </button>
+            <LogOut className="w-3.5 h-3.5" /> Kapat / Çıkış
+          </Link>
         </div>
       </div>
 
@@ -424,13 +455,20 @@ export default function AdminPos() {
                     <div 
                       key={item.id}
                       onClick={() => addToCart(item)}
-                      className="border border-gray-200 hover:border-primary rounded-xl p-3 bg-white flex flex-col justify-between gap-2.5 cursor-pointer hover:shadow-md transition-all text-left"
+                      className="border border-gray-200 hover:border-primary rounded-xl p-3 bg-white flex flex-col justify-between gap-2.5 cursor-pointer hover:shadow-md transition-all text-left hover:scale-[1.01]"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
+                        <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
+                          {item.imageUrl ? (
+                            <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon className="w-6 h-6 text-gray-300" />
+                          )}
+                        </div>
                         <div className="text-xxs font-mono text-gray-400 flex items-center gap-0.5">
                           <Barcode className="w-3 h-3" /> {item.barcode || '—'}
                         </div>
-                        <h3 className="font-bold text-gray-900 text-xs line-clamp-2 min-h-[32px]">{item.name}</h3>
+                        <h3 className="font-bold text-gray-900 text-xs line-clamp-2 min-h-[32px] leading-tight">{item.name}</h3>
                         <p className="text-xxs text-gray-500">{item.brand || 'Markasız'} {item.model}</p>
                       </div>
                       <div className="flex justify-between items-center border-t border-gray-100 pt-2">
