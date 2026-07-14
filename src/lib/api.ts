@@ -316,6 +316,10 @@ export async function importCampaignRemoteImages() {
   return adminRequest('/api/admin/campaigns/import-remote-images', { method: 'POST' });
 }
 
+export async function deleteCampaign(id: number) {
+  return adminRequest(`/api/admin/campaigns/${id}`, { method: 'DELETE' });
+}
+
 // FAQ
 export async function fetchAdminFAQ() {
   return adminRequest('/api/admin/faq');

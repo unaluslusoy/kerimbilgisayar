@@ -33,7 +33,10 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
-const rootDir = process.cwd();
+
+const rootDir = fs.existsSync(path.join(process.cwd(), 'uploads')) 
+  ? process.cwd() 
+  : path.resolve(__dirname, '..');
 import { 
   users, 
   companies,
@@ -417,6 +420,31 @@ async function startServer() {
     }
   });
   
+  // Root level PWA and static files direct serving
+  app.get('/sw.js', (req, res) => {
+    const swPath = isDev 
+      ? path.join(rootDir, 'public', 'sw.js')
+      : path.join(rootDir, 'dist', 'sw.js');
+    if (fs.existsSync(swPath)) {
+      res.setHeader('Content-Type', 'application/javascript');
+      res.sendFile(swPath);
+    } else {
+      res.status(404).send('Not Found');
+    }
+  });
+
+  app.get('/manifest.json', (req, res) => {
+    const manifestPath = isDev
+      ? path.join(rootDir, 'public', 'manifest.json')
+      : path.join(rootDir, 'dist', 'manifest.json');
+    if (fs.existsSync(manifestPath)) {
+      res.setHeader('Content-Type', 'application/json');
+      res.sendFile(manifestPath);
+    } else {
+      res.status(404).send('Not Found');
+    }
+  });
+
   // Uploads directory static serving. Missing files must not fall through to the SPA shell.
   app.use('/uploads', express.static(path.join(rootDir, 'uploads'), {
     fallthrough: false,
@@ -4335,6 +4363,15 @@ async function startServer() {
       if (endDate) updateData.endDate = new Date(endDate);
       if (discountRate !== undefined) updateData.discountRate = discountRate?.toString();
       await db.update(campaigns).set(updateData).where(eq(campaigns.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/campaigns/:id', requireAdmin, async (req, res) => {
+    try {
+      await db.delete(campaigns).where(eq(campaigns.id, parseInt(req.params.id)));
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
