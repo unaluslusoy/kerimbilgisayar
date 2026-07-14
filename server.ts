@@ -2250,8 +2250,81 @@ async function startServer() {
     try {
       const dealers = await db.select().from(companies)
         .where(eq(companies.dealerType, 'dealer'))
-        .orderBy(companies.name);
+        .orderBy(desc(companies.createdAt));
       res.json(dealers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Yeni bayi ekle
+  app.post('/api/admin/dealers', requireAdmin, async (req, res) => {
+    try {
+      const { name, taxId, taxOffice, address, phone, email, website, sector, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote } = req.body;
+      const inserted = await db.insert(companies).values({
+        tenantId: 1,
+        name,
+        taxId,
+        taxOffice,
+        address,
+        phone,
+        email,
+        website,
+        sector,
+        type: 'partner',
+        dealerType: 'dealer',
+        dealerRiskLimit: dealerRiskLimit ? dealerRiskLimit.toString() : null,
+        dealerDueDays: parseInt(dealerDueDays) || 0,
+        dealerDiscountRate: dealerDiscountRate ? dealerDiscountRate.toString() : '0.00',
+        dealerPriceListNote,
+      });
+      res.json({ success: true, id: (inserted[0] as any).insertId });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bayi sil
+  app.delete('/api/admin/dealers/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Set linked users' companyId to null first
+      await db.update(users).set({ companyId: null }).where(eq(users.companyId, id));
+      await db.delete(companies).where(eq(companies.id, id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bayi yetkililerini listele
+  app.get('/api/admin/dealers/:id/users', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const dealerUsers = await db.select().from(users).where(eq(users.companyId, id));
+      res.json(dealerUsers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Bayiye yeni yetkili ekle
+  app.post('/api/admin/dealers/:id/users', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { firstName, lastName, email, phone, password } = req.body;
+      const hashedPassword = await bcrypt.hash(password || 'bayi123', 10);
+      const inserted = await db.insert(users).values({
+        tenantId: 1,
+        firstName,
+        lastName,
+        email,
+        phone,
+        passwordHash: hashedPassword,
+        roleType: 'dealer_user',
+        companyId: id,
+      });
+      res.json({ success: true, id: (inserted[0] as any).insertId });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -2367,15 +2440,23 @@ async function startServer() {
   // Bayiyi companies üzerinden düzenle
   app.patch('/api/admin/dealers/:id', requireAdmin, async (req, res) => {
     try {
-      const { dealerType, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote, name } = req.body;
+      const id = parseInt(req.params.id);
+      const { name, taxId, taxOffice, address, phone, email, website, sector, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote } = req.body;
       const updateData: any = { updatedAt: new Date() };
-      if (dealerType !== undefined) updateData.dealerType = dealerType;
-      if (dealerRiskLimit !== undefined) updateData.dealerRiskLimit = dealerRiskLimit;
-      if (dealerDueDays !== undefined) updateData.dealerDueDays = dealerDueDays;
-      if (dealerDiscountRate !== undefined) updateData.dealerDiscountRate = dealerDiscountRate;
-      if (dealerPriceListNote !== undefined) updateData.dealerPriceListNote = dealerPriceListNote;
       if (name !== undefined) updateData.name = name;
-      await db.update(companies).set(updateData).where(eq(companies.id, parseInt(req.params.id)));
+      if (taxId !== undefined) updateData.taxId = taxId;
+      if (taxOffice !== undefined) updateData.taxOffice = taxOffice;
+      if (address !== undefined) updateData.address = address;
+      if (phone !== undefined) updateData.phone = phone;
+      if (email !== undefined) updateData.email = email;
+      if (website !== undefined) updateData.website = website;
+      if (sector !== undefined) updateData.sector = sector;
+      if (dealerRiskLimit !== undefined) updateData.dealerRiskLimit = dealerRiskLimit ? dealerRiskLimit.toString() : null;
+      if (dealerDueDays !== undefined) updateData.dealerDueDays = parseInt(dealerDueDays) || 0;
+      if (dealerDiscountRate !== undefined) updateData.dealerDiscountRate = dealerDiscountRate ? dealerDiscountRate.toString() : '0.00';
+      if (dealerPriceListNote !== undefined) updateData.dealerPriceListNote = dealerPriceListNote;
+
+      await db.update(companies).set(updateData).where(eq(companies.id, id));
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -4348,115 +4429,7 @@ async function startServer() {
     }
   });
 
-  // ============================================================
-  // ADMIN API — DEALERS (BAYİLER)
-  // ============================================================
 
-  app.get('/api/admin/dealers', requireAdmin, async (req, res) => {
-    try {
-      const allDealers = await db.select()
-        .from(companies)
-        .where(eq(companies.dealerType, 'dealer'))
-        .orderBy(desc(companies.createdAt));
-      res.json(allDealers);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post('/api/admin/dealers', requireAdmin, async (req, res) => {
-    try {
-      const { name, taxId, taxOffice, address, phone, email, website, sector, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote } = req.body;
-      const inserted = await db.insert(companies).values({
-        tenantId: 1,
-        name,
-        taxId,
-        taxOffice,
-        address,
-        phone,
-        email,
-        website,
-        sector,
-        type: 'partner',
-        dealerType: 'dealer',
-        dealerRiskLimit: dealerRiskLimit ? dealerRiskLimit.toString() : null,
-        dealerDueDays: parseInt(dealerDueDays) || 0,
-        dealerDiscountRate: dealerDiscountRate ? dealerDiscountRate.toString() : '0.00',
-        dealerPriceListNote,
-      });
-      res.json({ success: true, id: (inserted[0] as any).insertId });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.patch('/api/admin/dealers/:id', requireAdmin, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const { name, taxId, taxOffice, address, phone, email, website, sector, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote } = req.body;
-      const updateData: any = {};
-      if (name !== undefined) updateData.name = name;
-      if (taxId !== undefined) updateData.taxId = taxId;
-      if (taxOffice !== undefined) updateData.taxOffice = taxOffice;
-      if (address !== undefined) updateData.address = address;
-      if (phone !== undefined) updateData.phone = phone;
-      if (email !== undefined) updateData.email = email;
-      if (website !== undefined) updateData.website = website;
-      if (sector !== undefined) updateData.sector = sector;
-      if (dealerRiskLimit !== undefined) updateData.dealerRiskLimit = dealerRiskLimit ? dealerRiskLimit.toString() : null;
-      if (dealerDueDays !== undefined) updateData.dealerDueDays = parseInt(dealerDueDays) || 0;
-      if (dealerDiscountRate !== undefined) updateData.dealerDiscountRate = dealerDiscountRate ? dealerDiscountRate.toString() : '0.00';
-      if (dealerPriceListNote !== undefined) updateData.dealerPriceListNote = dealerPriceListNote;
-
-      await db.update(companies).set(updateData).where(eq(companies.id, id));
-      res.json({ success: true });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.delete('/api/admin/dealers/:id', requireAdmin, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      // Set linked users' companyId to null first
-      await db.update(users).set({ companyId: null }).where(eq(users.companyId, id));
-      await db.delete(companies).where(eq(companies.id, id));
-      res.json({ success: true });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.get('/api/admin/dealers/:id/users', requireAdmin, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const dealerUsers = await db.select().from(users).where(eq(users.companyId, id));
-      res.json(dealerUsers);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post('/api/admin/dealers/:id/users', requireAdmin, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const { firstName, lastName, email, phone, password } = req.body;
-      const hashedPassword = await bcrypt.hash(password || 'bayi123', 10);
-      const inserted = await db.insert(users).values({
-        tenantId: 1,
-        firstName,
-        lastName,
-        email,
-        phone,
-        passwordHash: hashedPassword,
-        roleType: 'dealer_user',
-        companyId: id,
-      });
-      res.json({ success: true, id: (inserted[0] as any).insertId });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
 
   // ============================================================
   // ADMIN API — BLOG
