@@ -1805,7 +1805,10 @@ async function startServer() {
             }
             // If customer provided a new email, update it
             if (customerEmail && existingUser[0].email.includes('@noemail.local')) {
-              await tx.update(users).set({ email: customerEmail }).where(eq(users.id, userId));
+              const duplicateEmailUser = await tx.select().from(users).where(eq(users.email, customerEmail)).limit(1);
+              if (duplicateEmailUser.length === 0) {
+                await tx.update(users).set({ email: customerEmail }).where(eq(users.id, userId));
+              }
             }
             
             // Ensure customer record exists
@@ -1945,7 +1948,12 @@ async function startServer() {
               userUpdate.lastName = parts.slice(1).join(' ');
             }
             if (customerPhone !== undefined) userUpdate.phone = customerPhone;
-            if (customerEmail !== undefined) userUpdate.email = customerEmail;
+            if (customerEmail !== undefined) {
+              const duplicateEmailUser = await tx.select().from(users).where(eq(users.email, customerEmail)).limit(1);
+              if (duplicateEmailUser.length === 0 || duplicateEmailUser[0].id === uId) {
+                userUpdate.email = customerEmail;
+              }
+            }
             
             if (Object.keys(userUpdate).length > 0) {
               await tx.update(users).set(userUpdate).where(eq(users.id, uId));
