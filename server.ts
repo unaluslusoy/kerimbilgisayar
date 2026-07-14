@@ -5491,7 +5491,9 @@ async function startServer() {
     try {
       const s = await getGMBSettings();
       if (!s.tokens || !s.selectedLocation) return res.json({ error: 'unauthorized', message: 'Yetki verilmemiş veya konum seçilmemiş' });
-      const r = await createGMBClient(s).request({ url: `https://mybusinessbusinessinformation.googleapis.com/v1/${s.selectedLocation}?readMask=name,title,primaryPhone,profile` });
+      const parts = s.selectedLocation.split('/');
+      const locationId = parts.length >= 2 ? parts.slice(-2).join('/') : s.selectedLocation;
+      const r = await createGMBClient(s).request({ url: `https://mybusinessbusinessinformation.googleapis.com/v1/${locationId}?readMask=name,title,primaryPhone,profile` });
       res.json(r.data);
     } catch (e: any) { res.json({ error: 'unauthorized', message: e.message }); }
   });
@@ -5501,10 +5503,12 @@ async function startServer() {
     try {
       const s = await getGMBSettings();
       if (!s.tokens || !s.selectedLocation) return res.json({ error: 'unauthorized', message: 'Yetki verilmemiş veya konum seçilmemiş' });
+      const parts = s.selectedLocation.split('/');
+      const locationId = parts.length >= 2 ? parts.slice(-2).join('/') : s.selectedLocation;
       const { updateMask, ...body } = req.body;
       const mask = updateMask || 'title,primaryPhone,profile.description';
       const r = await createGMBClient(s).request({
-        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${s.selectedLocation}?updateMask=${mask}`,
+        url: `https://mybusinessbusinessinformation.googleapis.com/v1/${locationId}?updateMask=${mask}`,
         method: 'PATCH', data: body
       });
       res.json(r.data);
