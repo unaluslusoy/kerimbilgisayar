@@ -104,6 +104,7 @@ export default function ServiceManager() {
   const [isDeletingTicket, setIsDeletingTicket] = useState(false);
   const [newTicketPhotos, setNewTicketPhotos] = useState<any[]>([]);
   const [newTicketPhotoUploading, setNewTicketPhotoUploading] = useState(false);
+  const [modalTab, setModalTab] = useState<'musteri'|'cihaz'|'servis'|'medya'>('musteri');
 
   const [newTicket, setNewTicket] = useState({
     subject: '',
@@ -116,6 +117,12 @@ export default function ServiceManager() {
     deviceType: '',
     deviceBrand: '',
     deviceModel: '',
+    deviceSerial: '',
+    imei: '',
+    patternLock: '',
+    pinPassword: '',
+    deviceEmail: '',
+    deviceEmailPassword: '',
     dealerId: '' as string | number,
     source: 'walk_in',
     assignedTo: '' as string | number,
@@ -178,28 +185,30 @@ export default function ServiceManager() {
   });
 
   const handleNewTicketPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.[0]) return;
+    if (!e.target.files || e.target.files.length === 0) return;
     setNewTicketPhotoUploading(true);
+    const files = Array.from(e.target.files) as File[];
+    const token = localStorage.getItem('admin_token');
     try {
-      const file = e.target.files[0];
-      const formData = new FormData();
-      formData.append('file', file);
-      const token = localStorage.getItem('admin_token');
-      const res = await fetch('/api/admin/media/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Yükleme başarısız');
-      const data = await res.json();
-      setNewTicketPhotos(prev => [...prev, {
-        fileName: file.name,
-        fileUrl: data.fileUrl,
-        fileType: file.type,
-        fileSize: file.size,
-      }]);
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/admin/servis/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        if (!res.ok) throw new Error('Yükleme başarısız: ' + file.name);
+        const data = await res.json();
+        setNewTicketPhotos(prev => [...prev, {
+          fileName: data.fileName || file.name,
+          fileUrl: data.fileUrl,
+          fileType: data.fileType || file.type,
+          fileSize: data.fileSize || file.size,
+        }]);
+      }
     } catch (err: any) {
-      alert('Fotoğraf yüklenirken hata: ' + err.message);
+      alert('Dosya yüklenirken hata: ' + err.message);
     } finally {
       setNewTicketPhotoUploading(false);
       e.target.value = '';
@@ -221,6 +230,7 @@ export default function ServiceManager() {
 
       setShowModal(false);
       setNewTicketPhotos([]);
+      setModalTab('musteri');
       setNewTicket({
         subject: '',
         description: '',
@@ -232,6 +242,12 @@ export default function ServiceManager() {
         deviceType: '',
         deviceBrand: '',
         deviceModel: '',
+        deviceSerial: '',
+        imei: '',
+        patternLock: '',
+        pinPassword: '',
+        deviceEmail: '',
+        deviceEmailPassword: '',
         dealerId: '',
         source: 'walk_in',
         assignedTo: '',
@@ -1369,59 +1385,87 @@ export default function ServiceManager() {
       {/* New Ticket Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b border-gray-150">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-0 border-b border-gray-100">
               <h2 className="text-xl font-black text-gray-900 tracking-tight">Yeni Servis Kaydı Oluştur</h2>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-xl">
+              <button onClick={() => { setShowModal(false); setModalTab('musteri'); }} className="p-2 hover:bg-gray-100 rounded-xl">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            
-            <div className="p-6 space-y-6 overflow-y-auto">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Sol Sütun: Müşteri & Cihaz */}
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-100 px-6 bg-white">
+              {([
+                { key: 'musteri', label: 'Müşteri Bilgileri' },
+                { key: 'cihaz', label: 'Cihaz Bilgileri' },
+                { key: 'servis', label: 'Servis Detayları' },
+                { key: 'medya', label: 'Medya / Dosyalar' },
+              ] as const).map(tab => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setModalTab(tab.key)}
+                  className={cn(
+                    'px-5 py-3 text-sm font-bold border-b-2 transition-colors',
+                    modalTab === tab.key
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                  )}
+                >
+                  {tab.label}
+                  {tab.key === 'medya' && newTicketPhotos.length > 0 && (
+                    <span className="ml-1.5 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-full">{newTicketPhotos.length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+
+              {/* ── TAB 1: MÜŞTERİ BİLGİLERİ ── */}
+              {modalTab === 'musteri' && (
                 <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1.5 mb-3">Müşteri & Cihaz Bilgileri</h3>
-                  
-                  {/* Müşteri Türü Seçimi */}
                   <div className="mb-4">
-                    <label className="block text-xs font-semibold text-gray-555 mb-1.5">Müşteri Türü</label>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Müşteri Türü</label>
                     <div className="flex gap-2">
-                      <button
-                        type="button"
+                      <button type="button"
                         onClick={() => setNewTicket({ ...newTicket, customerType: 'bireysel' })}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all ${
-                          newTicket.customerType === 'bireysel'
-                            ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-white text-gray-750 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        Bireysel
-                      </button>
-                      <button
-                        type="button"
+                        className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all ${newTicket.customerType === 'bireysel' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                      >👤 Bireysel</button>
+                      <button type="button"
                         onClick={() => setNewTicket({ ...newTicket, customerType: 'kurumsal' })}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-xl border transition-all ${
-                          newTicket.customerType === 'kurumsal'
-                            ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-white text-gray-750 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        Kurumsal (Firma)
-                      </button>
+                        className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all ${newTicket.customerType === 'kurumsal' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                      >🏢 Kurumsal (Firma)</button>
                     </div>
                   </div>
 
                   {newTicket.customerType === 'kurumsal' && (
-                    <div className="mb-3 animate-in fade-in duration-200">
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ünvanı *</label>
-                      <input
-                        type="text" value={newTicket.companyName}
-                        onChange={e => setNewTicket({ ...newTicket, companyName: e.target.value })}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-                        placeholder="Firma Adı / Ticari Ünvan"
-                        required={newTicket.customerType === 'kurumsal'}
-                      />
+                    <div className="animate-in fade-in duration-200 space-y-3 bg-blue-50/60 border border-blue-100 rounded-2xl p-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ünvanı *</label>
+                        <input type="text" value={newTicket.companyName}
+                          onChange={e => setNewTicket({ ...newTicket, companyName: e.target.value })}
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="Firma Adı / Ticari Ünvan" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
+                          <input type="text" value={newTicket.taxOffice}
+                            onChange={e => setNewTicket({ ...newTicket, taxOffice: e.target.value })}
+                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Vergi Dairesi" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi / TCKN</label>
+                          <input type="text" value={newTicket.taxId}
+                            onChange={e => setNewTicket({ ...newTicket, taxId: e.target.value })}
+                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Vergi No / TCKN" />
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1430,120 +1474,140 @@ export default function ServiceManager() {
                       <label className="block text-xs font-semibold text-gray-600 mb-1">
                         {newTicket.customerType === 'kurumsal' ? 'Yetkili Adı Soyadı *' : 'Müşteri Adı Soyadı *'}
                       </label>
-                      <input
-                        type="text" value={newTicket.customerName}
+                      <input type="text" value={newTicket.customerName}
                         onChange={e => setNewTicket({ ...newTicket, customerName: e.target.value })}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-                        placeholder="Ad Soyad"
-                        required
-                      />
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="Ad Soyad" required />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Telefon Numarası</label>
-                      <input
-                        type="text" value={newTicket.customerPhone}
+                      <input type="tel" value={newTicket.customerPhone}
                         onChange={e => setNewTicket({ ...newTicket, customerPhone: e.target.value })}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-                        placeholder="05XX XXX XX XX"
-                      />
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="05XX XXX XX XX" />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Adresi</label>
-                      <input
-                        type="email" value={newTicket.customerEmail}
-                        onChange={e => setNewTicket({ ...newTicket, customerEmail: e.target.value })}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-                        placeholder="musteri@eposta.com"
-                      />
-                    </div>
-                    {newTicket.customerType === 'kurumsal' && (
-                      <div className="grid grid-cols-2 gap-2 animate-in fade-in duration-200">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
-                          <input
-                            type="text" value={newTicket.taxOffice}
-                            onChange={e => setNewTicket({ ...newTicket, taxOffice: e.target.value })}
-                            className="w-full border border-gray-300 rounded-xl px-3 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
-                            placeholder="Vergi Dairesi"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi / TCKN</label>
-                          <input
-                            type="text" value={newTicket.taxId}
-                            onChange={e => setNewTicket({ ...newTicket, taxId: e.target.value })}
-                            className="w-full border border-gray-300 rounded-xl px-3 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
-                            placeholder="Vergi No / TCKN"
-                          />
-                        </div>
-                      </div>
-                    )}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Adresi</label>
+                    <input type="email" value={newTicket.customerEmail}
+                      onChange={e => setNewTicket({ ...newTicket, customerEmail: e.target.value })}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                      placeholder="musteri@eposta.com" />
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Adresi</label>
-                    <textarea
-                      value={newTicket.address}
+                    <textarea value={newTicket.address}
                       onChange={e => setNewTicket({ ...newTicket, address: e.target.value })}
                       className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none resize-none"
-                      rows={2}
-                      placeholder="Müşteri adresi (Fatura / Teslimat için)"
-                    />
+                      rows={2} placeholder="Müşteri adresi (Fatura / Teslimat için)" />
                   </div>
+                </div>
+              )}
 
-                  <div className="grid grid-cols-3 gap-3 pt-2">
+              {/* ── TAB 2: CİHAZ BİLGİLERİ ── */}
+              {modalTab === 'cihaz' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Cihaz Türü</label>
-                      <input
-                        type="text" value={newTicket.deviceType}
+                      <input type="text" value={newTicket.deviceType}
                         onChange={e => setNewTicket({ ...newTicket, deviceType: e.target.value })}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        placeholder="Örn: Laptop"
-                      />
+                        placeholder="Örn: Laptop, Telefon" />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Marka</label>
-                      <input
-                        type="text" value={newTicket.deviceBrand}
+                      <input type="text" value={newTicket.deviceBrand}
                         onChange={e => setNewTicket({ ...newTicket, deviceBrand: e.target.value })}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        placeholder="Örn: Asus"
-                      />
+                        placeholder="Örn: Asus, Apple" />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Model</label>
-                      <input
-                        type="text" value={newTicket.deviceModel}
+                      <input type="text" value={newTicket.deviceModel}
                         onChange={e => setNewTicket({ ...newTicket, deviceModel: e.target.value })}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        placeholder="Örn: ROG Strix"
-                      />
+                        placeholder="Örn: ROG Strix, iPhone 15" />
                     </div>
                   </div>
-                </div>
 
-                {/* Sağ Sütun: Servis Parametreleri */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1.5 mb-3">Servis Detayları</h3>
-                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Seri No</label>
+                      <input type="text" value={newTicket.deviceSerial}
+                        onChange={e => setNewTicket({ ...newTicket, deviceSerial: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none font-mono"
+                        placeholder="Seri Numarası" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">IMEI</label>
+                      <input type="text" value={newTicket.imei}
+                        onChange={e => setNewTicket({ ...newTicket, imei: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none font-mono"
+                        placeholder="IMEI Numarası" />
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-amber-700 uppercase tracking-widest">🔐 Erişim Bilgileri (Teknik Personel)</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Desen Kilidi</label>
+                        <input type="text" value={newTicket.patternLock}
+                          onChange={e => setNewTicket({ ...newTicket, patternLock: e.target.value })}
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="Desen kilitlii: 1-2-3..." />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">PIN / Parola</label>
+                        <input type="text" value={newTicket.pinPassword}
+                          onChange={e => setNewTicket({ ...newTicket, pinPassword: e.target.value })}
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="PIN veya ekran parolası" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Cihaz E-Postası</label>
+                        <input type="text" value={newTicket.deviceEmail}
+                          onChange={e => setNewTicket({ ...newTicket, deviceEmail: e.target.value })}
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="Apple ID / Google hesabı" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Parolası</label>
+                        <input type="text" value={newTicket.deviceEmailPassword}
+                          onChange={e => setNewTicket({ ...newTicket, deviceEmailPassword: e.target.value })}
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="Hesap parolası" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Yanında Teslim Alınan Emanetler</label>
+                    <input type="text" value={newTicket.accessories}
+                      onChange={e => setNewTicket({ ...newTicket, accessories: e.target.value })}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                      placeholder="Örn: Şarj aleti, kılıf, çanta, kutu..." />
+                  </div>
+                </div>
+              )}
+
+              {/* ── TAB 3: SERVİS DETAYLARI ── */}
+              {modalTab === 'servis' && (
+                <div className="space-y-5">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Kanal / Kaynak</label>
-                      <select
-                        value={newTicket.source}
+                      <select value={newTicket.source}
                         onChange={e => {
                           const val = e.target.value;
-                          setNewTicket(prev => ({
-                            ...prev,
-                            source: val,
-                            dealerId: val !== 'dealer' ? '' : prev.dealerId
-                          }));
+                          setNewTicket(prev => ({ ...prev, source: val, dealerId: val !== 'dealer' ? '' : prev.dealerId }));
                         }}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                      >
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                         <option value="walk_in">Elden Teslim (Walk-in)</option>
                         <option value="dealer">Bayi Kanalı</option>
                         <option value="online">Online Başvuru</option>
@@ -1553,30 +1617,22 @@ export default function ServiceManager() {
                     {newTicket.source === 'dealer' ? (
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Aracı Bayi</label>
-                        <select
-                          value={newTicket.dealerId}
+                        <select value={newTicket.dealerId}
                           onChange={e => setNewTicket({ ...newTicket, dealerId: e.target.value })}
-                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        >
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                           <option value="">Bayi Seçin...</option>
-                          {dealers.map(d => (
-                            <option key={d.id} value={d.id}>{d.name}</option>
-                          ))}
+                          {dealers.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
                         </select>
                       </div>
                     ) : (
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Teslim Alan / Atanan Personel</label>
-                        <select
-                          value={newTicket.assignedTo}
+                        <select value={newTicket.assignedTo}
                           onChange={e => setNewTicket({ ...newTicket, assignedTo: e.target.value })}
-                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        >
+                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                           <option value="">Seçin...</option>
                           {staffUsers.map(u => (
-                            <option key={u.id} value={u.id}>
-                              {u.firstName} {u.lastName}
-                            </option>
+                            <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                           ))}
                         </select>
                       </div>
@@ -1608,91 +1664,95 @@ export default function ServiceManager() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cihazla Birlikte Alınan Emanetler (Aksesuarlar)</label>
-                    <input
-                      type="text"
-                      value={newTicket.accessories}
-                      onChange={e => setNewTicket({ ...newTicket, accessories: e.target.value })}
-                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                      placeholder="Örn: Şarj aleti, kılıf, çanta..."
+                    <label className="block text-sm font-bold text-gray-800 mb-2">Müşteri Şikayeti / Detaylı Açıklama</label>
+                    <RichTextEditor
+                      value={newTicket.description}
+                      onChange={val => setNewTicket({ ...newTicket, description: val })}
+                      placeholder="Arıza açıklaması, müşteri şikayetleri ve ilk tespitleri buraya yazın..."
+                      className="bg-white rounded-xl shadow-sm"
                     />
                   </div>
 
-                  {/* Cihaz Fotoğrafları - Teslim Anı */}
-                  <div className="pt-2">
-                    <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center justify-between">
-                      <span>Cihaz Fotoğrafları (Teslim Anı)</span>
-                      <span className="text-[10px] text-blue-650 hover:underline font-bold flex items-center gap-1 cursor-pointer">
-                        <Camera className="w-3.5 h-3.5" /> {newTicketPhotoUploading ? 'Yükleniyor...' : 'Fotoğraf Çek / Yükle'}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={handleNewTicketPhotoUpload}
-                          disabled={newTicketPhotoUploading}
-                          className="hidden"
-                        />
-                      </span>
-                    </label>
-                    
-                    {newTicketPhotos.length === 0 ? (
-                      <p className="text-[11px] text-gray-400 italic">Henüz teslim anı fotoğrafı eklenmedi.</p>
-                    ) : (
-                      <div className="grid grid-cols-4 gap-2 border border-gray-200 p-2 rounded-xl bg-gray-50/50">
-                        {newTicketPhotos.map((photo, index) => (
-                          <div key={index} className="relative group border border-gray-200 rounded-lg overflow-hidden aspect-video bg-white flex items-center justify-center">
-                            <img
-                              src={photo.fileUrl}
-                              alt={photo.fileName}
-                              className="w-full h-full object-cover"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setNewTicketPhotos(prev => prev.filter((_, idx) => idx !== index));
-                              }}
-                              className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-md shadow-md"
-                              title="Fotoğrafı Sil"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div>
+                    <label className="block text-sm font-bold text-gray-800 mb-2">Teknik Personel Görüşü (Ön Tespit)</label>
+                    <RichTextEditor
+                      value={newTicket.technicianNotes}
+                      onChange={val => setNewTicket({ ...newTicket, technicianNotes: val })}
+                      placeholder="Teknik ön tespit, olası sorunlar..."
+                      className="bg-white rounded-xl shadow-sm"
+                    />
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Açıklama / Şikayet */}
-              <div className="pt-4 border-t border-gray-150">
-                <label className="block text-sm font-bold text-gray-800 mb-2">Müşteri Şikayeti / Detaylı Açıklama (Zengin Metin)</label>
-                <RichTextEditor
-                  value={newTicket.description}
-                  onChange={val => setNewTicket({ ...newTicket, description: val })}
-                  placeholder="Arıza açıklaması, müşteri şikayetleri ve ilk tespitleri buraya yazın..."
-                  className="bg-white rounded-xl shadow-sm animate-in fade-in duration-200"
-                />
-              </div>
+              {/* ── TAB 4: MEDYA / DOSYALAR ── */}
+              {modalTab === 'medya' && (
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center hover:border-primary/40 transition-colors">
+                    <label className="cursor-pointer">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Camera className="w-6 h-6 text-primary" />
+                        </div>
+                        <p className="text-sm font-bold text-gray-700">Fotoğraf veya Video Yükle</p>
+                        <p className="text-xs text-gray-400">Birden fazla dosya seçebilirsiniz • Görsel ve video desteklenir</p>
+                        {newTicketPhotoUploading && (
+                          <div className="flex items-center gap-2 text-primary text-sm font-semibold">
+                            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            Yükleniyor...
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        onChange={handleNewTicketPhotoUpload}
+                        disabled={newTicketPhotoUploading}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {newTicketPhotos.length === 0 ? (
+                    <p className="text-center text-sm text-gray-400 py-4">Henüz teslim anı görseli / videosu eklenmedi.</p>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                      {newTicketPhotos.map((file, index) => (
+                        <div key={index} className="relative group border border-gray-200 rounded-xl overflow-hidden aspect-video bg-gray-50 flex items-center justify-center">
+                          {file.fileType?.startsWith('video/') ? (
+                            <video src={file.fileUrl} className="w-full h-full object-cover" controls />
+                          ) : (
+                            <img src={file.fileUrl} alt={file.fileName} className="w-full h-full object-cover" />
+                          )}
+                          <button type="button"
+                            onClick={() => setNewTicketPhotos(prev => prev.filter((_, idx) => idx !== index))}
+                            className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Sil"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                            {file.fileName}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="flex gap-3 p-6 border-t border-gray-150 bg-slate-50/50">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition-colors"
-              >
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-slate-50/50">
+              <button type="button" onClick={() => { setShowModal(false); setModalTab('musteri'); }}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition-colors">
                 İptal
               </button>
-              <button
-                type="button"
-                onClick={handleCreate}
+              <button type="button" onClick={handleCreate}
                 disabled={saving || !newTicket.customerName}
-                className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-bold transition-colors disabled:opacity-50 flex items-center justify-center shadow-md shadow-primary/20"
-              >
-                {saving ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                ) : null}
+                className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-bold transition-colors disabled:opacity-50 flex items-center justify-center shadow-md shadow-primary/20">
+                {saving ? (<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />) : null}
                 Kayıt ve Giriş Fişi Oluştur
               </button>
             </div>

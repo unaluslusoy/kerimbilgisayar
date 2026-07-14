@@ -101,6 +101,26 @@ import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
 
 const uploadsDir = path.join(rootDir, 'uploads');
 
+function moveUserFile(fileUrl: string, userId: number): string {
+  if (!fileUrl.includes('servisklasoru/temp/')) return fileUrl;
+  
+  const fileName = path.basename(fileUrl);
+  const oldPath = path.join(rootDir, 'uploads', 'servisklasoru', 'temp', fileName);
+  const newDir = path.join(rootDir, 'uploads', 'servisklasoru', String(userId));
+  const newPath = path.join(newDir, fileName);
+  
+  try {
+    if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true });
+    if (fs.existsSync(oldPath)) {
+      fs.renameSync(oldPath, newPath);
+      return `/uploads/servisklasoru/${userId}/${fileName}`;
+    }
+  } catch (err) {
+    console.error('Failed to move user file:', err);
+  }
+  return fileUrl;
+}
+
 import { nullableDecimal, nullableInt, generateSlug, assertSafeRemoteUrl, saveRemoteImageToMedia } from './src/server/utils';
 
 async function ensureCustomerRowsFromUsers(): Promise<number> {
@@ -418,6 +438,25 @@ async function startServer() {
     }
   });
   const upload = multer({ storage });
+
+  // Helper: geçici klasördeki servvis dosyasını müşteri klasörüne taşı
+  const moveUserFile = (fileUrl: string, userId: number): string => {
+    try {
+      const filename = path.basename(fileUrl);
+      const srcDir = path.join(rootDir, 'uploads', 'servisklasoru', 'temp');
+      const destDir = path.join(rootDir, 'uploads', 'servisklasoru', String(userId));
+      fs.mkdirSync(destDir, { recursive: true });
+      const srcPath = path.join(srcDir, filename);
+      const destPath = path.join(destDir, filename);
+      if (fs.existsSync(srcPath)) {
+        fs.renameSync(srcPath, destPath);
+        return `/uploads/servisklasoru/${userId}/${filename}`;
+      }
+    } catch (e) {
+      console.error('moveUserFile error:', e);
+    }
+    return fileUrl; // hata olursa orijinal url'yi döndür
+  };
 
   // Chrome DevTools JSON endpoint — CSP hatasını önler
   app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
@@ -2664,18 +2703,53 @@ async function startServer() {
     }
   });
 
+  // POST: Add attachment record (JSON body with file URL already uploaded)
   app.post('/api/admin/tickets/:ticketId/attachments', requireAdmin, async (req, res) => {
     try {
       const { fileName, fileUrl, fileType, fileSize } = req.body;
-      const [inserted] = await db.insert(ticketAttachments).values({
+      const ticketId = parseInt(req.params.ticketId);
+      // Resolve userId for folder organization
+      const ticketRow = await db.select({ userId: tickets.userId }).from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+      const userId = ticketRow[0]?.userId;
+      // Move file from temp to user-specific folder if applicable
+      const finalUrl = userId ? moveUserFile(fileUrl, userId) : fileUrl;
+
+      await db.insert(ticketAttachments).values({
         tenantId: 1,
-        ticketId: parseInt(req.params.ticketId),
+        ticketId,
         fileName: fileName || 'Dosya',
-        fileUrl,
-        fileType: fileType || 'image/*',
+        fileUrl: finalUrl,
+        fileType: fileType || 'application/octet-stream',
         fileSize: fileSize || 0,
       });
-      res.json({ id: (inserted as any).insertId, success: true });
+      res.json({ success: true, fileUrl: finalUrl });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Servis dosyası yükleme — uploads/servisklasoru/temp/ klasörüne kaydeder
+  const servisStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const tempDir = path.join(rootDir, 'uploads', 'servisklasoru', 'temp');
+      fs.mkdirSync(tempDir, { recursive: true });
+      cb(null, tempDir);
+    },
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+  });
+  const servisUpload = multer({
+    storage: servisStorage,
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit for videos
+  });
+
+  app.post('/api/admin/servis/upload', requireAdmin, servisUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'Dosya yüklenmedi' });
+      const fileUrl = `/uploads/servisklasoru/temp/${req.file.filename}`;
+      res.json({ success: true, fileUrl, fileName: req.file.originalname, fileType: req.file.mimetype, fileSize: req.file.size });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
