@@ -114,6 +114,13 @@ export default function ServiceManager() {
   const [newTicketPhotos, setNewTicketPhotos] = useState<any[]>([]);
   const [newTicketPhotoUploading, setNewTicketPhotoUploading] = useState(false);
   const [modalTab, setModalTab] = useState<'musteri'|'cihaz'|'servis'|'medya'>('musteri');
+  
+  // Advanced filters and pagination
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [technicianFilter, setTechnicianFilter] = useState('all');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
 
   const [newTicket, setNewTicket] = useState({
     subject: '',
@@ -230,13 +237,29 @@ export default function ServiceManager() {
 
   const filtered = tickets.filter(t => {
     const matchStatus = filter === 'all' || t.status === filter;
+    
     const matchSearch = search === '' ||
       t.ticketNumber?.toLowerCase().includes(search.toLowerCase()) ||
       t.customerName?.toLowerCase().includes(search.toLowerCase()) ||
       t.subject?.toLowerCase().includes(search.toLowerCase()) ||
       t.customerPhone?.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchSearch;
+      
+    const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
+    const matchTechnician = technicianFilter === 'all' || String(t.assignedTo) === String(technicianFilter);
+    const matchDeviceType = deviceTypeFilter === 'all' || t.deviceType === deviceTypeFilter;
+
+    return matchStatus && matchSearch && matchPriority && matchTechnician && matchDeviceType;
   });
+
+  // Calculate paginated subset of filtered tickets
+  const totalPages = Math.ceil(filtered.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const paginatedFiltered = filtered.slice(startIndex, startIndex + rowsPerPage);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, search, priorityFilter, technicianFilter, deviceTypeFilter]);
 
   const handleNewTicketPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -653,56 +676,109 @@ export default function ServiceManager() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-3 rounded-theme border border-gray-200 shadow-sm flex flex-col md:flex-row gap-3 items-center shrink-0">
-        <div className="flex flex-wrap gap-1.5 flex-1">
-          {FILTER_TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className={cn(
-                "px-3 py-1.5 rounded-theme text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
-                filter === tab.key ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              )}
-            >
-              {tab.label}
-              {statusCounts[tab.key] !== undefined && (
-                <span className={cn(
-                  "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
-                  filter === tab.key ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
-                )}>
-                  {statusCounts[tab.key] || 0}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Görünüm modu toggle */}
-          <div className="flex rounded-theme border border-gray-200 overflow-hidden">
-            <button
-              onClick={() => setViewMode('list')}
-              title="Liste Görünümü"
-              className={cn('px-2.5 py-1.5 transition-colors', viewMode === 'list' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100')}
-            >
-              <LayoutList className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('kanban')}
-              title="Kanban Görünümü"
-              className={cn('px-2.5 py-1.5 transition-colors', viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100')}
-            >
-              <Columns className="w-4 h-4" />
-            </button>
+      <div className="bg-white p-4 rounded-theme border border-gray-200 shadow-sm space-y-3 shrink-0">
+        {/* Status Filters */}
+        <div className="flex flex-col lg:flex-row gap-3 justify-between items-start lg:items-center">
+          <div className="flex flex-wrap gap-1.5 flex-1">
+            {FILTER_TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={cn(
+                  "px-3 py-1.5 rounded-theme text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
+                  filter === tab.key ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                )}
+              >
+                {tab.label}
+                {statusCounts[tab.key] !== undefined && (
+                  <span className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
+                    filter === tab.key ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
+                  )}>
+                    {statusCounts[tab.key] || 0}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-          <div className="relative w-full md:w-56">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Kayıt no, müşteri, telefon..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-theme text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+          <div className="flex items-center gap-2 shrink-0 self-end lg:self-auto">
+            {/* Görünüm modu toggle */}
+            <div className="flex rounded-theme border border-gray-200 overflow-hidden bg-gray-50">
+              <button
+                onClick={() => setViewMode('list')}
+                title="Liste Görünümü"
+                className={cn('px-2.5 py-1.5 transition-colors', viewMode === 'list' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100')}
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                title="Kanban Görünümü"
+                className={cn('px-2.5 py-1.5 transition-colors', viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100')}
+              >
+                <Columns className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Dropdown Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-gray-100">
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Öncelik Seviyesi</label>
+            <select
+              value={priorityFilter}
+              onChange={e => setPriorityFilter(e.target.value)}
+              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">Tüm Öncelikler</option>
+              <option value="dusuk">Düşük</option>
+              <option value="normal">Normal</option>
+              <option value="yuksek">Yüksek</option>
+              <option value="acil">Acil</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Atanan Personel</label>
+            <select
+              value={technicianFilter}
+              onChange={e => setTechnicianFilter(e.target.value)}
+              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">Tüm Personeller</option>
+              {staffUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Cihaz Türü</label>
+            <select
+              value={deviceTypeFilter}
+              onChange={e => setDeviceTypeFilter(e.target.value)}
+              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">Tüm Cihazlar</option>
+              {Array.from(new Set(tickets.map(t => t.deviceType).filter(Boolean))).map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Hızlı Arama</label>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="No, müşteri, telefon..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -779,58 +855,145 @@ export default function ServiceManager() {
               })}
             </div>
           ) : (
-            /* LİSTE GÖRÜNÜMÜ */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filtered.map(ticket => (
-                <div
-                  key={ticket.id}
-                  onClick={() => openDetail(ticket)}
-                  className={cn(
-                    "bg-white rounded-theme border shadow-sm hover:shadow-md hover:border-gray-300 transition-all flex flex-col p-5 cursor-pointer",
-                    detailTicket?.id === ticket.id ? 'border-primary ring-1 ring-primary' : 'border-gray-200',
-                    ticket.status === 'musteri_onayi_bekliyor' && detailTicket?.id !== ticket.id ? 'border-amber-300' : ''
-                  )}
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="font-mono text-xs font-bold text-gray-400">{ticket.ticketNumber}</span>
-                    <div className="flex items-center gap-2">
-                      {ticket.status === 'musteri_onayi_bekliyor' && (
-                        <span title="Müşteri onayı bekleniyor"><AlertCircle className="w-3.5 h-3.5 text-amber-500" /></span>
-                      )}
-                      <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-bold", STATUS_COLORS[ticket.status || 'yeni'])}>
-                        {STATUS_LABELS[ticket.status || 'yeni']}
-                      </span>
-                      <Link
-                        to={`/print/ticket/${ticket.ticketNumber}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="text-gray-400 hover:text-gray-600 p-1"
-                        title="Yazdır"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </Link>
-                    </div>
+            /* LİSTE GÖRÜNÜMÜ — UZMAN DATATABLE TASARIMI */
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        <th className="py-3.5 px-4 font-mono">Kayıt No</th>
+                        <th className="py-3.5 px-4">Kayıt Tarihi</th>
+                        <th className="py-3.5 px-4">Müşteri & İletişim</th>
+                        <th className="py-3.5 px-4">Cihaz / Marka Model</th>
+                        <th className="py-3.5 px-4">Şikayet / Konu</th>
+                        <th className="py-3.5 px-4 text-center">Öncelik</th>
+                        <th className="py-3.5 px-4">Atanan Personel</th>
+                        <th className="py-3.5 px-4">Durum</th>
+                        <th className="py-3.5 px-4 text-right">İşlemler</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                      {paginatedFiltered.map(ticket => (
+                        <tr
+                          key={ticket.id}
+                          onClick={() => openDetail(ticket)}
+                          className={cn(
+                            "hover:bg-slate-50/70 transition-colors cursor-pointer group",
+                            detailTicket?.id === ticket.id ? "bg-blue-50/30" : "",
+                            ticket.status === 'musteri_onayi_bekliyor' ? "bg-amber-50/10" : ""
+                          )}
+                        >
+                          {/* Kayıt No */}
+                          <td className="py-3.5 px-4 font-mono font-bold text-gray-900 group-hover:text-primary transition-colors">
+                            {ticket.ticketNumber}
+                          </td>
+                          {/* Kayıt Tarihi */}
+                          <td className="py-3.5 px-4 text-gray-500 whitespace-nowrap">
+                            {new Date(ticket.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          {/* Müşteri & İletişim */}
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-gray-900 leading-normal">{ticket.customerName}</div>
+                            <div className="text-[10px] text-gray-400 font-medium">{ticket.customerPhone || '—'}</div>
+                          </td>
+                          {/* Cihaz / Marka Model */}
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-gray-800 leading-normal">{ticket.deviceBrand} {ticket.deviceModel}</div>
+                            <div className="text-[10px] text-gray-400 font-mono font-medium">{ticket.deviceType || 'Cihaz'} {ticket.deviceSerial ? `• ${ticket.deviceSerial}` : ''}</div>
+                          </td>
+                          {/* Şikayet / Konu */}
+                          <td className="py-3.5 px-4 max-w-xs">
+                            <div className="truncate font-semibold text-gray-800" title={ticket.subject}>{ticket.subject}</div>
+                          </td>
+                          {/* Öncelik */}
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <span className={cn(
+                              "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
+                              ticket.priority === 'dusuk' ? "bg-gray-50 text-gray-500 border-gray-200" :
+                              ticket.priority === 'normal' ? "bg-blue-50 text-blue-600 border-blue-150" :
+                              ticket.priority === 'yuksek' ? "bg-orange-50 text-orange-600 border-orange-150" :
+                              "bg-red-50 text-red-600 border-red-150 font-black animate-pulse"
+                            )}>
+                              {PRIORITY_LABELS[ticket.priority || 'normal']}
+                            </span>
+                          </td>
+                          {/* Atanan Personel */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {ticket.assignedName ? (
+                              <span className="text-blue-600 font-bold inline-flex items-center gap-1">
+                                <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                {ticket.assignedName}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 italic">Atanmamış</span>
+                            )}
+                          </td>
+                          {/* Durum */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-2xs border border-black/5", STATUS_COLORS[ticket.status || 'yeni'])}>
+                              {STATUS_LABELS[ticket.status || 'yeni']}
+                            </span>
+                          </td>
+                          {/* İşlemler */}
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Link
+                                to={`/print/ticket/${ticket.ticketNumber}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-700 rounded-lg transition-colors flex items-center justify-center shadow-2xs"
+                                title="Fis Yazdir"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* PAGINATION CONTROL BAR */}
+              {totalPages > 1 && (
+                <div className="bg-white px-4 py-3.5 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
+                  <div className="text-xs text-gray-500 font-medium">
+                    Toplam <span className="font-bold text-gray-800">{filtered.length}</span> kayıttan <span className="font-bold text-gray-800">{startIndex + 1} - {Math.min(startIndex + rowsPerPage, filtered.length)}</span> arası gösteriliyor
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-1 text-sm line-clamp-1">{ticket.subject}</h3>
-                  <p className="text-xs text-gray-500 mb-0.5">{ticket.customerName}</p>
-                  {ticket.customerPhone && (
-                    <p className="text-xs text-gray-400 mb-1">{ticket.customerPhone}</p>
-                  )}
-                  {ticket.dealerName && (
-                    <p className="text-xs text-blue-500 flex items-center gap-1 mb-1"><Building2 className="w-3 h-3" /> {ticket.dealerName}</p>
-                  )}
-                  <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-100 text-xs text-gray-400">
-                    <span className={cn('font-semibold', PRIORITY_COLORS[ticket.priority || 'normal'])}>
-                      ● {PRIORITY_LABELS[ticket.priority || 'normal']}
-                    </span>
-                    <span className="text-[10px]">
-                      {new Date(ticket.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })}
-                    </span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Önceki
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={cn(
+                          "w-8 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center",
+                          currentPage === page
+                            ? "bg-primary text-white shadow-sm"
+                            : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                        )}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Sonraki
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
