@@ -45,6 +45,8 @@ const AdminServices = lazy(() => import('./pages/admin/AdminServices'));
 const AdminServiceCategories = lazy(() => import('./pages/admin/AdminServiceCategories'));
 const AdminShipments = lazy(() => import('./pages/admin/AdminShipments'));
 const AdminExpenses = lazy(() => import('./pages/admin/AdminExpenses'));
+const AdminDealers = lazy(() => import('./pages/admin/AdminDealers'));
+const AdminReceiptBuilder = lazy(() => import('./pages/admin/AdminReceiptBuilder'));
 const DynamicPage = lazy(() => import('./pages/public/DynamicPage'));
 const LegalPage = lazy(() => import('./pages/public/LegalPage'));
 const About = lazy(() => import('./pages/public/About'));
@@ -136,6 +138,7 @@ function AppContent() {
             <Route path="blog" element={<BlogList />} />
             <Route path="blog/:slug" element={<BlogPost />} />
             <Route path="ariza-sorgulama" element={<DeviceStatus />} />
+            <Route path="track/:orderNo" element={<DeviceStatus />} />
             <Route path="randevu" element={<Appointment />} />
             <Route path="hizmetler" element={<Services />} />
             <Route path="hizmetler/:id" element={<ServiceDetail />} />
@@ -174,6 +177,8 @@ function AppContent() {
             <Route path="abonelik-paketleri" element={<AdminSubscriptionPlans />} />
             <Route path="stok" element={<AdminStock />} />
             <Route path="satis-pos" element={<AdminPos />} />
+            <Route path="bayiler" element={<AdminDealers />} />
+            <Route path="sablon-tasarimci" element={<AdminReceiptBuilder />} />
             <Route path="mesajlar" element={<AdminMessages />} />
             <Route path="ayarlar" element={<AdminSettings />} />
             <Route path="profilim" element={<AdminProfile />} />

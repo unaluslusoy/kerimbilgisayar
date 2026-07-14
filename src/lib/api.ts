@@ -498,6 +498,10 @@ export async function createTicketMessage(data: { ticketId: number; message: str
   return adminRequest('/api/admin/ticket-messages', { method: 'POST', body: JSON.stringify(data) });
 }
 
+export async function fetchTicketStatusLogs(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/status-logs`);
+}
+
 // ============================================================
 // LEADS — CONVERT TO TICKET
 // ============================================================
@@ -583,4 +587,38 @@ export async function createAdminSale(data: any) {
 
 export async function fetchAdminSaleDetails(id: number) {
   return adminRequest(`/api/admin/sales/${id}`);
+}
+
+// ============================================================
+// CUSTOMERS SEARCH
+// ============================================================
+export async function searchAdminCustomers(query: string) {
+  return adminRequest(`/api/admin/customers/search?query=${encodeURIComponent(query)}`);
+}
+
+// ============================================================
+// DEALERS (BAYİ YÖNETİMİ)
+// ============================================================
+export async function fetchAdminDealers() {
+  return adminRequest('/api/admin/dealers');
+}
+
+export async function createAdminDealer(data: any) {
+  return adminRequest('/api/admin/dealers', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateAdminDealer(id: number, data: any) {
+  return adminRequest(`/api/admin/dealers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function deleteAdminDealer(id: number) {
+  return adminRequest(`/api/admin/dealers/${id}`, { method: 'DELETE' });
+}
+
+export async function fetchDealerUsers(dealerId: number) {
+  return adminRequest(`/api/admin/dealers/${dealerId}/users`);
+}
+
+export async function createDealerUser(dealerId: number, data: any) {
+  return adminRequest(`/api/admin/dealers/${dealerId}/users`, { method: 'POST', body: JSON.stringify(data) });
 }

@@ -134,28 +134,42 @@ export default function AdminPos() {
     return s + (itemSubtotal * (rate / (100 + rate)));
   }, 0);
 
+  const getCustomerDisplayName = (c: any) => {
+    if (!c) return '';
+    if (c.firstName || c.lastName) {
+      return `${c.firstName || ''} ${c.lastName || ''}`.trim();
+    }
+    return c.name || 'İsimsiz Müşteri';
+  };
+
   const handleCreateCustomer = async () => {
     if (!newCust.name) return;
     setSavingCustomer(true);
     try {
-      const res = await createAdminCustomer(newCust);
+      const parts = newCust.name.trim().split(' ');
+      const firstName = parts[0] || '';
+      const lastName = parts.slice(1).join(' ') || '';
+      const res = await createAdminCustomer({
+        firstName,
+        lastName,
+        phone: newCust.phone,
+        email: newCust.email,
+        taxOffice: newCust.taxOffice,
+        taxId: newCust.taxId,
+        address: newCust.address
+      });
       setShowAddCustModal(false);
       setNewCust({ name: '', phone: '', email: '', taxOffice: '', taxId: '', address: '' });
-      
-      // Fetch fresh customer list immediately to avoid stale closure state
-      const updated = await fetchAdminCustomers();
-      setCustomersList(updated);
-      
-      // Refresh other lists in background
-      loadData();
-
-      // Select newly created customer using fresh list
+      await loadData();
+      // Select newly created customer
       if (res.customerId) {
-        const fullCust = updated.find((c: any) => c.customerId === res.customerId || c.id === res.customerId);
-        setSelectedCustomer(fullCust || { id: res.customerId, name: newCust.name });
+        const fullCust = customersList.find(c => c.id === res.customerId) || { id: res.customerId, firstName, lastName };
+        setSelectedCustomer(fullCust);
       } else {
         // Fallback search
-        const created = updated.find((c: any) => c.name === newCust.name);
+        const updated = await fetchAdminCustomers();
+        setCustomersList(updated);
+        const created = updated.find((c: any) => `${c.firstName || ''} ${c.lastName || ''}`.trim() === `${firstName} ${lastName}`.trim());
         if (created) setSelectedCustomer(created);
       }
       toast.success('Müşteri başarıyla eklendi.');
@@ -319,8 +333,9 @@ export default function AdminPos() {
   });
 
   const filteredCustomers = customersList.filter(cust => {
+    const fullName = `${cust.firstName || ''} ${cust.lastName || ''}`.toLowerCase();
     return !customerSearch ||
-      cust.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      fullName.includes(customerSearch.toLowerCase()) ||
       cust.phone?.includes(customerSearch) ||
       cust.email?.toLowerCase().includes(customerSearch.toLowerCase());
   });
@@ -514,7 +529,7 @@ export default function AdminPos() {
               {selectedCustomer ? (
                 <div className="flex items-center justify-between bg-primary/5 border border-primary/20 p-2.5 rounded-xl">
                   <div className="text-left">
-                    <p className="text-xs font-bold text-gray-900">{selectedCustomer.name}</p>
+                    <p className="text-xs font-bold text-gray-900">{getCustomerDisplayName(selectedCustomer)}</p>
                     <p className="text-xxs text-gray-500">{selectedCustomer.phone || 'Telefon yok'}</p>
                   </div>
                   <button 
@@ -552,7 +567,7 @@ export default function AdminPos() {
                             }}
                             className="p-2.5 hover:bg-gray-50 cursor-pointer text-xs font-semibold text-gray-700 flex justify-between border-b"
                           >
-                            <span>{cust.name}</span>
+                            <span>{getCustomerDisplayName(cust)}</span>
                             <span className="text-gray-400 font-normal">{cust.phone || '—'}</span>
                           </div>
                         ))

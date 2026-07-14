@@ -15,6 +15,61 @@ export default function TicketPrintView() {
   const [printMode, setPrintMode] = useState<"select" | "a4" | "pos">("select");
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
 
+  const [a4Config, setA4Config] = useState<any>({
+    fontSize: 12,
+    fontFamily: 'Inter, sans-serif',
+    marginTop: 20,
+    marginBottom: 20,
+    marginLeft: 20,
+    marginRight: 20,
+    headerTitle: 'KERİM BİLGİSAYAR & TEKNİK SERVİS',
+    headerSub: 'Bilgisayar - Tablet - Telefon Onarım Merkezi',
+    headerInfo: 'Gsm: 0538 317 24 37 • E-posta: bilgi@kerimbilgisayar.com',
+    footerText: 'Cihaz teslim alınırken bu giriş fişinin ibraz edilmesi zorunludur. 90 gün içerisinde teslim alınmayan cihazlardan firmamız sorumlu değildir.',
+    showLogo: true,
+    logoUrl: '',
+    showQrCode: true,
+    showPatternLock: true,
+    showSignature: true,
+    signatureText: 'Cihazı Teslim Alan Yetkili'
+  });
+
+  const [posConfig, setPosConfig] = useState<any>({
+    fontSize: 10,
+    fontFamily: 'Courier New, monospace',
+    marginTop: 5,
+    marginBottom: 5,
+    marginLeft: 5,
+    marginRight: 5,
+    headerTitle: 'KERİM BİLGİSAYAR',
+    headerSub: 'TEKNİK SERVİS FİŞİ',
+    headerInfo: 'Destek: 0538 317 24 37',
+    footerText: 'Cihaz takibi için QR kodu taratın.',
+    showLogo: false,
+    logoUrl: '',
+    showQrCode: true,
+    showPatternLock: false,
+    showSignature: true,
+    signatureText: 'Müşteri İmzası'
+  });
+
+  useEffect(() => {
+    if (settings.print_ticket_a4_template) {
+      try {
+        setA4Config(JSON.parse(settings.print_ticket_a4_template));
+      } catch (e) {
+        console.error("A4 parse error", e);
+      }
+    }
+    if (settings.print_ticket_pos_template) {
+      try {
+        setPosConfig(JSON.parse(settings.print_ticket_pos_template));
+      } catch (e) {
+        console.error("POS parse error", e);
+      }
+    }
+  }, [settings]);
+
   useEffect(() => {
     if (ticketNumber) {
       fetchTicket(ticketNumber)
@@ -178,19 +233,26 @@ export default function TicketPrintView() {
 
   // --- BİLEŞEN: POS (80mm) Termal Fiş Nüshası ---
   const PosReceipt = ({ copyType }: { copyType: "FİRMA" | "MÜŞTERİ" }) => (
-    <div className="pos-receipt mx-auto bg-white text-black leading-tight w-[80mm] p-2 print:p-0 print:w-full print:text-black" style={{ fontFamily: "'DejaVu Sans Mono', Monaco, Consolas, 'Courier New', monospace", fontSize: '10pt' }}>
+    <div className="pos-receipt mx-auto bg-white text-black leading-tight w-[80mm] p-2 print:p-0 print:w-full print:text-black" style={{
+      fontFamily: posConfig.fontFamily || "'DejaVu Sans Mono', Monaco, Consolas, 'Courier New', monospace",
+      fontSize: `${posConfig.fontSize || 10}pt`,
+      paddingTop: `${posConfig.marginTop || 5}px`,
+      paddingBottom: `${posConfig.marginBottom || 5}px`,
+      paddingLeft: `${posConfig.marginLeft || 5}px`,
+      paddingRight: `${posConfig.marginRight || 5}px`
+    }}>
       
       {/* Üst Kısım: Sol QR Kod, Sağ Başlık & Bilgiler */}
       <div className="flex items-center gap-3 border-b border-dashed border-black pb-2 mb-2">
-        {qrCodeDataUrl && (
+        {posConfig.showQrCode && qrCodeDataUrl && (
           <div className="shrink-0">
             <img src={qrCodeDataUrl} alt="Takip QR" className="w-18 h-18 border border-black p-0.5" />
           </div>
         )}
         <div className="flex-1 min-w-0 text-left">
-          <div className="font-bold text-[10pt] uppercase tracking-tight">{settings.siteTitle || "KERİM BİLGİSAYAR"}</div>
-          <div className="text-[7.5pt] leading-tight mb-1 font-normal text-black">{settings.contactAddress}</div>
-          <div className="text-[8.5pt] font-normal">Tel: {settings.contactPhone}</div>
+          <div className="font-bold text-[10pt] uppercase tracking-tight">{posConfig.headerTitle || settings.siteTitle || "KERİM BİLGİSAYAR"}</div>
+          <div className="text-[7.5pt] leading-tight mb-1 font-normal text-black">{posConfig.headerSub || "TEKNİK SERVİS FİŞİ"}</div>
+          <div className="text-[8.5pt] font-normal">{posConfig.headerInfo || settings.contactPhone}</div>
           <div className="font-bold text-[8.5pt] bg-black text-white px-2 py-0.5 mt-1 inline-block uppercase">{copyType} NÜSHASI</div>
         </div>
       </div>
@@ -326,28 +388,30 @@ export default function TicketPrintView() {
       )}
 
       {/* İmzalar */}
-      <div className="mt-4 text-center border-b border-dashed border-black pb-4 font-mono text-[9.5pt]">
-        <div className="grid grid-cols-2 gap-4 font-bold">
-          <div>
-            <p>Müşteri</p>
-            <p className="mt-8 border-t border-black pt-1 font-normal text-[8.5pt]">İmza / Tarih</p>
-          </div>
-          <div>
-            <p>Yetkili Servis</p>
-            <p className="mt-8 border-t border-black pt-1 font-normal text-[8.5pt]">İmza / Kaşe</p>
+      {posConfig.showSignature && (
+        <div className="mt-4 text-center border-b border-dashed border-black pb-4 font-mono text-[9.5pt]">
+          <div className="grid grid-cols-2 gap-4 font-bold">
+            <div>
+              <p>Müşteri</p>
+              <p className="mt-8 border-t border-black pt-1 font-normal text-[8.5pt]">İmza / Tarih</p>
+            </div>
+            <div>
+              <p>{posConfig.signatureText || "Yetkili Servis"}</p>
+              <p className="mt-8 border-t border-black pt-1 font-normal text-[8.5pt]">İmza / Kaşe</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Alt Bilgilendirme - Sola Yaslı */}
       <div className="mt-2 text-left text-[8pt] leading-normal font-normal space-y-1">
-        <p>Bizi tercih ettiğiniz için teşekkür ederiz.</p>
-        <p>Cihaz tesliminde bu fişin ibraz edilmesi zorunludur.</p>
-        <p className="text-[7.5pt] text-black border-t border-dotted border-black pt-1 mt-1">
-          * Cihaz durumunu sol üstteki QR kod ile anlık sorgulayabilirsiniz.
-        </p>
+        <p className="text-[8.5pt] text-black font-semibold whitespace-pre-line">{posConfig.footerText || "Bizi tercih ettiğiniz için teşekkür ederiz."}</p>
+        {posConfig.showQrCode && (
+          <p className="text-[7.5pt] text-black border-t border-dotted border-black pt-1 mt-1">
+            * Cihaz durumunu sol üstteki QR kod ile anlık sorgulayabilirsiniz.
+          </p>
+        )}
       </div>
-
       {/* Otomatik Bıçak Kesme Boşluğu (Thermal Cutting Margins) */}
       <div className="pt-24 border-t border-transparent">
         <div className="text-center font-mono text-[7pt] text-gray-400">--- FİŞ SONU / KESİM NOKTASI ---</div>
@@ -357,20 +421,29 @@ export default function TicketPrintView() {
 
   // --- BİLEŞEN: A5 Form Nüshası (A4 için optimize edilmiş yükseklik) ---
   const A5Form = ({ copyType }: { copyType: "MÜŞTERİ NÜSHASI" | "FİRMA NÜSHASI" }) => (
-    <div className="bg-white text-black font-sans w-full p-4 box-border flex flex-col justify-between h-[132mm] border-2 border-gray-900 rounded-2xl print:rounded-none">
+    <div className="bg-white text-black font-sans w-full p-4 box-border flex flex-col justify-between h-[132mm] border-2 border-gray-900 rounded-2xl print:rounded-none" style={{
+      fontFamily: a4Config.fontFamily || "Inter, sans-serif",
+      fontSize: `${a4Config.fontSize || 11}pt`,
+      paddingTop: `${a4Config.marginTop || 16}px`,
+      paddingBottom: `${a4Config.marginBottom || 16}px`,
+      paddingLeft: `${a4Config.marginLeft || 16}px`,
+      paddingRight: `${a4Config.marginRight || 16}px`
+    }}>
       <div>
         {/* Header Block */}
         <div className="flex justify-between items-start border-b-2 border-gray-900 pb-2 mb-2">
           <div className="flex gap-3 items-center">
-            <div className="bg-black text-white h-9 px-3 flex items-center justify-center font-black text-sm tracking-tighter rounded-lg">
-              KB
-            </div>
+            {a4Config.showLogo && (
+              <div className="bg-black text-white h-9 px-3 flex items-center justify-center font-black text-sm tracking-tighter rounded-lg">
+                KB
+              </div>
+            )}
             <div>
               <h1 className="text-xs font-black tracking-tight uppercase leading-none mb-0.5">
-                {settings.siteTitle || "KERİM BİLGİSAYAR"}
+                {a4Config.headerTitle || settings.siteTitle || "KERİM BİLGİSAYAR"}
               </h1>
-              <p className="text-[8.5px] text-gray-500 leading-tight max-w-[280px] font-medium">{settings.contactAddress}</p>
-              <p className="text-[8.5px] text-gray-700 font-bold mt-0.5">Tel: {settings.contactPhone} | {settings.contactEmail}</p>
+              <p className="text-[8.5px] text-gray-500 leading-tight max-w-[280px] font-medium">{a4Config.headerSub || "Teknik Servis & Onarım Kabul Formu"}</p>
+              <p className="text-[8.5px] text-gray-700 font-bold mt-0.5">{a4Config.headerInfo || settings.contactPhone}</p>
             </div>
           </div>
           
@@ -398,29 +471,23 @@ export default function TicketPrintView() {
                   </tr>
                 )}
                 <tr>
-                  <td className="text-gray-500 font-medium w-16 py-0.5">{ticket.companyName ? 'Yetkili:' : 'Müşteri:'}</td>
+                  <td className="text-gray-500 font-medium w-16 py-0.5">Müşteri:</td>
                   <td className="font-bold text-gray-900 py-0.5">{ticket.customerName}</td>
                 </tr>
-                {ticket.taxId && (
-                  <tr>
-                    <td className="text-gray-500 font-medium py-0.5">Vergi:</td>
-                    <td className="font-semibold text-gray-700 py-0.5">{ticket.taxOffice} / {ticket.taxId}</td>
-                  </tr>
-                )}
                 <tr>
-                  <td className="text-gray-500 font-medium py-0.5">Kayıt Tarihi:</td>
-                  <td className="font-semibold text-gray-700 py-0.5">{new Date(ticket.createdAt).toLocaleDateString("tr-TR")}</td>
+                  <td className="text-gray-500 font-medium py-0.5">Telefon:</td>
+                  <td className="font-semibold text-gray-800 py-0.5">{ticket.customerPhone}</td>
                 </tr>
-                {ticket.customerPhone && (
+                {ticket.customerEmail && (
                   <tr>
-                    <td className="text-gray-500 font-medium py-0.5">Telefon:</td>
-                    <td className="font-semibold text-gray-700 py-0.5">{ticket.customerPhone}</td>
+                    <td className="text-gray-500 font-medium py-0.5">E-posta:</td>
+                    <td className="text-gray-700 py-0.5 truncate max-w-[140px]">{ticket.customerEmail}</td>
                   </tr>
                 )}
                 {ticket.customerAddress && (
                   <tr>
                     <td className="text-gray-500 font-medium py-0.5">Adres:</td>
-                    <td className="font-semibold text-gray-700 py-0.5 break-words max-w-[200px]">{ticket.customerAddress}</td>
+                    <td className="text-gray-600 py-0.5 leading-snug text-[8.5px] truncate max-w-[140px]">{ticket.customerAddress}</td>
                   </tr>
                 )}
               </tbody>
@@ -429,21 +496,21 @@ export default function TicketPrintView() {
 
           {/* Device Card */}
           <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50 flex justify-between gap-2">
-            <div className="flex-1 min-w-0">
+            <div className="flex-1">
               <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Cihaz Bilgileri</h3>
               <table className="w-full text-[10px] leading-relaxed">
                 <tbody>
                   <tr>
-                    <td className="text-gray-500 font-medium w-16 py-0.5">Cihaz Türü:</td>
+                    <td className="text-gray-500 font-medium w-16 py-0.5">Cihaz:</td>
                     <td className="font-bold text-gray-900 py-0.5">{ticket.deviceType || '—'}</td>
                   </tr>
                   <tr>
                     <td className="text-gray-500 font-medium py-0.5">Model:</td>
-                    <td className="font-semibold text-gray-700 py-0.5">{ticket.brandModel || [ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || '—'}</td>
+                    <td className="font-semibold text-gray-800 py-0.5">{ticket.brandModel || [ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || '—'}</td>
                   </tr>
                   <tr>
                     <td className="text-gray-500 font-medium py-0.5">Seri No:</td>
-                    <td className="font-mono font-bold text-gray-900 py-0.5">{ticket.deviceSerial || ticket.serialNumber || '—'}</td>
+                    <td className="font-mono font-semibold text-gray-700 py-0.5">{ticket.deviceSerial || ticket.serialNumber || '—'}</td>
                   </tr>
                   {ticket.imei && (
                     <tr>
@@ -465,7 +532,7 @@ export default function TicketPrintView() {
               </table>
             </div>
 
-            {ticket.patternLock && (
+            {a4Config.showPatternLock && ticket.patternLock && (
               <div className="flex flex-col items-center shrink-0 border-l border-gray-200 pl-2">
                 <span className="text-[8px] font-bold text-gray-400 uppercase mb-1">Desen</span>
                 <PatternLockPicker
@@ -516,7 +583,7 @@ export default function TicketPrintView() {
 
         {/* Cost & QR tracking */}
         <div className="flex justify-between items-center gap-3">
-          {qrCodeDataUrl ? (
+          {a4Config.showQrCode && qrCodeDataUrl ? (
             <div className="flex items-center gap-2.5 border border-gray-100 rounded-xl p-1.5 bg-gray-50/30">
               <img src={qrCodeDataUrl} alt="Takip QR" className="w-12 h-12" />
               <div>
@@ -525,7 +592,7 @@ export default function TicketPrintView() {
               </div>
             </div>
           ) : (
-            <div className="text-[8px] text-gray-400">QR Kod Hazırlanıyor...</div>
+            <div className="text-[8px] text-gray-400">QR Kod Gizli</div>
           )}
 
           {grandTotal > 0 ? (
@@ -543,18 +610,20 @@ export default function TicketPrintView() {
 
       {/* Signature block */}
       <div className="mt-2 pt-1 border-t border-gray-100">
-        <div className="grid grid-cols-2 gap-2 text-center text-[9px]">
-          <div>
-            <p className="font-bold text-gray-600 mb-6">Müşteri (Teslim Eden)</p>
-            <p className="text-gray-400 text-[8px]">İmza / Tarih</p>
+        {a4Config.showSignature && (
+          <div className="grid grid-cols-2 gap-2 text-center text-[9px]">
+            <div>
+              <p className="font-bold text-gray-600 mb-6">Müşteri (Teslim Eden)</p>
+              <p className="text-gray-400 text-[8px]">İmza / Tarih</p>
+            </div>
+            <div>
+              <p className="font-bold text-gray-600 mb-6">{a4Config.signatureText || "Yetkili Servis (Teslim Alan)"}</p>
+              <p className="text-gray-400 text-[8px]">İmza / Kaşe</p>
+            </div>
           </div>
-          <div>
-            <p className="font-bold text-gray-600 mb-6">Yetkili Servis (Teslim Alan)</p>
-            <p className="text-gray-400 text-[8px]">İmza / Kaşe</p>
-          </div>
-        </div>
+        )}
         <div className="text-[7.5px] text-gray-400 text-center mt-2 border-t pt-1">
-          90 gün teslim alınmayan cihazlardan firmamız sorumlu değildir. Garanti kapsamında işlem yapılması için bu formun saklanması zorunludur.
+          {a4Config.footerText || "90 gün teslim alınmayan cihazlardan firmamız sorumlu değildir."}
         </div>
       </div>
     </div>

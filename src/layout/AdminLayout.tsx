@@ -122,7 +122,8 @@ export default function AdminLayout() {
           name: 'Müşteriler',
           icon: Users,
           subItems: [
-            { name: 'Müşteriler (Cariler)', path: '/admin/musteriler' }
+            { name: 'Müşteriler (Cariler)', path: '/admin/musteriler' },
+            { name: 'Bayi Yönetimi', path: '/admin/bayiler' }
           ]
         }
       ]
@@ -182,6 +183,7 @@ export default function AdminLayout() {
           icon: Settings,
           subItems: [
             { name: 'Genel Ayarlar', path: '/admin/ayarlar' },
+            { name: 'Şablon Tasarımcısı', path: '/admin/sablon-tasarimci' },
             { name: 'Dil Yönetimi', path: '/admin/diller' },
             { name: 'Eklentiler', path: '/admin/eklentiler' },
             { name: 'Güvenlik', path: '/admin/guvenlik' },

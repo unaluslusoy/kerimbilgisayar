@@ -957,4 +957,15 @@ export const ticketAttachmentMeta = mysqlTable('ticket_attachment_meta', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+export const serviceStatusLogs = mysqlTable('service_status_logs', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  ticketId: int('ticket_id').references(() => tickets.id).notNull(),
+  fromStatus: varchar('from_status', { length: 50 }),
+  toStatus: varchar('to_status', { length: 50 }).notNull(),
+  notes: text('notes'),
+  changedById: int('changed_by_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 

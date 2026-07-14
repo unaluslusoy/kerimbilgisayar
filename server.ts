@@ -84,6 +84,7 @@ import {
   saleItems,
   stockMovements,
   serializedItems,
+  serviceStatusLogs,
   blockedIps,
   shipments,
   expenses,
@@ -97,7 +98,7 @@ import {
   ticketAttachmentMeta,
 } from './src/db/schema';
 
-import { eq, desc, and, sql, asc, like } from 'drizzle-orm';
+import { eq, desc, and, or, sql, asc, like } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import crypto from 'crypto';
 import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
@@ -1912,8 +1913,25 @@ async function startServer() {
       const ticketId = parseInt(req.params.id);
       
       await db.transaction(async (tx) => {
+        // Select old ticket status to record status transition
+        const [oldTicket] = await tx.select({ status: tickets.status }).from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+        const fromStatus = oldTicket?.status || null;
+
         // Update ticket fields
         await tx.update(tickets).set(updateData).where(eq(tickets.id, ticketId));
+
+        // If status changed, write log
+        if (status && status !== fromStatus) {
+          const changedById = (req as any).adminUser.userId;
+          await tx.insert(serviceStatusLogs).values({
+            tenantId: 1,
+            ticketId,
+            fromStatus: fromStatus,
+            toStatus: status,
+            changedById,
+            notes: technicianNotes || 'Durum güncellendi.',
+          });
+        }
 
         // Update customer details if provided
         if (customerName || customerPhone || customerEmail) {
@@ -2041,6 +2059,26 @@ async function startServer() {
       }
 
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/tickets/:id/status-logs', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const logs = await db.select({
+        id: serviceStatusLogs.id,
+        fromStatus: serviceStatusLogs.fromStatus,
+        toStatus: serviceStatusLogs.toStatus,
+        notes: serviceStatusLogs.notes,
+        createdAt: serviceStatusLogs.createdAt,
+        changedByName: sql<string>`CONCAT(${users.firstName}, ' ', COALESCE(${users.lastName}, ''))`
+      }).from(serviceStatusLogs)
+        .leftJoin(users, eq(serviceStatusLogs.changedById, users.id))
+        .where(eq(serviceStatusLogs.ticketId, ticketId))
+        .orderBy(desc(serviceStatusLogs.createdAt));
+      res.json(logs);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -3981,6 +4019,40 @@ async function startServer() {
   // ADMIN API — CUSTOMERS, ACCOUNTS & SUBSCRIPTIONS
   // ============================================================
 
+  app.get('/api/admin/customers/search', requireAdmin, async (req, res) => {
+    try {
+      const q = (req.query.query as string || '').trim().toLowerCase();
+      if (!q) {
+        return res.json([]);
+      }
+      const matched = await db.select({
+        id: customers.userId,
+        customerId: customers.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        phone: users.phone,
+        companyName: companies.name,
+        address: companies.address,
+      }).from(customers)
+        .leftJoin(users, eq(customers.userId, users.id))
+        .leftJoin(companies, eq(customers.companyId, companies.id))
+        .where(
+          or(
+            like(sql<string>`LOWER(${users.firstName})`, `%${q}%`),
+            like(sql<string>`LOWER(${users.lastName})`, `%${q}%`),
+            like(sql<string>`LOWER(CONCAT(${users.firstName}, ' ', ${users.lastName}))`, `%${q}%`),
+            like(users.phone, `%${q}%`),
+            like(sql<string>`LOWER(${users.email})`, `%${q}%`)
+          )
+        )
+        .limit(10);
+      res.json(matched);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/api/admin/customers', requireAdmin, async (req, res) => {
     try {
       const allCustomers = await db.select({
@@ -4263,6 +4335,116 @@ async function startServer() {
         await db.insert(customerSubscriptions).values(payload);
       }
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
+  // ADMIN API — DEALERS (BAYİLER)
+  // ============================================================
+
+  app.get('/api/admin/dealers', requireAdmin, async (req, res) => {
+    try {
+      const allDealers = await db.select()
+        .from(companies)
+        .where(eq(companies.dealerType, 'dealer'))
+        .orderBy(desc(companies.createdAt));
+      res.json(allDealers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/dealers', requireAdmin, async (req, res) => {
+    try {
+      const { name, taxId, taxOffice, address, phone, email, website, sector, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote } = req.body;
+      const inserted = await db.insert(companies).values({
+        tenantId: 1,
+        name,
+        taxId,
+        taxOffice,
+        address,
+        phone,
+        email,
+        website,
+        sector,
+        type: 'partner',
+        dealerType: 'dealer',
+        dealerRiskLimit: dealerRiskLimit ? dealerRiskLimit.toString() : null,
+        dealerDueDays: parseInt(dealerDueDays) || 0,
+        dealerDiscountRate: dealerDiscountRate ? dealerDiscountRate.toString() : '0.00',
+        dealerPriceListNote,
+      });
+      res.json({ success: true, id: (inserted[0] as any).insertId });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/admin/dealers/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, taxId, taxOffice, address, phone, email, website, sector, dealerRiskLimit, dealerDueDays, dealerDiscountRate, dealerPriceListNote } = req.body;
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (taxId !== undefined) updateData.taxId = taxId;
+      if (taxOffice !== undefined) updateData.taxOffice = taxOffice;
+      if (address !== undefined) updateData.address = address;
+      if (phone !== undefined) updateData.phone = phone;
+      if (email !== undefined) updateData.email = email;
+      if (website !== undefined) updateData.website = website;
+      if (sector !== undefined) updateData.sector = sector;
+      if (dealerRiskLimit !== undefined) updateData.dealerRiskLimit = dealerRiskLimit ? dealerRiskLimit.toString() : null;
+      if (dealerDueDays !== undefined) updateData.dealerDueDays = parseInt(dealerDueDays) || 0;
+      if (dealerDiscountRate !== undefined) updateData.dealerDiscountRate = dealerDiscountRate ? dealerDiscountRate.toString() : '0.00';
+      if (dealerPriceListNote !== undefined) updateData.dealerPriceListNote = dealerPriceListNote;
+
+      await db.update(companies).set(updateData).where(eq(companies.id, id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/dealers/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Set linked users' companyId to null first
+      await db.update(users).set({ companyId: null }).where(eq(users.companyId, id));
+      await db.delete(companies).where(eq(companies.id, id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/dealers/:id/users', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const dealerUsers = await db.select().from(users).where(eq(users.companyId, id));
+      res.json(dealerUsers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/dealers/:id/users', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { firstName, lastName, email, phone, password } = req.body;
+      const hashedPassword = await bcrypt.hash(password || 'bayi123', 10);
+      const inserted = await db.insert(users).values({
+        tenantId: 1,
+        firstName,
+        lastName,
+        email,
+        phone,
+        passwordHash: hashedPassword,
+        roleType: 'dealer_user',
+        companyId: id,
+      });
+      res.json({ success: true, id: (inserted[0] as any).insertId });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

@@ -4,10 +4,11 @@ import { Search, Package, CheckCircle2, Wrench, Clock, FileText, AlertCircle, Ca
 import { cn } from '../../lib/utils';
 import { fetchTicket } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 export default function DeviceStatus() {
   usePageTitle('Cihaz Durumu Sorgula');
+  const { orderNo } = useParams<{ orderNo: string }>();
   const [ticketId, setTicketId] = useState('');
   const [result, setResult] = useState<any>(null);
   const [searched, setSearched] = useState(false);
@@ -26,6 +27,26 @@ export default function DeviceStatus() {
 
   // Extract from query params on mount
   useEffect(() => {
+    if (orderNo) {
+      const code = orderNo.trim().toUpperCase();
+      setTicketId(code);
+      setSearched(true);
+      setLoading(true);
+      setError(false);
+      fetchTicket(code)
+        .then((data) => {
+          setResult(data);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error(err);
+          setResult(null);
+          setError(true);
+          setLoading(false);
+        });
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const no = params.get('no');
     if (no) {
@@ -46,7 +67,7 @@ export default function DeviceStatus() {
           setLoading(false);
         });
     }
-  }, []);
+  }, [orderNo]);
 
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();

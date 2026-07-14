@@ -2,7 +2,7 @@ import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
@@ -86,6 +86,11 @@ export default function ServiceManager() {
   const [laborCostValue, setLaborCostValue] = useState('');
   const [isSavingLabor, setIsSavingLabor] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [statusLogs, setStatusLogs] = useState<any[]>([]);
+  const [rightPanelTab, setRightPanelTab] = useState<'notes' | 'timeline'>('notes');
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   // FAZ 2: Görünüm modu ve bayi
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [dealers, setDealers] = useState<any[]>([]);
@@ -153,31 +158,23 @@ export default function ServiceManager() {
 
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [duplicateCustomers, setDuplicateCustomers] = useState<any[]>([]);
+  const [searchingCustomer, setSearchingCustomer] = useState(false);
 
-  // Müşteri bilgileri girildikçe yinelenen kayıtları bul
-  const checkDuplicateCustomers = (field: 'name' | 'phone' | 'email', value: string) => {
-    if (!value || value.length < 3) {
+  // Müşteri bilgileri girildikçe veritabanından eşleşen müşterileri bul
+  const checkDuplicateCustomers = async (field: 'name' | 'phone' | 'email', value: string) => {
+    if (!value || value.length < 2) {
       setDuplicateCustomers([]);
       return;
     }
-    const valLower = value.toLowerCase();
-    const matched = allUsers.filter(u => {
-      // Sadece müşteri rolündekiler (customer)
-      if (u.roleType !== 'customer' && u.roleType !== 'user') return false;
-      
-      if (field === 'name') {
-        const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
-        return fullName.includes(valLower) || (u.companyName && u.companyName.toLowerCase().includes(valLower));
-      }
-      if (field === 'phone') {
-        return (u.phone || '').includes(value);
-      }
-      if (field === 'email') {
-        return (u.email || '').toLowerCase().includes(valLower);
-      }
-      return false;
-    });
-    setDuplicateCustomers(matched);
+    setSearchingCustomer(true);
+    try {
+      const results = await searchAdminCustomers(value);
+      setDuplicateCustomers(results || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSearchingCustomer(false);
+    }
   };
 
   const selectExistingCustomer = (c: any) => {
@@ -382,10 +379,18 @@ export default function ServiceManager() {
   };
 
   const handleStatusChange = async (id: number, status: string) => {
+    if (status === 'teslim_edildi') {
+      setShowSignatureModal(true);
+      return;
+    }
     try {
       await updateAdminTicket(id, { status });
       setTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t));
-      if (detailTicket?.id === id) setDetailTicket((prev: any) => ({ ...prev, status }));
+      if (detailTicket?.id === id) {
+        setDetailTicket((prev: any) => ({ ...prev, status }));
+        const logs = await fetchTicketStatusLogs(id).catch(() => []);
+        setStatusLogs(logs || []);
+      }
     } catch (e: any) {
       alert('Hata: ' + e.message);
     }
@@ -405,6 +410,112 @@ export default function ServiceManager() {
       alert('Hata: ' + e.message);
     } finally {
       setCostSaving(false);
+    }
+  };
+
+  const [isSignatureSaving, setIsSignatureSaving] = useState(false);
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0f172a'; // slate-900 color
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+  
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+  
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+  
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const handleSaveSignatureAndDeliver = async () => {
+    if (!detailTicket) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    setIsSignatureSaving(true);
+    try {
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('İmza görseli oluşturulamadı.');
+      
+      const file = new File([blob], `imza_${detailTicket.ticketNumber}.png`, { type: 'image/png' });
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const token = localStorage.getItem('admin_token');
+      const uploadRes = await fetch('/api/admin/media/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error('İmza görseli sunucuya yüklenemedi.');
+      const mediaData = await uploadRes.json();
+      
+      // Link to ticket attachments
+      await createTicketAttachment(detailTicket.id, {
+        fileName: `Müşteri Teslim İmzası - ${detailTicket.customerName}`,
+        fileUrl: mediaData.fileUrl,
+        fileType: 'image/png',
+        fileSize: file.size,
+      });
+      
+      // Update ticket status to "teslim_edildi"
+      await updateAdminTicket(detailTicket.id, { 
+        status: 'teslim_edildi',
+        technicianNotes: (detailTicket.technicianNotes || '') + '\n[Cihaz dijital imza karşılığında teslim edildi.]'
+      });
+      
+      // Update state
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, status: 'teslim_edildi' } : t));
+      setDetailTicket((prev: any) => ({ 
+        ...prev, 
+        status: 'teslim_edildi',
+        technicianNotes: (prev.technicianNotes || '') + '\n[Cihaz dijital imza karşılığında teslim edildi.]'
+      }));
+      
+      const atts = await fetchTicketAttachments(detailTicket.id).catch(() => []);
+      setTicketAttachments(atts || []);
+      const logs = await fetchTicketStatusLogs(detailTicket.id).catch(() => []);
+      setStatusLogs(logs || []);
+      
+      setShowSignatureModal(false);
+      alert('Cihaz başarıyla dijital imza ile teslim edildi!');
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setIsSignatureSaving(false);
     }
   };
 
@@ -515,6 +626,12 @@ export default function ServiceManager() {
       setTicketShipment(match || null);
     } catch (e) {
       setTicketShipment(null);
+    }
+    try {
+      const logs = await fetchTicketStatusLogs(ticket.id);
+      setStatusLogs(logs || []);
+    } catch (e) {
+      setStatusLogs([]);
     }
     try {
       const pluginsData = await adminRequest('/api/admin/plugins').catch(() => []);
@@ -1707,48 +1824,100 @@ export default function ServiceManager() {
                   </div>
                 </div>
 
-                {/* Right Area: Chat & Internal Notes */}
+                {/* Right Area: Chat & Internal Notes / Timeline */}
                 <div className="w-full lg:w-2/5 flex flex-col min-h-0 bg-slate-50/50 border-t lg:border-t-0 lg:border-l border-gray-200">
-                  <div className="p-4 border-b border-gray-200 shrink-0 bg-white">
-                    <p className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
-                      <MessageSquare className="w-4 h-4 text-blue-500" /> Dahili Notlar ({ticketNotes.length})
-                    </p>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {ticketNotes.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-8">Henüz not eklenmemiş.</p>
-                    )}
-                    {ticketNotes.map(note => (
-                      <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-xl p-3 shadow-sm">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-bold text-amber-800">{note.senderName}</span>
-                          <span className="text-[10px] text-amber-600 font-medium">{formatDate(note.createdAt)}</span>
-                        </div>
-                        <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{note.message}</p>
-                      </div>
-                    ))}
-                    <div ref={notesEndRef} />
-                  </div>
-
-                  <div className="p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
-                    <textarea
-                      rows={2}
-                      value={noteText}
-                      onChange={e => setNoteText(e.target.value)}
-                      placeholder="Dahili not ekle... (Ctrl+Enter ile gönder)"
-                      className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
-                      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
-                    />
+                  <div className="border-b border-gray-200 shrink-0 bg-white flex">
                     <button
-                      onClick={handleSendNote}
-                      disabled={noteSending || !noteText.trim()}
-                      className="px-4 py-2 bg-primary hover:bg-secondary text-white rounded-xl transition-colors disabled:opacity-50 shrink-0 flex items-center justify-center"
-                      title="Gönder (Ctrl+Enter)"
+                      type="button"
+                      onClick={() => setRightPanelTab('notes')}
+                      className={cn(
+                        'flex-1 py-3 text-center text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5',
+                        rightPanelTab === 'notes' ? 'border-primary text-primary bg-slate-50/30' : 'border-transparent text-gray-500 hover:text-gray-800'
+                      )}
                     >
-                      <Send className="w-4 h-4" />
+                      <MessageSquare className="w-3.5 h-3.5" /> Dahili Notlar ({ticketNotes.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRightPanelTab('timeline')}
+                      className={cn(
+                        'flex-1 py-3 text-center text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5',
+                        rightPanelTab === 'timeline' ? 'border-primary text-primary bg-slate-50/30' : 'border-transparent text-gray-500 hover:text-gray-800'
+                      )}
+                    >
+                      <Clock className="w-3.5 h-3.5" /> Durum Geçmişi ({statusLogs.length})
                     </button>
                   </div>
+                  
+                  {rightPanelTab === 'notes' ? (
+                    <>
+                      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        {ticketNotes.length === 0 && (
+                          <p className="text-xs text-gray-400 italic text-center py-8">Henüz not eklenmemiş.</p>
+                        )}
+                        {ticketNotes.map(note => (
+                          <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-xl p-3 shadow-sm">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs font-bold text-amber-800">{note.senderName}</span>
+                              <span className="text-[10px] text-amber-600 font-medium">{formatDate(note.createdAt)}</span>
+                            </div>
+                            <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{note.message}</p>
+                          </div>
+                        ))}
+                        <div ref={notesEndRef} />
+                      </div>
+
+                      <div className="p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
+                        <textarea
+                          rows={2}
+                          value={noteText}
+                          onChange={e => setNoteText(e.target.value)}
+                          placeholder="Dahili not ekle... (Ctrl+Enter ile gönder)"
+                          className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
+                          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSendNote}
+                          disabled={noteSending || !noteText.trim()}
+                          className="px-4 py-2 bg-primary hover:bg-secondary text-white rounded-xl transition-colors disabled:opacity-50 shrink-0 flex items-center justify-center"
+                          title="Gönder (Ctrl+Enter)"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {statusLogs.length === 0 && (
+                        <p className="text-xs text-gray-400 italic text-center py-8">İşlem geçmişi bulunmuyor.</p>
+                      )}
+                      <div className="relative border-l-2 border-gray-200 ml-3 pl-5 space-y-5">
+                        {statusLogs.map((log) => (
+                          <div key={log.id} className="relative">
+                            {/* Timeline Node Icon */}
+                            <div className="absolute -left-[27px] top-1 w-3 h-3 rounded-full bg-primary border-2 border-white ring-4 ring-slate-100" />
+                            
+                            <div className="bg-white border border-gray-150 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs font-bold text-gray-800">
+                                  {STATUS_LABELS[log.fromStatus] || 'Başlangıç'} ➜ {STATUS_LABELS[log.toStatus] || log.toStatus}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-medium">
+                                  {formatDate(log.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 mb-1.5 italic">"{log.notes || 'Açıklama belirtilmemiş'}"</p>
+                              <div className="flex items-center gap-1 text-[10px] text-gray-400 font-semibold">
+                                <span>👤 Güncelleyen:</span>
+                                <span className="text-gray-600">{log.changedByName || 'Sistem'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1885,6 +2054,13 @@ export default function ServiceManager() {
                       className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
                       placeholder="musteri@eposta.com" />
                   </div>
+
+                  {searchingCustomer && (
+                    <div className="flex items-center gap-2 text-xs text-primary font-semibold py-1">
+                      <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      Müşteriler sorgulanıyor...
+                    </div>
+                  )}
 
                   {/* Yinelenen / Kayıtlı Müşteri Uyarı Alanı */}
                   {duplicateCustomers.length > 0 && (
@@ -2177,6 +2353,83 @@ export default function ServiceManager() {
                 className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-bold transition-colors disabled:opacity-50 flex items-center justify-center shadow-md shadow-primary/20">
                 {saving ? (<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />) : null}
                 Kayıt ve Giriş Fişi Oluştur
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Digital Signature Delivery Modal */}
+      {showSignatureModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-slate-50">
+              <div>
+                <h3 className="text-sm font-black text-gray-950 uppercase tracking-widest">Cihaz Teslim Alım İmzası</h3>
+                <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Lütfen aşağıdaki alana imza atınız.</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowSignatureModal(false)} 
+                className="p-1.5 hover:bg-gray-200 rounded-xl text-gray-400 hover:text-gray-950 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Drawing Area (Canvas) */}
+            <div className="p-6 bg-slate-50 flex flex-col items-center">
+              <div className="relative w-full aspect-[4/3] bg-white rounded-2xl border-2 border-dashed border-gray-200 overflow-hidden shadow-inner">
+                <canvas
+                  ref={canvasRef}
+                  width={400}
+                  height={300}
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseLeave={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                  className="w-full h-full cursor-crosshair touch-none"
+                />
+                
+                {/* Floating Clear Button */}
+                <button
+                  type="button"
+                  onClick={clearSignature}
+                  className="absolute bottom-3 right-3 px-3 py-1.5 bg-white border border-gray-200 hover:bg-slate-50 text-gray-600 rounded-xl text-[10px] font-bold shadow-sm transition-colors"
+                >
+                  Alanı Temizle
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-450 italic mt-3 text-center">
+                * Bu imza, cihazın tüm onarım / servis işlemleri tamamlandıktan sonra teslim alındığını taahhüt eder.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-white">
+              <button
+                type="button"
+                onClick={() => setShowSignatureModal(false)}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition-colors text-xs"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSignatureAndDeliver}
+                disabled={isSignatureSaving}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1 shadow-md shadow-green-600/10 text-xs"
+              >
+                {isSignatureSaving ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                ) : (
+                  <Shield className="w-3.5 h-3.5" />
+                )}
+                İmzala & Teslim Et
               </button>
             </div>
           </div>
