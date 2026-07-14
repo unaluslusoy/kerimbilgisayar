@@ -85,11 +85,11 @@ export default function AdminLayout() {
 
   const menuGroups = [
     {
-      title: 'Yönetim & Takip',
+      title: 'Teknik Servis',
       items: [
         { name: 'Başlangıç', path: '/admin', icon: LayoutDashboard },
         {
-          name: 'Servis İşlemleri',
+          name: 'Teknik Servis İşlemleri',
           icon: Wrench,
           subItems: [
             { name: 'Servis Kayıtları', path: '/admin/servis' },
@@ -97,26 +97,43 @@ export default function AdminLayout() {
             { name: 'Servis Başvuruları', path: '/admin/basvurular' }
           ]
         },
-        { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare }
+        { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare },
+        { name: 'Bildirimler', path: '/admin/bildirimler', icon: Bell }
       ]
     },
     {
-      title: 'Ticari & Finans',
-      items: [
-        { name: 'POS Hızlı Satış', path: '/admin/satis-pos', icon: Store },
-        { name: 'Gider & Masraflar', path: '/admin/masraflar', icon: DollarSign },
-        { name: 'Stok & Depo', path: '/admin/stok', icon: Box },
-        { name: 'Abonelik Paketleri', path: '/admin/abonelik-paketleri', icon: Tag }
-      ]
-    },
-    {
-      title: 'Müşteri & CRM',
+      title: 'Ön Muhasebe',
       items: [
         {
-          name: 'Kullanıcı Yönetimi',
+          name: 'Ön Muhasebe İşlemleri',
+          icon: DollarSign,
+          subItems: [
+            { name: 'POS Hızlı Satış', path: '/admin/satis-pos' },
+            { name: 'Gider & Masraflar', path: '/admin/masraflar' },
+            { name: 'Stok & Depo', path: '/admin/stok' }
+          ]
+        }
+      ]
+    },
+    {
+      title: 'Müşteri Yönetimi',
+      items: [
+        {
+          name: 'Müşteriler',
           icon: Users,
           subItems: [
-            { name: 'Müşteriler (Cariler)', path: '/admin/musteriler' },
+            { name: 'Müşteriler (Cariler)', path: '/admin/musteriler' }
+          ]
+        }
+      ]
+    },
+    {
+      title: 'Personel & Kullanıcı',
+      items: [
+        {
+          name: 'Personel Yönetimi',
+          icon: Users,
+          subItems: [
             { name: 'Personel Listesi', path: '/admin/kullanicilar' }
           ]
         }
@@ -137,7 +154,8 @@ export default function AdminLayout() {
             { name: 'Yazı Kategorileri', path: '/admin/kategoriler' },
             { name: 'Müşteri Yorumları', path: '/admin/musteri-yorumlari' },
             { name: 'Kampanyalar', path: '/admin/kampanyalar' },
-            { name: 'SSS / Yardım', path: '/admin/sss' }
+            { name: 'SSS / Yardım', path: '/admin/sss' },
+            { name: 'Abonelik Paketleri', path: '/admin/abonelik-paketleri' }
           ]
         }
       ]
@@ -157,7 +175,7 @@ export default function AdminLayout() {
       ]
     },
     {
-      title: 'Sistem & Ayarlar',
+      title: 'Sistem ve Ayarlar',
       items: [
         {
           name: 'Sistem Ayarları',

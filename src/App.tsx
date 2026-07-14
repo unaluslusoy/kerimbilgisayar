@@ -72,6 +72,7 @@ const AdminGooglePosts = lazy(() => import('./pages/admin/google/AdminGooglePost
 const AdminGoogleReviews = lazy(() => import('./pages/admin/google/AdminGoogleReviews'));
 const AdminGoogleInfo = lazy(() => import('./pages/admin/google/AdminGoogleInfo'));
 const AdminGoogleInsights = lazy(() => import('./pages/admin/google/AdminGoogleInsights'));
+const AdminNotifications = lazy(() => import('./pages/admin/AdminNotifications'));
 
 
 function AppContent() {
@@ -200,6 +201,7 @@ function AppContent() {
             <Route path="hizmetler" element={<AdminServices />} />
             <Route path="kargo" element={<AdminShipments />} />
             <Route path="masraflar" element={<AdminExpenses />} />
+            <Route path="bildirimler" element={<AdminNotifications />} />
             
             {/* Google Business Routes */}
             <Route path="google" element={<AdminGoogleDashboard />} />

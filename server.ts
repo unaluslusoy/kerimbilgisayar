@@ -2470,7 +2470,7 @@ async function startServer() {
     try {
       const rows = await db.select().from(notifications)
         .orderBy(desc(notifications.createdAt))
-        .limit(10);
+        .limit(150);
       
       if (rows.length === 0) {
         const recentTickets = await db.select({
@@ -2503,6 +2503,27 @@ async function startServer() {
   app.post('/api/admin/notifications/mark-read', requireAdmin, async (req, res) => {
     try {
       await db.update(notifications).set({ isRead: true }).where(eq(notifications.isRead, false));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/notifications/:id/read', requireAdmin, async (req, res) => {
+    try {
+      await db.update(notifications)
+        .set({ isRead: true })
+        .where(eq(notifications.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/notifications/:id', requireAdmin, async (req, res) => {
+    try {
+      await db.delete(notifications)
+        .where(eq(notifications.id, parseInt(req.params.id)));
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

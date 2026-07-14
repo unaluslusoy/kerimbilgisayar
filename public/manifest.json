@@ -1,0 +1,25 @@
+{
+  "name": "Kerim Bilgisayar Teknik Servis & CRM Yönetim Paneli",
+  "short_name": "Kerim Servis",
+  "description": "Kerim Bilgisayar teknik servis süreçleri, ön muhasebe ve CRM yönetim uygulaması.",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#f0f0f1",
+  "theme_color": "#1d2327",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/assets/images/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/images/kerim-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
