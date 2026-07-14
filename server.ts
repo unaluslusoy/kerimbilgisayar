@@ -1211,6 +1211,12 @@ async function startServer() {
       const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
       if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
       
+      const targetUserId = ticket[0].assignedTo || ticket[0].userId || 1;
+      
+      // Müşteri ismini users tablosundan çek
+      const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
+      const clientName = userRecord[0] ? `${userRecord[0].firstName} ${userRecord[0].lastName}` : 'Müşteri';
+
       await db.transaction(async (tx) => {
         await tx.update(tickets).set({ status: 'isleme_alindi', updatedAt: new Date() }).where(eq(tickets.id, ticket[0].id));
         await tx.insert(ticketMessages).values({
@@ -1218,7 +1224,18 @@ async function startServer() {
           ticketId: ticket[0].id,
           message: 'Müşteri arıza/onarım teklifini onayladı. Cihaz onarım aşamasına alındı.',
           isInternal: true,
-          senderName: 'Sistem (Müşteri Onayı)'
+          senderId: targetUserId
+        });
+        
+        // Adminlere bildirim gönder
+        await tx.insert(notifications).values({
+          tenantId: 1,
+          userId: 1, // Ana yöneticiye bildirim
+          title: `Teklif Onaylandı: #${ticket[0].ticketNumber}`,
+          message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu cihazının onarım teklifini onayladı.`,
+          type: 'success',
+          isRead: false,
+          linkUrl: `/admin/servis`
         });
       });
       res.json({ success: true });
@@ -1233,6 +1250,12 @@ async function startServer() {
       const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
       if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
       
+      const targetUserId = ticket[0].assignedTo || ticket[0].userId || 1;
+
+      // Müşteri ismini users tablosundan çek
+      const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
+      const clientName = userRecord[0] ? `${userRecord[0].firstName} ${userRecord[0].lastName}` : 'Müşteri';
+
       await db.transaction(async (tx) => {
         await tx.update(tickets).set({ status: 'iptal', updatedAt: new Date() }).where(eq(tickets.id, ticket[0].id));
         await tx.insert(ticketMessages).values({
@@ -1240,7 +1263,18 @@ async function startServer() {
           ticketId: ticket[0].id,
           message: 'Müşteri onarım teklifini reddetti. Cihaz iptal durumuna alındı.',
           isInternal: true,
-          senderName: 'Sistem (Müşteri Reddi)'
+          senderId: targetUserId
+        });
+
+        // Adminlere bildirim gönder
+        await tx.insert(notifications).values({
+          tenantId: 1,
+          userId: 1,
+          title: `Teklif Reddedildi: #${ticket[0].ticketNumber}`,
+          message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu cihazının teklifini reddetti.`,
+          type: 'warning',
+          isRead: false,
+          linkUrl: `/admin/servis`
         });
       });
       res.json({ success: true });
@@ -1259,6 +1293,12 @@ async function startServer() {
       if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
       
       const tId = ticket[0].id;
+      const targetUserId = ticket[0].assignedTo || ticket[0].userId || 1;
+
+      // Müşteri ismini users tablosundan çek
+      const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
+      const clientName = userRecord[0] ? `${userRecord[0].firstName} ${userRecord[0].lastName}` : 'Müşteri';
+
       // Compute total cost
       const parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, tId));
       const partsTotal = parts.reduce((sum, p) => sum + parseFloat(p.totalPrice || '0'), 0);
@@ -1284,7 +1324,18 @@ async function startServer() {
           ticketId: tId,
           message: `Müşteri ödeme yöntemi olarak ${paymentMethod.toUpperCase()} seçti. Tutar: ${grandTotal.toFixed(2)} TL. Not: ${paymentMethod === 'havale_eft' ? 'Havale onayı bekleniyor.' : 'Ödeme başarılı.'}`,
           isInternal: false,
-          senderName: 'Sistem (Ödeme)'
+          senderId: targetUserId
+        });
+
+        // Adminlere bildirim gönder
+        await tx.insert(notifications).values({
+          tenantId: 1,
+          userId: 1,
+          title: `Ödeme Yapıldı: #${ticket[0].ticketNumber}`,
+          message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu servis için ${paymentMethod.toUpperCase()} ile ${grandTotal.toFixed(2)} TL ödeme yaptı.`,
+          type: 'success',
+          isRead: false,
+          linkUrl: `/admin/servis`
         });
       });
 

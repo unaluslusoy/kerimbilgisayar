@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSettings } from "../../context/SettingsContext";
 import { fetchTicket } from "../../lib/api";
-import { Printer, Receipt, ArrowLeft, BadgeAlert, FileText, Shield } from "lucide-react";
+import { Printer, Receipt, ArrowLeft, BadgeAlert, FileText } from "lucide-react";
 import PatternLockPicker from "../../components/ui/PatternLockPicker";
+import QRCode from "qrcode";
 
 export default function TicketPrintView() {
   const { ticketNumber } = useParams<{ ticketNumber: string }>();
@@ -12,6 +13,7 @@ export default function TicketPrintView() {
   const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [printMode, setPrintMode] = useState<"select" | "a4" | "pos">("select");
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
 
   useEffect(() => {
     if (ticketNumber) {
@@ -28,6 +30,22 @@ export default function TicketPrintView() {
   }, [ticketNumber]);
 
   useEffect(() => {
+    if (ticketNumber && ticket) {
+      const trackingUrl = `${settings.siteBaseUrl || window.location.origin}/ariza-sorgulama?no=${ticketNumber}`;
+      QRCode.toDataURL(trackingUrl, { 
+        margin: 1, 
+        width: 150,
+        color: {
+          dark: "#000000",
+          light: "#ffffff"
+        }
+      })
+        .then((url) => setQrCodeDataUrl(url))
+        .catch((err) => console.error("QR Code generation error:", err));
+    }
+  }, [ticketNumber, ticket, settings.siteBaseUrl]);
+
+  useEffect(() => {
     const handleAfterPrint = () => {
       setPrintMode("select");
     };
@@ -39,7 +57,7 @@ export default function TicketPrintView() {
     setPrintMode(mode);
     setTimeout(() => {
       window.print();
-    }, 400);
+    }, 500);
   };
 
   const handleGoBack = () => {
@@ -115,7 +133,7 @@ export default function TicketPrintView() {
   const grandTotal = partsTotal + (parseFloat(ticket.laborCost) || 0);
 
   const BarcodeSVG = () => (
-    <svg className="h-9 w-44 text-black" viewBox="0 0 100 20" fill="currentColor">
+    <svg className="h-8 w-36 text-black" viewBox="0 0 100 20" fill="currentColor">
       <rect x="0" y="0" width="2" height="20" />
       <rect x="3" y="0" width="1" height="20" />
       <rect x="5" y="0" width="4" height="20" />
@@ -150,9 +168,6 @@ export default function TicketPrintView() {
     </svg>
   );
 
-  const trackingUrl = `${settings.siteBaseUrl || "https://kerimbilgisayar.com"}/ariza-sorgulama?no=${ticketNumber}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(trackingUrl)}`;
-
   // Helper to format monospace columns matching exact 42 characters width
   const formatMonoRow = (col1: string, col2: string, col3: string) => {
     const c1 = (col1 || '').substring(0, 19).padEnd(19, ' ');
@@ -167,9 +182,11 @@ export default function TicketPrintView() {
       
       {/* Üst Kısım: Sol QR Kod, Sağ Başlık & Bilgiler */}
       <div className="flex items-center gap-3 border-b border-dashed border-black pb-2 mb-2">
-        <div className="shrink-0">
-          <img src={qrCodeUrl} alt="Takip QR" className="w-18 h-18 border border-black p-0.5" />
-        </div>
+        {qrCodeDataUrl && (
+          <div className="shrink-0">
+            <img src={qrCodeDataUrl} alt="Takip QR" className="w-18 h-18 border border-black p-0.5" />
+          </div>
+        )}
         <div className="flex-1 min-w-0 text-left">
           <div className="font-bold text-[10pt] uppercase tracking-tight">{settings.siteTitle || "KERİM BİLGİSAYAR"}</div>
           <div className="text-[7.5pt] leading-tight mb-1 font-normal text-black">{settings.contactAddress}</div>
@@ -277,7 +294,7 @@ export default function TicketPrintView() {
       </div>
 
       {/* Masraf & İşlem Dökümü */}
-      <div className="mb-2 border-2 border-black p-2 bg-gray-50/50 text-[9.5pt] text-left">
+      <div className="mb-2 border border-black p-2 bg-gray-50/50 text-[9.5pt] text-left">
         <p className="font-bold mb-1 uppercase tracking-wider text-[9.5pt] border-b border-black pb-1">💵 MASRAF & İŞLEM DÖKÜMÜ</p>
         <pre className="font-mono text-[9pt] leading-normal whitespace-pre bg-transparent p-0 m-0 border-0 text-black" style={{ fontFamily: "'DejaVu Sans Mono', Monaco, Consolas, 'Courier New', monospace" }}>
           {formatMonoRow("ÜRÜN / İŞLEM", "ADET", "TUTAR")}
@@ -330,48 +347,49 @@ export default function TicketPrintView() {
           * Cihaz durumunu sol üstteki QR kod ile anlık sorgulayabilirsiniz.
         </p>
       </div>
+
+      {/* Otomatik Bıçak Kesme Boşluğu (Thermal Cutting Margins) */}
+      <div className="pt-24 border-t border-transparent">
+        <div className="text-center font-mono text-[7pt] text-gray-400">--- FİŞ SONU / KESİM NOKTASI ---</div>
+      </div>
     </div>
   );
 
-  // --- BİLEŞEN: A5 Form Nüshası ---
+  // --- BİLEŞEN: A5 Form Nüshası (A4 için optimize edilmiş yükseklik) ---
   const A5Form = ({ copyType }: { copyType: "MÜŞTERİ NÜSHASI" | "FİRMA NÜSHASI" }) => (
-    <div className="bg-white text-black font-sans w-full p-6 print:p-4 box-border h-[148mm] flex flex-col justify-between border border-gray-200 print:border-0 rounded-2xl print:rounded-none">
+    <div className="bg-white text-black font-sans w-full p-4 box-border flex flex-col justify-between h-[132mm] border-2 border-gray-900 rounded-2xl print:rounded-none">
       <div>
         {/* Header Block */}
-        <div className="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-4">
+        <div className="flex justify-between items-start border-b-2 border-gray-900 pb-2 mb-2">
           <div className="flex gap-3 items-center">
-            {settings.siteLogo ? (
-              <img src={settings.siteLogo} alt="Logo" className="h-10 w-auto object-contain" />
-            ) : (
-              <div className="bg-black text-white h-10 px-3 flex items-center justify-center font-black text-base tracking-tighter rounded-lg">
-                KB
-              </div>
-            )}
+            <div className="bg-black text-white h-9 px-3 flex items-center justify-center font-black text-sm tracking-tighter rounded-lg">
+              KB
+            </div>
             <div>
-              <h1 className="text-sm font-black tracking-tight uppercase leading-none mb-1">
+              <h1 className="text-xs font-black tracking-tight uppercase leading-none mb-0.5">
                 {settings.siteTitle || "KERİM BİLGİSAYAR"}
               </h1>
-              <p className="text-[9px] text-gray-500 leading-tight max-w-[280px] font-medium">{settings.contactAddress}</p>
-              <p className="text-[9px] text-gray-700 font-bold mt-0.5">Tel: {settings.contactPhone} | {settings.contactEmail}</p>
+              <p className="text-[8.5px] text-gray-500 leading-tight max-w-[280px] font-medium">{settings.contactAddress}</p>
+              <p className="text-[8.5px] text-gray-700 font-bold mt-0.5">Tel: {settings.contactPhone} | {settings.contactEmail}</p>
             </div>
           </div>
           
           <div className="text-right">
-            <h2 className="text-xs font-black uppercase tracking-widest text-gray-900 mb-0.5">SERVIS KABUL FORMU</h2>
-            <div className="text-[8px] font-bold bg-gray-100 px-2 py-0.5 rounded inline-block text-gray-600 mb-2">{copyType}</div>
-            <div className="flex flex-col items-end gap-1">
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-900 mb-0.5">SERVIS KABUL FORMU</h2>
+            <div className="text-[8px] font-bold bg-gray-100 px-2 py-0.5 rounded inline-block text-gray-600 mb-1">{copyType}</div>
+            <div className="flex flex-col items-end gap-0.5">
               <BarcodeSVG />
-              <p className="text-[9px] font-bold font-mono tracking-widest">{ticketNumber}</p>
+              <p className="text-[8.5px] font-bold font-mono tracking-widest leading-none mt-0.5">{ticketNumber}</p>
             </div>
           </div>
         </div>
 
         {/* Content Body Grid */}
-        <div className="grid grid-cols-2 gap-6 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-2">
           {/* Customer Card */}
-          <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
-            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 border-b pb-1">Müşteri Bilgileri</h3>
-            <table className="w-full text-[11px] leading-relaxed">
+          <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50">
+            <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Müşteri Bilgileri</h3>
+            <table className="w-full text-[10px] leading-relaxed">
               <tbody>
                 {ticket.companyName && (
                   <tr>
@@ -410,10 +428,10 @@ export default function TicketPrintView() {
           </div>
 
           {/* Device Card */}
-          <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/50 flex justify-between gap-4">
+          <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50 flex justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 border-b pb-1">Cihaz Bilgileri</h3>
-              <table className="w-full text-[11px] leading-relaxed">
+              <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Cihaz Bilgileri</h3>
+              <table className="w-full text-[10px] leading-relaxed">
                 <tbody>
                   <tr>
                     <td className="text-gray-500 font-medium w-16 py-0.5">Cihaz Türü:</td>
@@ -448,12 +466,12 @@ export default function TicketPrintView() {
             </div>
 
             {ticket.patternLock && (
-              <div className="flex flex-col items-center shrink-0 border-l border-gray-200 pl-3">
-                <span className="text-[9px] font-bold text-gray-400 uppercase mb-1">Desen Kilidi</span>
+              <div className="flex flex-col items-center shrink-0 border-l border-gray-200 pl-2">
+                <span className="text-[8px] font-bold text-gray-400 uppercase mb-1">Desen</span>
                 <PatternLockPicker
                   value={ticket.patternLock}
                   onChange={() => {}}
-                  size={96}
+                  size={76}
                   readOnly
                 />
               </div>
@@ -462,21 +480,21 @@ export default function TicketPrintView() {
         </div>
 
         {ticket.accessories && (
-          <div className="border border-gray-200 rounded-xl p-2.5 bg-amber-50/20 mb-3 text-[11px]">
-            <span className="font-bold text-gray-700">Emanet Cihaz Yanında Alınanlar:</span> {ticket.accessories}
+          <div className="border border-gray-200 rounded-xl p-2 bg-amber-50/20 mb-2 text-[10px] leading-tight">
+            <span className="font-bold text-gray-700">Emanetler:</span> {ticket.accessories}
           </div>
         )}
 
         {/* Issue Description block */}
-        <div className="border border-gray-200 rounded-xl p-3 mb-3">
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5 border-b pb-1">Müşteri Şikayeti / Açıklama</h3>
-          <p className="text-[11px] text-gray-800 leading-relaxed whitespace-pre-wrap min-h-[40px]" dangerouslySetInnerHTML={{ __html: ticket.issueDescription || "Açıklama belirtilmemiş." }}></p>
+        <div className="border border-gray-200 rounded-xl p-2.5 mb-2">
+          <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Müşteri Şikayeti / Açıklama</h3>
+          <p className="text-[10px] text-gray-800 leading-normal whitespace-pre-wrap min-h-[30px]" dangerouslySetInnerHTML={{ __html: ticket.issueDescription || "Açıklama belirtilmemiş." }}></p>
         </div>
 
         {/* Masraflar ve İşlemler Listesi */}
-        <div className="border border-gray-200 rounded-xl p-3 mb-4 bg-slate-50/30">
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5 border-b pb-1">Yapılan İşlemler & Masraf Dökümü</h3>
-          <div className="text-[11px] space-y-1">
+        <div className="border border-gray-200 rounded-xl p-2.5 mb-2 bg-slate-50/30">
+          <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Yapılan İşlemler & Masraf Dökümü</h3>
+          <div className="text-[10px] space-y-0.5">
             {ticket.parts && ticket.parts.length > 0 ? (
               ticket.parts.map((p: any) => (
                 <div key={p.id} className="flex justify-between text-gray-700">
@@ -485,10 +503,10 @@ export default function TicketPrintView() {
                 </div>
               ))
             ) : (
-              <div className="text-gray-450 italic text-[10px]">Kullanılan yedek parça veya işlem kaydı bulunmuyor.</div>
+              <div className="text-gray-450 italic text-[9.5px]">Kullanılan yedek parça veya işlem kaydı bulunmuyor.</div>
             )}
             {parseFloat(ticket.laborCost) > 0 && (
-              <div className="flex justify-between text-gray-700 border-t border-dashed pt-1 mt-1 font-bold">
+              <div className="flex justify-between text-gray-700 border-t border-dashed pt-0.5 mt-0.5 font-bold">
                 <span>İşçilik Ücreti</span>
                 <span className="font-bold text-gray-900">₺{parseFloat(ticket.laborCost).toLocaleString("tr-TR")}</span>
               </div>
@@ -497,22 +515,26 @@ export default function TicketPrintView() {
         </div>
 
         {/* Cost & QR tracking */}
-        <div className="flex justify-between items-center gap-4">
-          <div className="flex items-center gap-3 border border-gray-100 rounded-xl p-2 bg-gray-50/30">
-            <img src={qrCodeUrl} alt="Takip QR" className="w-14 h-14" />
-            <div>
-              <p className="text-[9px] font-bold text-gray-800 mb-0.5">Cihaz Durumunu Cepten Sorgulayın</p>
-              <p className="text-[8px] text-gray-500">Kameranızla taratarak anlık servis aşamalarını izleyebilirsiniz.</p>
-            </div>
-          </div>
-
-          {grandTotal > 0 ? (
-            <div className="border border-gray-900 rounded-xl px-4 py-2 text-right bg-gray-900 text-white min-w-[140px]">
-              <p className="text-[9px] uppercase tracking-wider font-bold opacity-70">Toplam Tutar</p>
-              <p className="text-base font-black">₺{grandTotal.toLocaleString("tr-TR")}</p>
+        <div className="flex justify-between items-center gap-3">
+          {qrCodeDataUrl ? (
+            <div className="flex items-center gap-2.5 border border-gray-100 rounded-xl p-1.5 bg-gray-50/30">
+              <img src={qrCodeDataUrl} alt="Takip QR" className="w-12 h-12" />
+              <div>
+                <p className="text-[8.5px] font-bold text-gray-800 leading-tight">Cihaz Durumunu Cepten Sorgulayın</p>
+                <p className="text-[7.5px] text-gray-500 leading-tight">Kameranızla taratarak anlık izleyebilirsiniz.</p>
+              </div>
             </div>
           ) : (
-            <div className="border border-gray-200 rounded-xl px-4 py-2 text-center text-gray-400 font-bold text-[10px] bg-gray-50">
+            <div className="text-[8px] text-gray-400">QR Kod Hazırlanıyor...</div>
+          )}
+
+          {grandTotal > 0 ? (
+            <div className="border border-gray-950 rounded-xl px-3 py-1.5 text-right bg-gray-950 text-white min-w-[120px]">
+              <p className="text-[8px] uppercase tracking-wider font-bold opacity-70">Toplam Tutar</p>
+              <p className="text-sm font-black">₺{grandTotal.toLocaleString("tr-TR")}</p>
+            </div>
+          ) : (
+            <div className="border border-gray-200 rounded-xl px-3 py-1.5 text-center text-gray-400 font-bold text-[9px] bg-gray-50">
               Ücretsiz Tespit / Servis Bedeli Bekleniyor
             </div>
           )}
@@ -520,18 +542,18 @@ export default function TicketPrintView() {
       </div>
 
       {/* Signature block */}
-      <div className="mt-3 pt-2 border-t border-gray-100">
-        <div className="grid grid-cols-2 gap-4 text-center text-[10px]">
+      <div className="mt-2 pt-1 border-t border-gray-100">
+        <div className="grid grid-cols-2 gap-2 text-center text-[9px]">
           <div>
-            <p className="font-bold text-gray-600 mb-8">Müşteri (Teslim Eden)</p>
-            <p className="text-gray-400 text-[9px]">İmza / Tarih</p>
+            <p className="font-bold text-gray-600 mb-6">Müşteri (Teslim Eden)</p>
+            <p className="text-gray-400 text-[8px]">İmza / Tarih</p>
           </div>
           <div>
-            <p className="font-bold text-gray-600 mb-8">Yetkili Servis (Teslim Alan)</p>
-            <p className="text-gray-400 text-[9px]">İmza / Kaşe</p>
+            <p className="font-bold text-gray-600 mb-6">Yetkili Servis (Teslim Alan)</p>
+            <p className="text-gray-400 text-[8px]">İmza / Kaşe</p>
           </div>
         </div>
-        <div className="text-[8px] text-gray-400 text-center mt-3 border-t pt-1.5">
+        <div className="text-[7.5px] text-gray-400 text-center mt-2 border-t pt-1">
           90 gün teslim alınmayan cihazlardan firmamız sorumlu değildir. Garanti kapsamında işlem yapılması için bu formun saklanması zorunludur.
         </div>
       </div>
@@ -577,7 +599,7 @@ export default function TicketPrintView() {
               <div className="w-14 h-16 bg-green-50 text-green-600 rounded-2xl mb-4 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
                 <Receipt className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-lg text-gray-900 group-hover:text-green-700">Termal Fiş Yazıcısı (2 Kopya)</h3>
+              <h3 className="font-bold text-lg text-gray-900 group-hover:text-green-700">Termal Fiş Yazıcısı</h3>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">
                 80mm genişliğinde termal rulolu fiş yazıcıları için yüksek kontrastlı ardışık 2 kopya basar.
               </p>
@@ -601,13 +623,13 @@ export default function TicketPrintView() {
       {/* PRINT LAYOUT: A4 Double Copy */}
       <div className={`print-container-a4 ${printMode === "a4" ? "block" : "hidden"} print:block mx-auto max-w-4xl bg-white w-full shadow-lg print:shadow-none p-6 print:p-0`}>
         {printMode === "a4" && (
-          <div className="w-full h-[297mm] flex flex-col justify-between">
+          <div className="w-full flex flex-col justify-between" style={{ height: '277mm', boxSizing: 'border-box' }}>
             {/* Top Copy */}
             <A5Form copyType="FİRMA NÜSHASI" />
             
             {/* Cut Line */}
-            <div className="relative w-full border-t-2 border-dashed border-gray-300 my-4 py-0 flex items-center justify-center print:border-black">
-              <span className="absolute bg-white px-4 text-[9px] text-gray-400 tracking-widest uppercase font-bold print:text-black">
+            <div className="w-full border-t-2 border-dashed border-black my-2 flex items-center justify-center relative" style={{ height: '10mm' }}>
+              <span className="absolute bg-white px-4 text-[9px] text-gray-600 tracking-widest uppercase font-bold print:text-black">
                 Kesim Çizgisi ✂
               </span>
             </div>

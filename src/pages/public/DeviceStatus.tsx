@@ -70,10 +70,10 @@ export default function DeviceStatus() {
     if (!result) return;
     setProcessingAction(true);
     try {
-      const res = await fetch(`/api/tickets/${result.id}/approve`, { method: 'POST' });
+      const res = await fetch(`/api/tickets/${result.ticketNumber}/approve`, { method: 'POST' });
       if (!res.ok) throw new Error('Onaylama işlemi başarısız.');
       // Refresh ticket info
-      const data = await fetchTicket(result.id);
+      const data = await fetchTicket(result.ticketNumber);
       setResult(data);
       alert('Onarım onayınız başarıyla iletildi. Cihazınız sıraya alınmıştır.');
     } catch (err: any) {
@@ -88,9 +88,9 @@ export default function DeviceStatus() {
     if (!window.confirm('Teklifi reddetmek istediğinize emin misiniz? Cihaz işlem yapılmadan iade edilecektir.')) return;
     setProcessingAction(true);
     try {
-      const res = await fetch(`/api/tickets/${result.id}/decline`, { method: 'POST' });
+      const res = await fetch(`/api/tickets/${result.ticketNumber}/decline`, { method: 'POST' });
       if (!res.ok) throw new Error('İşlem başarısız.');
-      const data = await fetchTicket(result.id);
+      const data = await fetchTicket(result.ticketNumber);
       setResult(data);
       alert('Talebiniz alınmıştır. Cihaz iade edilmek üzere hazırlanacaktır.');
     } catch (err: any) {
@@ -104,7 +104,7 @@ export default function DeviceStatus() {
     if (!result) return;
     setProcessingAction(true);
     try {
-      const res = await fetch(`/api/tickets/${result.id}/pay`, {
+      const res = await fetch(`/api/tickets/${result.ticketNumber}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentMethod: method })
@@ -121,7 +121,7 @@ export default function DeviceStatus() {
       }
       
       // Refresh data
-      const data = await fetchTicket(result.id);
+      const data = await fetchTicket(result.ticketNumber);
       setResult(data);
     } catch (err: any) {
       alert('Ödeme hatası: ' + err.message);
