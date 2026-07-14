@@ -1,10 +1,11 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2 } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
+import PatternLockPicker from '../../components/ui/PatternLockPicker';
 import { mediaUrl } from '../../lib/media';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -102,6 +103,14 @@ export default function ServiceManager() {
   const [editDeviceBrand, setEditDeviceBrand] = useState('');
   const [editDeviceModel, setEditDeviceModel] = useState('');
   const [isDeletingTicket, setIsDeletingTicket] = useState(false);
+  // Detay paneli cihaz bilgileri düzenleme state'leri
+  const [editImei, setEditImei] = useState('');
+  const [editDeviceSerial, setEditDeviceSerial] = useState('');
+  const [editPatternLock, setEditPatternLock] = useState('');
+  const [editPinPassword, setEditPinPassword] = useState('');
+  const [editDeviceEmail, setEditDeviceEmail] = useState('');
+  const [editDeviceEmailPassword, setEditDeviceEmailPassword] = useState('');
+  const [editCustomerAddress, setEditCustomerAddress] = useState('');
   const [newTicketPhotos, setNewTicketPhotos] = useState<any[]>([]);
   const [newTicketPhotoUploading, setNewTicketPhotoUploading] = useState(false);
   const [modalTab, setModalTab] = useState<'musteri'|'cihaz'|'servis'|'medya'>('musteri');
@@ -345,6 +354,13 @@ export default function ServiceManager() {
         deviceType: editDeviceType,
         deviceBrand: editDeviceBrand,
         deviceModel: editDeviceModel,
+        imei: editImei,
+        deviceSerial: editDeviceSerial,
+        patternLock: editPatternLock,
+        pinPassword: editPinPassword,
+        deviceEmail: editDeviceEmail,
+        deviceEmailPassword: editDeviceEmailPassword,
+        address: editCustomerAddress,
       };
       await updateAdminTicket(detailTicket.id, dataToSave);
       
@@ -396,6 +412,13 @@ export default function ServiceManager() {
     setEditDeviceType(ticket.deviceType || '');
     setEditDeviceBrand(ticket.deviceBrand || '');
     setEditDeviceModel(ticket.deviceModel || '');
+    setEditImei(ticket.imei || '');
+    setEditDeviceSerial(ticket.deviceSerial || ticket.serialNumber || '');
+    setEditPatternLock(ticket.patternLock || '');
+    setEditPinPassword(ticket.pinPassword || '');
+    setEditDeviceEmail(ticket.deviceEmail || '');
+    setEditDeviceEmailPassword(ticket.deviceEmailPassword || '');
+    setEditCustomerAddress(ticket.address || ticket.customerAddress || '');
     setIsEditingDetails(false);
     
     try {
@@ -925,7 +948,7 @@ export default function ServiceManager() {
                       <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 flex flex-col justify-between">
                         <div>
                           <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Telefon</p>
-                          <p className="text-gray-850 font-bold text-sm">
+                          <p className="text-gray-855 font-bold text-sm">
                             {detailTicket.customerPhone
                               ? <a href={`tel:${detailTicket.customerPhone}`} className="text-blue-600 hover:underline flex items-center gap-1">
                                   <Phone className="w-3.5 h-3.5" /> {detailTicket.customerPhone}
@@ -987,10 +1010,153 @@ export default function ServiceManager() {
                         <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
                           <Clock className="w-3 h-3" /> Oluşturulma
                         </p>
-                        <p className="text-gray-850 font-bold text-sm">{formatDate(detailTicket.createdAt)}</p>
+                        <p className="text-gray-855 font-bold text-sm">{formatDate(detailTicket.createdAt)}</p>
                       </div>
                     </div>
                   )}
+
+                  {/* Cihaz & Erişim Bilgileri Kartı */}
+                  <div className="border border-gray-200 rounded-2xl p-5 bg-white shadow-sm space-y-4">
+                    <p className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5 border-b pb-2">
+                      <Shield className="w-4 h-4 text-amber-500" /> Cihaz & Erişim Bilgileri
+                    </p>
+                    
+                    {isEditingDetails ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Seri Numarası</label>
+                            <input
+                              type="text"
+                              value={editDeviceSerial}
+                              onChange={e => setEditDeviceSerial(e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none font-mono text-xs"
+                              placeholder="Seri No"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">IMEI</label>
+                            <input
+                              type="text"
+                              value={editImei}
+                              onChange={e => setEditImei(e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none font-mono text-xs"
+                              placeholder="IMEI"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-amber-50/50 border border-amber-200/75 rounded-xl p-4 space-y-3">
+                          <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">🔐 Cihaz Kilit & Hesap Bilgileri</p>
+                          <div className="flex gap-4 flex-wrap">
+                            <div className="flex flex-col items-center gap-1 shrink-0">
+                              <label className="block text-[10px] font-semibold text-gray-600 mb-1 self-start">Desen Kilidi</label>
+                              <PatternLockPicker
+                                value={editPatternLock}
+                                onChange={val => setEditPatternLock(val)}
+                                size={148}
+                              />
+                            </div>
+                            <div className="flex-1 min-w-[160px] space-y-2">
+                              <div>
+                                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">PIN / Ekran Şifresi</label>
+                                <input
+                                  type="text"
+                                  value={editPinPassword}
+                                  onChange={e => setEditPinPassword(e.target.value)}
+                                  className="w-full border border-gray-300 bg-white rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-primary outline-none font-mono"
+                                  placeholder="Ekran şifresi"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Cihaz E-Postası</label>
+                                <input
+                                  type="text"
+                                  value={editDeviceEmail}
+                                  onChange={e => setEditDeviceEmail(e.target.value)}
+                                  className="w-full border border-gray-300 bg-white rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                                  placeholder="Google / Apple hesabı"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Hesap Şifresi</label>
+                                <input
+                                  type="text"
+                                  value={editDeviceEmailPassword}
+                                  onChange={e => setEditDeviceEmailPassword(e.target.value)}
+                                  className="w-full border border-gray-300 bg-white rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                                  placeholder="E-posta şifresi"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Müşteri Adresi</label>
+                          <textarea
+                            value={editCustomerAddress}
+                            onChange={e => setEditCustomerAddress(e.target.value)}
+                            rows={2}
+                            className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none text-xs"
+                            placeholder="Müşteri Fatura / Teslimat Adresi"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 text-xs">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-gray-50/60 border border-gray-100 rounded-xl p-2.5">
+                            <p className="text-gray-400 font-semibold uppercase tracking-wider text-[10px] mb-0.5">Seri No</p>
+                            <p className="text-gray-800 font-mono font-bold">{detailTicket.deviceSerial || detailTicket.serialNumber || '—'}</p>
+                          </div>
+                          <div className="bg-gray-50/60 border border-gray-100 rounded-xl p-2.5">
+                            <p className="text-gray-400 font-semibold uppercase tracking-wider text-[10px] mb-0.5">IMEI</p>
+                            <p className="text-gray-800 font-mono font-bold">{detailTicket.imei || '—'}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-amber-50/40 border border-amber-100/70 rounded-xl p-3.5 flex gap-4 flex-wrap">
+                          <div className="flex flex-col items-center shrink-0">
+                            <p className="text-[10px] text-amber-800 font-semibold self-start mb-1">Desen Kilidi Görünümü</p>
+                            <PatternLockPicker
+                              value={detailTicket.patternLock || ''}
+                              onChange={() => {}}
+                              size={128}
+                              readOnly
+                            />
+                          </div>
+                          <div className="flex-1 min-w-[160px] space-y-2">
+                            <div>
+                              <p className="text-gray-400 font-semibold uppercase tracking-wider text-[10px] mb-0.5">PIN / Şifre</p>
+                              <p className="text-gray-855 font-mono font-bold bg-white px-2 py-1 rounded border border-gray-200/50 inline-block text-xs">
+                                {detailTicket.pinPassword || 'Belirtilmedi'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400 font-semibold uppercase tracking-wider text-[10px] mb-0.5">Cihaz Hesabı / E-Posta</p>
+                              <p className="text-gray-855 font-bold break-all bg-white px-2 py-1 rounded border border-gray-200/50 inline-block text-xs">
+                                {detailTicket.deviceEmail || 'Belirtilmedi'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400 font-semibold uppercase tracking-wider text-[10px] mb-0.5">Hesap Şifresi</p>
+                              <p className="text-gray-855 font-mono font-bold bg-white px-2 py-1 rounded border border-gray-200/50 inline-block text-xs">
+                                {detailTicket.deviceEmailPassword || 'Belirtilmedi'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {(detailTicket.address || detailTicket.customerAddress) && (
+                          <div className="bg-gray-50/60 border border-gray-100 rounded-xl p-3">
+                            <p className="text-gray-400 font-semibold uppercase tracking-wider text-[10px] mb-0.5">Adres</p>
+                            <p className="text-gray-800 leading-normal font-medium">{detailTicket.address || detailTicket.customerAddress}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Personel Atama */}
                   <div className="border border-gray-200 rounded-2xl p-4 bg-blue-50/30">
@@ -1551,37 +1717,43 @@ export default function ServiceManager() {
                   </div>
 
                   <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-3">
-                    <p className="text-xs font-bold text-amber-700 uppercase tracking-widest">🔐 Erişim Bilgileri (Teknik Personel)</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Desen Kilidi</label>
-                        <input type="text" value={newTicket.patternLock}
-                          onChange={e => setNewTicket({ ...newTicket, patternLock: e.target.value })}
-                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                          placeholder="Desen kilitlii: 1-2-3..." />
+                    <p className="text-xs font-bold text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5" />
+                      Erişim Bilgileri (Teknik Personel)
+                    </p>
+                    <div className="flex gap-4 flex-wrap">
+                      {/* Sol: Desen Kilidi - görsel */}
+                      <div className="flex flex-col items-center gap-1">
+                        <label className="block text-xs font-semibold text-gray-600 mb-1 self-start">Desen Kilidi</label>
+                        <PatternLockPicker
+                          value={newTicket.patternLock}
+                          onChange={val => setNewTicket({ ...newTicket, patternLock: val })}
+                          size={172}
+                        />
                       </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">PIN / Parola</label>
-                        <input type="text" value={newTicket.pinPassword}
-                          onChange={e => setNewTicket({ ...newTicket, pinPassword: e.target.value })}
-                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                          placeholder="PIN veya ekran parolası" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Cihaz E-Postası</label>
-                        <input type="text" value={newTicket.deviceEmail}
-                          onChange={e => setNewTicket({ ...newTicket, deviceEmail: e.target.value })}
-                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                          placeholder="Apple ID / Google hesabı" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Parolası</label>
-                        <input type="text" value={newTicket.deviceEmailPassword}
-                          onChange={e => setNewTicket({ ...newTicket, deviceEmailPassword: e.target.value })}
-                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                          placeholder="Hesap parolası" />
+                      {/* Sağ: PIN, E-posta, Parola */}
+                      <div className="flex-1 min-w-[180px] space-y-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">PIN / Parola</label>
+                          <input type="text" value={newTicket.pinPassword}
+                            onChange={e => setNewTicket({ ...newTicket, pinPassword: e.target.value })}
+                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="PIN veya ekran parolası" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">Cihaz E-Postası</label>
+                          <input type="text" value={newTicket.deviceEmail}
+                            onChange={e => setNewTicket({ ...newTicket, deviceEmail: e.target.value })}
+                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Apple ID / Google hesabı" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">E-Posta Parolası</label>
+                          <input type="text" value={newTicket.deviceEmailPassword}
+                            onChange={e => setNewTicket({ ...newTicket, deviceEmailPassword: e.target.value })}
+                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Hesap parolası" />
+                        </div>
                       </div>
                     </div>
                   </div>

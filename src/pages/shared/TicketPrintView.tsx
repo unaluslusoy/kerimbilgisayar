@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSettings } from "../../context/SettingsContext";
 import { fetchTicket } from "../../lib/api";
-import { Printer, Receipt, ArrowLeft, BadgeAlert, FileText } from "lucide-react";
+import { Printer, Receipt, ArrowLeft, BadgeAlert, FileText, Shield } from "lucide-react";
+import PatternLockPicker from "../../components/ui/PatternLockPicker";
 
 export default function TicketPrintView() {
   const { ticketNumber } = useParams<{ ticketNumber: string }>();
@@ -189,7 +190,7 @@ export default function TicketPrintView() {
       </div>
 
       {/* Müşteri & Cihaz Bilgileri */}
-      <div className="space-y-0.5 text-[9.5pt] border-b border-dashed border-black pb-2 mb-2">
+      <div className="space-y-0.5 text-[9.5pt] border-b border-dashed border-black pb-2 mb-2 text-left">
         <div className="flex justify-between">
           <span className="font-bold">Müşteri:</span>
           <span className="font-normal">{ticket.customerName}</span>
@@ -215,47 +216,76 @@ export default function TicketPrintView() {
         {ticket.customerAddress && (
           <div className="flex justify-between">
             <span className="font-bold">Adres:</span>
-            <span className="font-normal text-[8.5pt] text-right truncate max-w-[210px]" title={ticket.customerAddress}>{ticket.customerAddress}</span>
+            <span className="font-normal text-[8.5pt] text-right truncate max-w-[210px]">{ticket.customerAddress}</span>
           </div>
         )}
         <div className="flex justify-between">
           <span className="font-bold">Cihaz:</span>
-          <span className="font-normal">{ticket.deviceType}</span>
+          <span className="font-normal">{ticket.deviceType || '—'}</span>
         </div>
         <div className="flex justify-between">
           <span className="font-bold">Model:</span>
-          <span className="font-normal">{ticket.brandModel}</span>
+          <span className="font-normal">{ticket.brandModel || [ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || '—'}</span>
         </div>
+        <div className="flex justify-between">
+          <span className="font-bold">Seri No:</span>
+          <span className="font-normal font-mono">{ticket.deviceSerial || ticket.serialNumber || '—'}</span>
+        </div>
+        {ticket.imei && (
+          <div className="flex justify-between">
+            <span className="font-bold">IMEI:</span>
+            <span className="font-normal font-mono">{ticket.imei}</span>
+          </div>
+        )}
         <div className="flex justify-between">
           <span className="font-bold">Durum:</span>
           <span className="font-bold">{statusMap[ticket.rawStatus] || ticket.status}</span>
         </div>
       </div>
 
+      {/* Erişim / Kilit Bilgileri */}
+      {(ticket.pinPassword || ticket.patternLock) && (
+        <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt] text-left">
+          <span className="font-bold">🔐 Erişim Bilgileri:</span>
+          {ticket.pinPassword && (
+            <div className="flex justify-between text-[9pt]">
+              <span>Cihaz Şifresi / PIN:</span>
+              <span className="font-mono font-bold">{ticket.pinPassword}</span>
+            </div>
+          )}
+          {ticket.patternLock && (
+            <div className="flex justify-between text-[9pt]">
+              <span>Desen Kilidi:</span>
+              <span className="font-mono font-bold">{ticket.patternLock}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Emanetler */}
       {ticket.accessories && (
-        <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt]">
+        <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt] text-left">
           <span className="font-bold">Emanet Alınanlar:</span>
           <p className="font-normal mt-0.5 text-[9pt] leading-tight text-black">{ticket.accessories}</p>
         </div>
       )}
 
       {/* Şikayet / Açıklama */}
-      <div className="mb-2 border-b border-dashed border-black pb-2 text-[9.5pt]">
+      <div className="mb-2 border-b border-dashed border-black pb-2 text-[9.5pt] text-left">
         <p className="font-bold mb-0.5">Şikayet / Açıklama:</p>
-        <p className="font-normal text-[9pt] whitespace-pre-wrap leading-tight text-black" dangerouslySetInnerHTML={{ __html: ticket.issueDescription }}></p>
+        <p className="font-normal text-[9pt] whitespace-pre-wrap leading-tight text-black" dangerouslySetInnerHTML={{ __html: ticket.issueDescription || ticket.description || "Şikayet belirtilmemiş." }}></p>
       </div>
 
       {/* Masraf & İşlem Dökümü */}
-      <div className="mb-2 border-b border-dashed border-black pb-2 text-[9.5pt]">
-        <p className="font-bold mb-1">Masraf & İşlem Dökümü:</p>
+      <div className="mb-2 border-2 border-black p-2 bg-gray-50/50 text-[9.5pt] text-left">
+        <p className="font-bold mb-1 uppercase tracking-wider text-[9.5pt] border-b border-black pb-1">💵 MASRAF & İŞLEM DÖKÜMÜ</p>
         <pre className="font-mono text-[9pt] leading-normal whitespace-pre bg-transparent p-0 m-0 border-0 text-black" style={{ fontFamily: "'DejaVu Sans Mono', Monaco, Consolas, 'Courier New', monospace" }}>
           {formatMonoRow("ÜRÜN / İŞLEM", "ADET", "TUTAR")}
           {"\n"}
           {"------------------------------------------"}
           {"\n"}
           {ticket.parts && ticket.parts.length > 0 ? (
-            ticket.parts.map((p: any) => formatMonoRow(p.name, p.quantity.toString(), parseFloat(p.totalPrice).toFixed(2) + " TL")).join("\n")
+            ticket.parts.map((p: any) => formatMonoRow(p.name || p.stockItemName, p.quantity.toString(), parseFloat(p.totalPrice).toFixed(2) + " TL")).join("\n")
           ) : (
             "  (Kullanılan yedek parça kaydı bulunmuyor.)\n"
           )}
@@ -272,7 +302,7 @@ export default function TicketPrintView() {
 
       {/* Teknisyen Görüşü */}
       {ticket.technicianNotes && (
-        <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt]">
+        <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt] text-left">
           <span className="font-bold block">Teknisyen Görüşü / Raporu:</span>
           <p className="font-normal text-[9pt] text-black italic leading-tight mt-0.5" dangerouslySetInnerHTML={{ __html: ticket.technicianNotes }}></p>
         </div>
@@ -380,24 +410,54 @@ export default function TicketPrintView() {
           </div>
 
           {/* Device Card */}
-          <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
-            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 border-b pb-1">Cihaz Bilgileri</h3>
-            <table className="w-full text-[11px] leading-relaxed">
-              <tbody>
-                <tr>
-                  <td className="text-gray-500 font-medium w-16 py-0.5">Cihaz Türü:</td>
-                  <td className="font-bold text-gray-900 py-0.5">{ticket.deviceType}</td>
-                </tr>
-                <tr>
-                  <td className="text-gray-500 font-medium py-0.5">Model:</td>
-                  <td className="font-semibold text-gray-700 py-0.5">{ticket.brandModel}</td>
-                </tr>
-                <tr>
-                  <td className="text-gray-500 font-medium py-0.5">Durum:</td>
-                  <td className="font-bold text-gray-900 py-0.5">{statusMap[ticket.rawStatus] || ticket.status}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/50 flex justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 border-b pb-1">Cihaz Bilgileri</h3>
+              <table className="w-full text-[11px] leading-relaxed">
+                <tbody>
+                  <tr>
+                    <td className="text-gray-500 font-medium w-16 py-0.5">Cihaz Türü:</td>
+                    <td className="font-bold text-gray-900 py-0.5">{ticket.deviceType || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-gray-500 font-medium py-0.5">Model:</td>
+                    <td className="font-semibold text-gray-700 py-0.5">{ticket.brandModel || [ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-gray-500 font-medium py-0.5">Seri No:</td>
+                    <td className="font-mono font-bold text-gray-900 py-0.5">{ticket.deviceSerial || ticket.serialNumber || '—'}</td>
+                  </tr>
+                  {ticket.imei && (
+                    <tr>
+                      <td className="text-gray-500 font-medium py-0.5">IMEI:</td>
+                      <td className="font-mono font-semibold text-gray-700 py-0.5">{ticket.imei}</td>
+                    </tr>
+                  )}
+                  {ticket.pinPassword && (
+                    <tr>
+                      <td className="text-gray-500 font-medium py-0.5">PIN / Şifre:</td>
+                      <td className="font-mono font-bold text-amber-700 py-0.5">🔑 {ticket.pinPassword}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="text-gray-500 font-medium py-0.5">Durum:</td>
+                    <td className="font-bold text-gray-900 py-0.5">{statusMap[ticket.rawStatus] || ticket.status}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {ticket.patternLock && (
+              <div className="flex flex-col items-center shrink-0 border-l border-gray-200 pl-3">
+                <span className="text-[9px] font-bold text-gray-400 uppercase mb-1">Desen Kilidi</span>
+                <PatternLockPicker
+                  value={ticket.patternLock}
+                  onChange={() => {}}
+                  size={96}
+                  readOnly
+                />
+              </div>
+            )}
           </div>
         </div>
 
