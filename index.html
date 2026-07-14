@@ -85,7 +85,21 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
-            .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+            .then((reg) => {
+              console.log('Service Worker registered successfully:', reg.scope);
+              
+              // Her sayfa yuklenmesinde sw guncellemesini denetle
+              reg.update();
+
+              // Eger yeni bir sw yuklendiyse ve controller degistiyse sayfayi yenile
+              let refreshing = false;
+              navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!refreshing) {
+                  refreshing = true;
+                  window.location.reload();
+                }
+              });
+            })
             .catch((err) => console.error('Service Worker registration failed:', err));
         });
       }

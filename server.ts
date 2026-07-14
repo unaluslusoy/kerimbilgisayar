@@ -5143,7 +5143,7 @@ async function startServer() {
       if (typeof settings === 'string') {
         try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
       }
-      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      if (!settings.tokens || !settings.selectedLocation) return res.json([]);
       
       const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
       oauth2Client.setCredentials(settings.tokens);
@@ -5152,7 +5152,7 @@ async function startServer() {
       const posts = (response.data as any).localPosts || [];
       res.json(posts);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.json([]);
     }
   });
 
@@ -5187,13 +5187,13 @@ async function startServer() {
       if (typeof settings === 'string') {
         try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
       }
-      if (!settings.tokens || !settings.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemiş veya konum seçilmemiş' });
+      if (!settings.tokens || !settings.selectedLocation) return res.json([]);
       const oauth2Client = new google.auth.OAuth2(settings.clientId, settings.clientSecret);
       oauth2Client.setCredentials(settings.tokens);
       const response = await oauth2Client.request({ url: `https://mybusiness.googleapis.com/v4/${settings.selectedLocation}/reviews` });
       res.json((response.data as any).reviews || []);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.json([]);
     }
   });
 
@@ -5219,17 +5219,17 @@ async function startServer() {
   app.get('/api/admin/plugins/google-business/info', requireAdmin, async (req, res) => {
     try {
       const s = await getGMBSettings();
-      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      if (!s.tokens || !s.selectedLocation) return res.json({ error: 'unauthorized', message: 'Yetki verilmemiş veya konum seçilmemiş' });
       const r = await createGMBClient(s).request({ url: `https://mybusinessbusinessinformation.googleapis.com/v1/${s.selectedLocation}?readMask=name,title,primaryPhone,profile` });
       res.json(r.data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { res.json({ error: 'unauthorized', message: e.message }); }
   });
 
   // PATCH /info
   app.patch('/api/admin/plugins/google-business/info', requireAdmin, async (req, res) => {
     try {
       const s = await getGMBSettings();
-      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      if (!s.tokens || !s.selectedLocation) return res.json({ error: 'unauthorized', message: 'Yetki verilmemiş veya konum seçilmemiş' });
       const { updateMask, ...body } = req.body;
       const mask = updateMask || 'title,primaryPhone,profile.description';
       const r = await createGMBClient(s).request({
@@ -5237,17 +5237,17 @@ async function startServer() {
         method: 'PATCH', data: body
       });
       res.json(r.data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { res.json({ error: 'unauthorized', message: e.message }); }
   });
 
   // GET /media
   app.get('/api/admin/plugins/google-business/media', requireAdmin, async (req, res) => {
     try {
       const s = await getGMBSettings();
-      if (!s.tokens || !s.selectedLocation) return res.status(400).json({ error: 'Yetki verilmemis veya konum secilmemis' });
+      if (!s.tokens || !s.selectedLocation) return res.json({ error: 'unauthorized', message: 'Yetki verilmemiş veya konum seçilmemiş' });
       const r = await createGMBClient(s).request({ url: `https://mybusiness.googleapis.com/v4/${s.selectedLocation}/media` });
       res.json((r.data as any).mediaItems || []);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { res.json([]); }
   });
 
   // POST /media

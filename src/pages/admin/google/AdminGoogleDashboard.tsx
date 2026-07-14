@@ -28,8 +28,15 @@ export default function AdminGoogleDashboard() {
         adminRequest('/api/admin/plugins/google-business/posts'),
         adminRequest('/api/admin/plugins/google-business/insights', { method: 'POST', body: JSON.stringify({ days: 30 }) }),
       ]);
-      if (infoData.status === 'fulfilled') setInfo(infoData.value);
-      else setErrorMsg((infoData.reason as any)?.message || 'Hata');
+      if (infoData.status === 'fulfilled') {
+        if (infoData.value?.error === 'unauthorized') {
+          setErrorMsg(infoData.value.message || 'Google Business yetkilendirmesi yapılmamış.');
+        } else {
+          setInfo(infoData.value);
+        }
+      } else {
+        setErrorMsg((infoData.reason as any)?.message || 'Google Business verileri alınamadı.');
+      }
       if (reviewsData.status === 'fulfilled') setReviews(reviewsData.value || []);
       if (postsData.status === 'fulfilled') setPosts(postsData.value || []);
       if (insightsData.status === 'fulfilled') setInsights(insightsData.value?.locationMetrics?.[0]?.metricValues || []);
@@ -46,11 +53,11 @@ export default function AdminGoogleDashboard() {
   const totalActions = getMetric('ACTIONS_WEBSITE') + getMetric('ACTIONS_PHONE') + getMetric('ACTIONS_DRIVING_DIRECTIONS');
 
   if (errorMsg && !loading) return (
-    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-red-100">
-      <AlertTriangle className="w-12 h-12 text-red-400 mb-4" />
+    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-orange-100 max-w-md mx-auto mt-10">
+      <AlertTriangle className="w-12 h-12 text-orange-500 mb-4" />
       <h2 className="text-xl font-bold text-gray-900 mb-2">Google Hesabınız Bağlı Değil</h2>
-      <p className="text-gray-500 mb-6 text-center max-w-md">{errorMsg}</p>
-      <a href="/admin/eklentiler" className="px-5 py-2.5 bg-primary text-white font-medium rounded-theme hover:bg-secondary">Eklentiler Sayfasına Git</a>
+      <p className="text-gray-500 mb-6 text-center text-xs px-6">{errorMsg}</p>
+      <Link to="/admin/eklentiler" className="px-5 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-secondary transition-all shadow-sm text-xs">Eklentiler Sayfasına Git</Link>
     </div>
   );
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kerim-servis-cache-v1';
+const CACHE_NAME = 'kerim-servis-cache-v1.2';
 const ASSETS_TO_CACHE = [
   '/admin',
   '/assets/images/favicon.svg',
