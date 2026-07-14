@@ -427,6 +427,7 @@ async function startServer() {
       : path.join(rootDir, 'dist', 'sw.js');
     if (fs.existsSync(swPath)) {
       res.setHeader('Content-Type', 'application/javascript');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.sendFile(swPath);
     } else {
       res.status(404).send('Not Found');

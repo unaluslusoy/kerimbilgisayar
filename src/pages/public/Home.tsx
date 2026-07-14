@@ -551,7 +551,14 @@ export default function Home() {
               <div key={i} className="bg-white rounded-theme overflow-hidden shadow-lg border border-primary/10 hover:shadow-xl transition-shadow flex flex-col">
                 {camp.imageUrl && (
                   <div className="h-48 relative overflow-hidden">
-                    <img src={mediaUrl(camp.imageUrl)} alt={camp.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+                    <img 
+                      src={mediaUrl(camp.imageUrl)} 
+                      alt={camp.title} 
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&q=80';
+                      }}
+                    />
                     {camp.discountRate && (
                       <div className="absolute top-4 right-4 bg-primary text-white font-bold px-3 py-1 rounded-full text-sm shadow">
                         %{Number(camp.discountRate)} İndirim
