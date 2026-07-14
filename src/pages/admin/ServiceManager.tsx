@@ -1608,10 +1608,10 @@ export default function ServiceManager() {
             {/* Tabs */}
             <div className="flex border-b border-gray-100 px-6 bg-white">
               {([
-                { key: 'musteri', label: '👤 Müşteri & Cari Bilgileri' },
-                { key: 'cihaz', label: '💻 Cihaz & Erişim Bilgileri' },
-                { key: 'servis', label: '🔧 Servis Kabul & Detayları' },
-                { key: 'medya', label: '📸 Teslim Fotoğrafları & Ekler' },
+                { key: 'musteri', label: 'Müşteri & Cari Bilgileri' },
+                { key: 'cihaz', label: 'Cihaz & Erişim Bilgileri' },
+                { key: 'servis', label: 'Servis Kabul & Detayları' },
+                { key: 'medya', label: 'Teslim Fotoğrafları & Ekler' },
               ] as const).map(tab => (
                 <button
                   key={tab.key}
@@ -1624,6 +1624,10 @@ export default function ServiceManager() {
                       : 'border-transparent text-gray-500 hover:text-gray-800'
                   )}
                 >
+                  {tab.key === 'musteri' && <Users className="w-4 h-4" />}
+                  {tab.key === 'cihaz' && <Shield className="w-4 h-4" />}
+                  {tab.key === 'servis' && <Wrench className="w-4 h-4" />}
+                  {tab.key === 'medya' && <ImageIcon className="w-4 h-4" />}
                   {tab.label}
                   {tab.key === 'medya' && newTicketPhotos.length > 0 && (
                     <span className="ml-1.5 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-full">{newTicketPhotos.length}</span>
@@ -1644,11 +1648,11 @@ export default function ServiceManager() {
                       <button type="button"
                         onClick={() => setNewTicket({ ...newTicket, customerType: 'bireysel' })}
                         className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all ${newTicket.customerType === 'bireysel' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                      >👤 Bireysel Müşteri</button>
+                      >Bireysel Müşteri</button>
                       <button type="button"
                         onClick={() => setNewTicket({ ...newTicket, customerType: 'kurumsal' })}
                         className={`flex-1 py-2 text-sm font-bold rounded-xl border transition-all ${newTicket.customerType === 'kurumsal' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                      >🏢 Kurumsal Müşteri (Cari)</button>
+                      >Kurumsal Müşteri (Cari)</button>
                     </div>
                   </div>
 
