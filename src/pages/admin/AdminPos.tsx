@@ -8,7 +8,8 @@ import { Link } from 'react-router-dom';
 import { mediaUrl } from '../../lib/media';
 import { 
   fetchAdminStock, fetchAdminCustomers, createAdminCustomer, 
-  createAdminSale, fetchAdminSales, fetchAdminSaleDetails 
+  createAdminSale, fetchAdminSales, fetchAdminSaleDetails,
+  fetchSettings
 } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
 
@@ -48,16 +49,22 @@ export default function AdminPos() {
   const [detailSale, setDetailSale] = useState<any | null>(null);
   const detailPrintRef = useRef<HTMLDivElement>(null);
 
+  const [settings, setSettings] = useState<any | null>(null);
+
   const loadData = async () => {
     try {
-      const [stockData, custData, salesData] = await Promise.all([
+      const [stockData, custData, salesData, settingsData] = await Promise.all([
         fetchAdminStock(),
         fetchAdminCustomers(),
-        fetchAdminSales()
+        fetchAdminSales(),
+        fetchSettings().catch(() => null)
       ]);
       setStock(stockData.filter((i: any) => i.isActive && i.currentStock > 0));
       setCustomersList(custData);
       setSalesHistory(salesData);
+      if (settingsData) {
+        setSettings(settingsData);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -348,9 +355,19 @@ export default function AdminPos() {
       {/* Standalone Application Bar */}
       <div className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between shadow-md border-b border-slate-950 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/20 rounded-xl text-primary-light border border-primary/30">
-            <ShoppingCart className="w-5 h-5 text-white" />
-          </div>
+          {settings?.logoUrl || settings?.siteLogo ? (
+            <div className="bg-white p-1 rounded-xl border border-slate-750 flex items-center justify-center">
+              <img 
+                src={mediaUrl(settings.logoUrl || settings.siteLogo)} 
+                alt="Logo" 
+                className="h-8 max-w-[120px] object-contain" 
+              />
+            </div>
+          ) : (
+            <div className="p-2 bg-primary/20 rounded-xl text-primary-light border border-primary/30">
+              <ShoppingCart className="w-5 h-5 text-white" />
+            </div>
+          )}
           <div>
             <h1 className="text-sm font-black uppercase tracking-wider flex items-center gap-2 text-white">
               Kerim Bilgisayar <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-mono font-bold">POS v1.4</span>
