@@ -170,6 +170,19 @@ export default function ServiceManager() {
     try {
       const results = await searchAdminCustomers(value);
       setDuplicateCustomers(results || []);
+      
+      // Auto-fill exactly matched customer (e.g. exactly same phone or email)
+      if (results && results.length === 1) {
+        const c = results[0];
+        const isPhoneMatch = field === 'phone' && c.phone && value.replace(/\D/g, '') === c.phone.replace(/\D/g, '');
+        const isEmailMatch = field === 'email' && c.email && value.toLowerCase() === c.email.toLowerCase();
+        
+        if (isPhoneMatch || isEmailMatch) {
+          // Auto select if exact match
+          selectExistingCustomer(c);
+          setDuplicateCustomers([]); // Hide warning since we auto-selected
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -1928,7 +1941,7 @@ export default function ServiceManager() {
       {/* New Ticket Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[90vw] max-h-[92vh] overflow-hidden flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-0 border-b border-gray-100">
               <h2 className="text-xl font-black text-gray-900 tracking-tight">Yeni Servis Kaydı Oluştur</h2>
@@ -1973,7 +1986,11 @@ export default function ServiceManager() {
 
               {/* ── TAB 1: MÜŞTERİ BİLGİLERİ ── */}
               {modalTab === 'musteri' && (
-                <div className="space-y-4">
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 mb-2 border-b border-gray-100 pb-3">
+                    <Users className="w-5 h-5 text-primary" />
+                    <h3 className="text-sm font-bold text-gray-800">Müşteri ve Cari Bilgileri</h3>
+                  </div>
                   <div className="mb-4">
                     <label className="block text-xs font-semibold text-gray-600 mb-1.5">Müşteri Türü</label>
                     <div className="flex gap-2">
@@ -2101,7 +2118,11 @@ export default function ServiceManager() {
 
               {/* ── TAB 2: CİHAZ BİLGİLERİ ── */}
               {modalTab === 'cihaz' && (
-                <div className="space-y-4">
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 mb-2 border-b border-gray-100 pb-3">
+                    <Shield className="w-5 h-5 text-primary" />
+                    <h3 className="text-sm font-bold text-gray-800">Cihaz & Teslimat Bilgileri</h3>
+                  </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Cihaz Türü</label>
@@ -2197,7 +2218,11 @@ export default function ServiceManager() {
 
               {/* ── TAB 3: SERVİS DETAYLARI ── */}
               {modalTab === 'servis' && (
-                <div className="space-y-5">
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 mb-2 border-b border-gray-100 pb-3">
+                    <Wrench className="w-5 h-5 text-primary" />
+                    <h3 className="text-sm font-bold text-gray-800">Servis Kabul ve Arıza Detayları</h3>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Kanal / Kaynak</label>
@@ -2286,7 +2311,11 @@ export default function ServiceManager() {
 
               {/* ── TAB 4: MEDYA / DOSYALAR ── */}
               {modalTab === 'medya' && (
-                <div className="space-y-4">
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 mb-2 border-b border-gray-100 pb-3">
+                    <ImageIcon className="w-5 h-5 text-primary" />
+                    <h3 className="text-sm font-bold text-gray-800">Cihaz Teslim Fotoğrafları & Ekler</h3>
+                  </div>
                   <div className="border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center hover:border-primary/40 transition-colors">
                     <label className="cursor-pointer">
                       <div className="flex flex-col items-center gap-2">

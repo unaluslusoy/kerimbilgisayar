@@ -44,11 +44,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, turnstileToken }),
     });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Giriş başarısız');
+    
+    let data;
+    try {
+      const text = await res.text();
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error('Sunucu ile iletişim kurulamadı. Lütfen daha sonra tekrar deneyin.');
     }
-    const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.error || 'Giriş başarısız, lütfen bilgilerinizi kontrol edin.');
+    }
+    
     setToken(data.token);
     setUser(data.user);
     const persistentStorage = remember ? localStorage : sessionStorage;

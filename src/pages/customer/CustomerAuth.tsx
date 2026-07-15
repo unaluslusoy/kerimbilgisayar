@@ -82,8 +82,16 @@ export default function CustomerAuth() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: formData.email, password: formData.password }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Giriş yapılamadı');
+        
+        let data;
+        try {
+          const text = await res.text();
+          data = JSON.parse(text);
+        } catch (e) {
+          throw new Error('Sunucu ile iletişim kurulamadı. Lütfen daha sonra tekrar deneyin.');
+        }
+        
+        if (!res.ok) throw new Error(data?.error || 'Giriş yapılamadı');
         login(data.token, data.user);
         navigate('/musteri/panel');
       } else {
@@ -98,8 +106,16 @@ export default function CustomerAuth() {
             password: formData.password,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Kayıt olunamadı');
+        
+        let data;
+        try {
+          const text = await res.text();
+          data = JSON.parse(text);
+        } catch (e) {
+          throw new Error('Sunucu ile iletişim kurulamadı. Lütfen daha sonra tekrar deneyin.');
+        }
+        
+        if (!res.ok) throw new Error(data?.error || 'Kayıt olunamadı');
         setSuccessMsg('Hesabınız oluşturuldu! Şimdi giriş yapabilirsiniz.');
         setMode('login');
         setFormData(prev => ({ ...prev, password: '', passwordConfirm: '' }));

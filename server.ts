@@ -2973,12 +2973,21 @@ async function startServer() {
     limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit for videos
   });
 
-  app.post('/api/admin/servis/upload', requireAdmin, servisUpload.single('file'), async (req, res) => {
+  app.post('/api/admin/servis/upload', requireAdmin, (req, res, next) => {
+    servisUpload.single('file')(req, res, (err) => {
+      if (err) {
+        console.error("Multer Servis Upload Hatası:", err);
+        return res.status(400).json({ error: 'Dosya yüklenemedi: ' + err.message });
+      }
+      next();
+    });
+  }, async (req, res) => {
     try {
-      if (!req.file) return res.status(400).json({ error: 'Dosya yüklenmedi' });
+      if (!req.file) return res.status(400).json({ error: 'Dosya seçilmedi' });
       const fileUrl = `/uploads/servisklasoru/temp/${req.file.filename}`;
       res.json({ success: true, fileUrl, fileName: req.file.originalname, fileType: req.file.mimetype, fileSize: req.file.size });
     } catch (e: any) {
+      console.error("Servis Upload Exception:", e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -4805,7 +4814,15 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/media/upload', requireAdmin, upload.single('file'), async (req, res) => {
+  app.post('/api/admin/media/upload', requireAdmin, (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+      if (err) {
+        console.error("Multer Media Upload Hatası:", err);
+        return res.status(400).json({ error: 'Dosya yüklenemedi: ' + err.message });
+      }
+      next();
+    });
+  }, async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       
