@@ -206,6 +206,8 @@ import {
 // ═══════════════════════════════════════════════════════════════════════════
 let dbHealthy = false;
 let dbLastError: string | null = null;
+let gmbCache: any = null;
+let gmbCacheTime = 0;
 
 async function warmUpDatabase() {
   const t0 = Date.now();
@@ -819,6 +821,13 @@ async function startServer() {
 
   app.get('/api/public/google-business', async (req, res) => {
     try {
+      const now = Date.now();
+      const GMB_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+      if (gmbCache && (now - gmbCacheTime < GMB_CACHE_DURATION)) {
+        res.setHeader('x-cache', 'HIT');
+        return res.json(gmbCache);
+      }
+
       const gmbPlugin = await db.select().from(plugins).where(eq(plugins.pluginId, 'google-business')).limit(1);
       if (!gmbPlugin.length || !gmbPlugin[0].isActive) {
         return res.json({ error: 'Plugin not active' });
@@ -838,13 +847,22 @@ async function startServer() {
       const response = await oauth2Client.request({ url }).catch(() => ({ data: {} }));
       const reviewsData = (response as any).data || {};
       
-      res.json({
+      const result = {
         rating: reviewsData.averageRating || 5.0,
         user_ratings_total: reviewsData.totalReviewCount || reviewsData.reviews?.length || 0,
         reviews: reviewsData.reviews || [],
         url: '#'
-      });
+      };
+
+      gmbCache = result;
+      gmbCacheTime = now;
+      res.setHeader('x-cache', 'MISS');
+      res.json(result);
     } catch (e: any) {
+      if (gmbCache) {
+        res.setHeader('x-cache', 'STALE');
+        return res.json(gmbCache);
+      }
       res.status(500).json({ error: e.message });
     }
   });
