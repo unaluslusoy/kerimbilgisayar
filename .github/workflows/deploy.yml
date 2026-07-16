@@ -115,6 +115,11 @@ jobs:
 
             pm2 save
 
+            # PM2 ve Node path'lerini bulup crontab @reboot olarak ekleyelim (sudo gerektirmeden otomatik baslatma icin)
+            PM2_BIN=$(which pm2 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.13.1/bin/pm2")
+            NODE_BIN_DIR=$(dirname $(which node 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.13.1/bin/node"))
+            (crontab -l 2>/dev/null | grep -F "pm2 resurrect" || (crontab -l 2>/dev/null; echo "@reboot env PATH=\"$NODE_BIN_DIR:\$PATH\" $PM2_BIN resurrect")) | crontab -
+
             for attempt in 1 2 3 4 5; do
               if curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health"; then
                 echo "API health check passed"
