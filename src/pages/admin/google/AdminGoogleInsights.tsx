@@ -72,11 +72,18 @@ export default function AdminGoogleInsights() {
   const pct = (part: number, total: number) => (total > 0 ? Math.round((part / total) * 100) : 0);
 
   if (errorMsg && !loading) {
+    const isQuotaError = errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('limit');
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-red-100">
         <AlertTriangle className="w-12 h-12 text-red-400 mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Google Hesabınız Bağlı Değil</h2>
-        <p className="text-gray-500 mb-6 text-center max-w-md">{errorMsg}</p>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">
+          {isQuotaError ? 'Google API İstek Limiti Aşıldı' : 'Google Hesabınız Bağlı Değil'}
+        </h2>
+        <p className="text-gray-500 mb-6 text-center max-w-md">
+          {isQuotaError 
+            ? 'Google İşletme Profili API kullanım kotası aşıldı. Lütfen birkaç dakika sonra tekrar deneyin.'
+            : errorMsg}
+        </p>
         <a href="/admin/eklentiler" className="px-5 py-2.5 bg-primary text-white font-medium rounded-theme hover:bg-secondary">
           Eklentiler Sayfasına Git
         </a>

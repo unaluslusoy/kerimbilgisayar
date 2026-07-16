@@ -281,13 +281,14 @@ async function startServer() {
         reportOnly: true,
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://challenges.cloudflare.com'],
+          scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.googletagmanager.com', 'https://www.google-analytics.com', 'https://challenges.cloudflare.com', 'https://static.cloudflareinsights.com'],
           styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
           fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
           imgSrc: ["'self'", 'data:', 'https:'],
-          connectSrc: ["'self'", 'https://www.google-analytics.com'],
+          connectSrc: ["'self'", 'https://www.google-analytics.com', 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://challenges.cloudflare.com', 'https://cloudflareinsights.com', 'https://*.cloudflareinsights.com', 'https://*.googleapis.com'],
           frameSrc: ["'self'", 'https://challenges.cloudflare.com', 'https://www.google.com'],
           objectSrc: ["'none'"],
+          upgradeInsecureRequests: null,
         },
       };
 
@@ -5670,7 +5671,14 @@ async function startServer() {
       }
       const metricValues = Object.entries(totals).map(([metric, value]) => ({ metric, totalValue: { value } }));
       res.json({ locationMetrics: [{ metricValues }] });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      const status = e.response?.status || 500;
+      let errorMsg = e.message;
+      if (e.response?.data?.error?.message) {
+        errorMsg = e.response.data.error.message;
+      }
+      res.status(status).json({ error: errorMsg });
+    }
   });
 
   // PUT /reviews/reply

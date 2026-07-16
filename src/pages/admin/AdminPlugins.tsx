@@ -453,7 +453,13 @@ export default function AdminPlugins() {
       {/* ── Google Business Settings Modal ── */}
       {isGoogleModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg my-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveGoogleSettings();
+            }}
+            className="bg-white rounded-xl shadow-xl w-full max-w-lg my-4"
+          >
             {/* Header */}
             <div className="flex justify-between items-start p-6 border-b border-gray-100">
               <div>
@@ -618,6 +624,7 @@ export default function AdminPlugins() {
             {/* Footer */}
             <div className="p-6 bg-gray-50 flex justify-between items-center gap-3 rounded-b-xl border-t border-gray-100">
               <button
+                type="button"
                 onClick={resetGoogleSettings}
                 className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-theme hover:bg-red-100 transition-colors"
               >
@@ -625,13 +632,14 @@ export default function AdminPlugins() {
               </button>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setIsGoogleModalOpen(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-theme hover:bg-gray-50 transition-colors"
                 >
                   İptal
                 </button>
                 <button
-                  onClick={saveGoogleSettings}
+                  type="submit"
                   disabled={
                     savingSettings ||
                     !googleClientId ||
@@ -648,14 +656,20 @@ export default function AdminPlugins() {
                 </button>
               </div>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
       {/* ── PayTR Settings Modal ── */}
       {isPaytrModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              savePaytrSettings();
+            }}
+            className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden"
+          >
             <div className="flex justify-between items-center p-6 border-b border-gray-100">
               <h2 className="text-xl font-bold text-gray-900">PayTR Ayarları</h2>
               <button onClick={() => setIsPaytrModalOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -696,6 +710,7 @@ export default function AdminPlugins() {
             </div>
             <div className="p-6 bg-gray-50 flex justify-between items-center gap-3 rounded-b-xl border-t border-gray-100">
               <button
+                type="button"
                 onClick={resetPaytrSettings}
                 className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-theme hover:bg-red-100 transition-colors"
               >
@@ -703,13 +718,14 @@ export default function AdminPlugins() {
               </button>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setIsPaytrModalOpen(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-theme hover:bg-gray-50 transition-colors"
                 >
                   İptal
                 </button>
                 <button
-                  onClick={savePaytrSettings}
+                  type="submit"
                   disabled={savingSettings || !paytrMerchantId || !paytrMerchantKey || !paytrMerchantSalt}
                   className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-theme hover:bg-secondary transition-colors disabled:opacity-50"
                 >
@@ -717,13 +733,19 @@ export default function AdminPlugins() {
                 </button>
               </div>
             </div>
-          </div>
+          </form>
         </div>
       )}
       {/* ── Cargo Settings Modal ── */}
       {isCargoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveCargoSettings();
+            }}
+            className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden"
+          >
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50">
               <h2 className="text-base font-bold text-gray-900">
                 {selectedCargoPlugin === 'yurtici-cargo' ? 'Yurtiçi Kargo Entegrasyon Ayarları' :
@@ -778,6 +800,7 @@ export default function AdminPlugins() {
             </div>
             <div className="p-6 bg-gray-50 flex justify-between items-center gap-3 rounded-b-xl border-t border-gray-100">
               <button
+                type="button"
                 onClick={resetCargoSettings}
                 className="px-4 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-theme hover:bg-red-100 transition-colors"
               >
@@ -785,13 +808,14 @@ export default function AdminPlugins() {
               </button>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setIsCargoModalOpen(false)}
                   className="px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-theme hover:bg-gray-50 transition-colors"
                 >
                   İptal
                 </button>
                 <button
-                  onClick={saveCargoSettings}
+                  type="submit"
                   disabled={savingSettings || !cargoCustomerCode || !cargoApiKey || !cargoApiPassword}
                   className="px-4 py-2 text-xs font-bold text-white bg-primary rounded-theme hover:bg-secondary transition-colors disabled:opacity-50"
                 >
@@ -799,7 +823,7 @@ export default function AdminPlugins() {
                 </button>
               </div>
             </div>
-          </div>
+          </form>
         </div>
       )}
 

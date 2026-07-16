@@ -36,7 +36,22 @@ self.addEventListener('fetch', (e) => {
   
   // API veya dinamik admin isteklerini cache'leme, doğrudan ağa git
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/admin/')) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    e.respondWith(
+      fetch(e.request).catch(async (err) => {
+        const cached = await caches.match(e.request);
+        if (cached) return cached;
+        if (url.pathname.startsWith('/api')) {
+          return new Response(JSON.stringify({ error: 'Network error', details: err.message }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        return new Response('Network error. Lütfen bağlantınızı kontrol edin.', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+      })
+    );
     return;
   }
 

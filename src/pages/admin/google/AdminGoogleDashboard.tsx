@@ -12,6 +12,7 @@ const STAR_MAP: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FI
 export default function AdminGoogleDashboard() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [insightsError, setInsightsError] = useState('');
 
   const [info, setInfo] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
@@ -21,6 +22,7 @@ export default function AdminGoogleDashboard() {
   const fetchAll = async () => {
     setLoading(true);
     setErrorMsg('');
+    setInsightsError('');
     try {
       const [infoData, reviewsData, postsData, insightsData] = await Promise.allSettled([
         adminRequest('/api/admin/plugins/google-business/info'),
@@ -39,7 +41,16 @@ export default function AdminGoogleDashboard() {
       }
       if (reviewsData.status === 'fulfilled') setReviews(reviewsData.value || []);
       if (postsData.status === 'fulfilled') setPosts(postsData.value || []);
-      if (insightsData.status === 'fulfilled') setInsights(insightsData.value?.locationMetrics?.[0]?.metricValues || []);
+      if (insightsData.status === 'fulfilled') {
+        setInsights(insightsData.value?.locationMetrics?.[0]?.metricValues || []);
+      } else {
+        const msg = (insightsData.reason as any)?.message || '';
+        if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('limit') || msg.toLowerCase().includes('429')) {
+          setInsightsError('Google API istek limiti aşıldı, istatistikler geçici olarak gösterilemiyor.');
+        } else {
+          setInsightsError('İstatistikler yüklenemedi.');
+        }
+      }
     } finally { setLoading(false); }
   };
 
@@ -203,7 +214,15 @@ export default function AdminGoogleDashboard() {
           </div>
 
           {/* Insight özet bar */}
-          {insights.length > 0 && (
+          {insightsError ? (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold text-orange-800">İstatistikler Yüklenemedi</h4>
+                <p className="text-xs text-orange-750 mt-1">{insightsError}</p>
+              </div>
+            </div>
+          ) : insights.length > 0 ? (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
               <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" /> Son 30 Gün Özeti
@@ -230,7 +249,7 @@ export default function AdminGoogleDashboard() {
                 </Link>
               </div>
             </div>
-          )}
+          ) : null}
         </>
       )}
     </div>
