@@ -12,6 +12,41 @@ process.on('unhandledRejection', (reason) => {
   if (process.env.NODE_ENV === 'production') process.exit(1);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GLOBAL LOG BUFFER FOR DIAGNOSTICS
+// ═══════════════════════════════════════════════════════════════════════════
+export const logBuffer: { time: string; type: 'log' | 'error'; message: string }[] = [];
+const originalLog = console.log;
+const originalError = console.error;
+
+function addLog(type: 'log' | 'error', args: any[]) {
+  const message = args.map(arg => {
+    if (arg instanceof Error) {
+      return arg.stack || arg.message;
+    }
+    if (typeof arg === 'object') {
+      try { return JSON.stringify(arg); } catch (e) { return String(arg); }
+    }
+    return String(arg);
+  }).join(' ');
+  logBuffer.push({
+    time: new Date().toISOString(),
+    type,
+    message
+  });
+  if (logBuffer.length > 200) logBuffer.shift();
+}
+
+console.log = (...args: any[]) => {
+  addLog('log', args);
+  originalLog.apply(console, args);
+};
+
+console.error = (...args: any[]) => {
+  addLog('error', args);
+  originalError.apply(console, args);
+};
+
 console.log('┌─────────────────────────────────────────────');
 console.log('│ 🚀 Kerim Bilgisayar Server — boot başlıyor');
 console.log('│ Node:', process.version, '| PID:', process.pid);
@@ -493,10 +528,7 @@ async function startServer() {
     res.json([]);
   });
 
-  // --- HEALTH ---
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'API is running' });
-  });
+
 
   // ============================================================
   // PUBLIC API (CMS FRONTEND)
@@ -1493,6 +1525,30 @@ async function startServer() {
 
   app.get('/api/admin/me', requireAdmin, (req, res) => {
     res.json((req as any).adminUser);
+  });
+
+  app.get('/api/admin/system/health', requireAdmin, async (req, res) => {
+    try {
+      const os = await import('os');
+      res.json({
+        status: dbHealthy ? 'ok' : 'degraded',
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        cpu: process.cpuUsage(),
+        platform: os.platform(),
+        cpus: os.cpus().length,
+        totalMemory: os.totalmem(),
+        freeMemory: os.freemem(),
+        loadAvg: os.loadavg(),
+        db: dbHealthy ? 'up' : 'down',
+        dbError: dbLastError,
+        pid: process.pid,
+        node: process.version,
+        logs: logBuffer
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ============================================================

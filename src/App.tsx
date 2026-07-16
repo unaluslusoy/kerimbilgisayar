@@ -40,6 +40,7 @@ const AdminPlugins = lazy(() => import('./pages/admin/AdminPlugins'));
 const AdminApiKeys = lazy(() => import('./pages/admin/AdminApiKeys'));
 const AdminWebhooks = lazy(() => import('./pages/admin/AdminWebhooks'));
 const AdminSecurity = lazy(() => import('./pages/admin/AdminSecurity'));
+const AdminSystemHealth = lazy(() => import('./pages/admin/AdminSystemHealth'));
 const LanguageSettings = lazy(() => import('./pages/admin/LanguageSettings'));
 const AdminServices = lazy(() => import('./pages/admin/AdminServices'));
 const AdminServiceCategories = lazy(() => import('./pages/admin/AdminServiceCategories'));
@@ -203,6 +204,7 @@ function AppContent() {
             <Route path="api-anahtarlari" element={<AdminApiKeys />} />
             <Route path="webhooks" element={<AdminWebhooks />} />
             <Route path="guvenlik" element={<AdminSecurity />} />
+            <Route path="sistem-sagligi" element={<AdminSystemHealth />} />
             <Route path="hizmetler" element={<AdminServices />} />
             <Route path="kargo" element={<AdminShipments />} />
             <Route path="masraflar" element={<AdminExpenses />} />

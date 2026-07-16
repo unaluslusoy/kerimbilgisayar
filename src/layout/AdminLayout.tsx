@@ -187,6 +187,7 @@ export default function AdminLayout() {
             { name: 'Dil Yönetimi', path: '/admin/diller' },
             { name: 'Eklentiler', path: '/admin/eklentiler' },
             { name: 'Güvenlik', path: '/admin/guvenlik' },
+            { name: 'Sistem Sağlığı', path: '/admin/sistem-sagligi' },
             { name: 'API Anahtarları', path: '/admin/api-anahtarlari' },
             { name: 'Webhooks', path: '/admin/webhooks' }
           ]
