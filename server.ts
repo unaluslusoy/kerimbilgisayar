@@ -8,9 +8,10 @@ process.on('uncaughtException', (err) => {
   if (process.env.NODE_ENV === 'production') process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('\n💥 [FATAL] unhandledRejection:', reason);
-  if (process.env.NODE_ENV === 'production') process.exit(1);
+  console.error('\n💥 [WARNING] unhandledRejection (process kept alive):', reason);
+  // Do not call process.exit(1) on promise rejections to prevent transient database/network errors from crashing the server.
 });
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GLOBAL LOG BUFFER FOR DIAGNOSTICS
