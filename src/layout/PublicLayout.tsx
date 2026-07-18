@@ -89,6 +89,7 @@ export default function PublicLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState<Record<number, boolean>>({});
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
@@ -316,18 +317,54 @@ export default function PublicLayout() {
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
           <div className="lg:hidden border-t border-gray-100 bg-white px-4 py-4 space-y-1 shadow-lg absolute w-full max-h-[calc(100vh-88px)] overflow-y-auto">
-            {buildTree(headerItems).map((item: any) => (
-              <Link
-                key={item.id}
-                onClick={() => setIsMobileMenuOpen(false)}
-                to={item.url}
-                className={`flex items-center w-full px-4 py-3 rounded-lg font-medium text-sm transition-colors ${
-                  isActive(item.url) ? 'bg-[#e6fce8] text-[#5da350]' : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {item.title}
-              </Link>
-            ))}
+            {buildTree(headerItems).map((item: any) => {
+              const hasChildren = item.children && item.children.length > 0;
+              const isSubOpen = !!mobileSubmenuOpen[item.id];
+              
+              if (hasChildren) {
+                return (
+                  <div key={item.id} className="flex flex-col w-full">
+                    <button
+                      onClick={() => setMobileSubmenuOpen(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                      className="flex items-center justify-between w-full px-4 py-3 rounded-lg font-medium text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <span>{item.title}</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isSubOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {isSubOpen && (
+                      <div className="pl-4 pr-2 py-1 space-y-1 bg-gray-50/50 rounded-lg ml-2 border-l border-gray-100">
+                        {item.children.map((child: any) => (
+                          <Link
+                            key={child.id}
+                            to={child.url}
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className={`flex items-center w-full px-4 py-2.5 rounded-lg font-medium text-sm transition-colors ${
+                              isActive(child.url) ? 'text-[#5da350] font-bold' : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            {child.title}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.id}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  to={item.url}
+                  className={`flex items-center w-full px-4 py-3 rounded-lg font-medium text-sm transition-colors ${
+                    isActive(item.url) ? 'bg-[#e6fce8] text-[#5da350]' : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {item.title}
+                </Link>
+              );
+            })}
             <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
               <a href={`tel:${contactPhone}`} className="flex items-center gap-2 px-4 py-3 rounded-lg bg-gray-50 text-gray-700 font-medium text-sm">
                 <Phone className="w-4 h-4 text-[#5da350]" /> {contactPhone}
