@@ -82,6 +82,8 @@ jobs:
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             APP_URL=${{ secrets.APP_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
             NODE_ENV=production
             EOF
 
@@ -93,6 +95,8 @@ jobs:
             export DATABASE_URL="${{ secrets.DATABASE_URL }}"
             export GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
             export APP_URL="${{ secrets.APP_URL }}"
+            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
+            export ALLOWED_ORIGINS="${{ secrets.ALLOWED_ORIGINS }}"
             
             NODE_ENV=development npm install --include=dev --legacy-peer-deps
             NODE_ENV=development npm run db:push

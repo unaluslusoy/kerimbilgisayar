@@ -251,6 +251,25 @@ async function startServer() {
   const requestCounters = new Map<string, { count: number; startedAt: number }>();
   const autoBlockedIps = new Map<string, number>();
 
+  // Periodic memory cleanup to prevent memory leaks from in-memory Maps
+  setInterval(() => {
+    const now = Date.now();
+    
+    // Clear expired request counters (older than 10 minutes)
+    for (const [ip, bucket] of requestCounters.entries()) {
+      if (now - bucket.startedAt > 10 * 60 * 1000) {
+        requestCounters.delete(ip);
+      }
+    }
+
+    // Clear expired in-memory blocks
+    for (const [ip, blockedUntil] of autoBlockedIps.entries()) {
+      if (blockedUntil < now) {
+        autoBlockedIps.delete(ip);
+      }
+    }
+  }, 10 * 60 * 1000).unref();
+
   app.use(express.json({ limit: '2mb' }));
 
   // ─── HEALTH ENDPOINTS — middleware'lerden ÖNCE mount et ki her zaman erişilebilsin
