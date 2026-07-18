@@ -23,6 +23,18 @@ export default function AdminMedia() {
   const [form, setForm] = useState({ title: '', altText: '', description: '', folderId: '' });
   const [savingDetails, setSavingDetails] = useState(false);
 
+  // Alert/Confirm modal states
+  const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; message: string; title: string } | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{ isOpen: boolean; message: string; title: string; onConfirm: () => void } | null>(null);
+
+  const showAlert = (message: string, title = 'Hata') => {
+    setAlertConfig({ isOpen: true, message, title });
+  };
+
+  const showConfirm = (message: string, onConfirm: () => void, title = 'Onay Gerekli') => {
+    setConfirmConfig({ isOpen: true, message, title, onConfirm });
+  };
+
   const load = async () => {
     setLoading(true);
     try {
@@ -51,7 +63,7 @@ export default function AdminMedia() {
       await uploadAdminMedia(file, currentFolderId);
       await load();
     } catch (err: any) {
-      alert('Yükleme hatası: ' + err.message);
+      showAlert('Yükleme hatası: ' + err.message);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -67,7 +79,7 @@ export default function AdminMedia() {
       setRemoteUrl('');
       await load();
     } catch (err: any) {
-      alert('İçe aktarma hatası: ' + err.message);
+      showAlert('İçe aktarma hatası: ' + err.message);
     } finally {
       setImportingRemote(false);
     }
@@ -88,18 +100,22 @@ export default function AdminMedia() {
       setCreatingFolder(false);
       await load();
     } catch (err: any) {
-      alert('Klasör oluşturulamadı: ' + err.message);
+      showAlert('Klasör oluşturulamadı: ' + err.message);
     }
   };
 
-  const handleDeleteFolder = async (id: number) => {
-    if (!confirm('Bu klasörü silmek istediğinize emin misiniz? (İçindeki dosyalar kök dizine taşınacaktır)')) return;
-    try {
-      await deleteMediaFolder(id);
-      await load();
-    } catch (err: any) {
-      alert('Klasör silinemedi: ' + err.message);
-    }
+  const handleDeleteFolder = (id: number) => {
+    showConfirm(
+      'Bu klasörü silmek istediğinize emin misiniz? (İçindeki dosyalar kök dizine taşınacaktır)',
+      async () => {
+        try {
+          await deleteMediaFolder(id);
+          await load();
+        } catch (err: any) {
+          showAlert('Klasör silinemedi: ' + err.message);
+        }
+      }
+    );
   };
 
   const handleOpenDetails = (item: any) => {
@@ -129,23 +145,27 @@ export default function AdminMedia() {
       setSelectedItem(null);
       await load();
     } catch (e: any) {
-      alert('Güncelleme hatası: ' + e.message);
+      showAlert('Güncelleme hatası: ' + e.message);
     } finally {
       setSavingDetails(false);
     }
   };
 
-  const handleDeleteItem = async (id: number) => {
-    if (!confirm('Bu medyayı kalıcı olarak silmek istediğinizden emin misiniz?')) return;
-    try {
-      await adminRequest(`/api/admin/media/${id}`, { method: 'DELETE' });
-      if (selectedItem && selectedItem.id === id) {
-        setSelectedItem(null);
+  const handleDeleteItem = (id: number) => {
+    showConfirm(
+      'Bu medyayı kalıcı olarak silmek istediğinizden emin misiniz?',
+      async () => {
+        try {
+          await adminRequest(`/api/admin/media/${id}`, { method: 'DELETE' });
+          if (selectedItem && selectedItem.id === id) {
+            setSelectedItem(null);
+          }
+          await load();
+        } catch (e: any) {
+          showAlert('Silme hatası: ' + e.message);
+        }
       }
-      await load();
-    } catch (e: any) {
-      alert('Silme hatası: ' + e.message);
-    }
+    );
   };
 
   const getFileIcon = (mimeType: string) => {
@@ -180,7 +200,7 @@ export default function AdminMedia() {
       });
       await load();
     } catch (err: any) {
-      alert('Taşıma başarısız: ' + err.message);
+      showAlert('Taşıma başarısız: ' + err.message);
     }
   };
 
@@ -494,6 +514,59 @@ export default function AdminMedia() {
                   {savingDetails ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Alert Modal */}
+      {alertConfig && alertConfig.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-md w-full p-6 mx-4 transform transition-all duration-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <span className="text-red-500">⚠</span> {alertConfig.title}
+            </h3>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              {alertConfig.message}
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setAlertConfig(null)}
+                className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+              >
+                Tamam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal */}
+      {confirmConfig && confirmConfig.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-md w-full p-6 mx-4 transform transition-all duration-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <span className="text-yellow-500">❓</span> {confirmConfig.title}
+            </h3>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              {confirmConfig.message}
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmConfig(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                onClick={() => {
+                  confirmConfig.onConfirm();
+                  setConfirmConfig(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+              >
+                Onayla
+              </button>
             </div>
           </div>
         </div>
