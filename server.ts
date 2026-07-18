@@ -1312,7 +1312,14 @@ async function startServer() {
       const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
       if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
       
-      const targetUserId = ticket[0].assignedTo || ticket[0].userId || 1;
+      const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.roleType, 'tenant_admin')).limit(1);
+      const adminUserId = adminUsers[0]?.id || 1;
+
+      let targetUserId = ticket[0].assignedTo || ticket[0].userId || adminUserId;
+      const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId)).limit(1);
+      if (!userExists.length) {
+        targetUserId = adminUserId;
+      }
       
       // Müşteri ismini users tablosundan çek
       const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
@@ -1331,7 +1338,7 @@ async function startServer() {
         // Adminlere bildirim gönder
         await tx.insert(notifications).values({
           tenantId: 1,
-          userId: 1, // Ana yöneticiye bildirim
+          userId: adminUserId,
           title: `Teklif Onaylandı: #${ticket[0].ticketNumber}`,
           message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu cihazının onarım teklifini onayladı.`,
           type: 'success',
@@ -1339,8 +1346,13 @@ async function startServer() {
           linkUrl: `/admin/servis`
         });
       });
+
+      // Müşteriye bildirim gönder (email + whatsapp)
+      await triggerStatusNotifications(ticket[0].id, 'isleme_alindi');
+
       res.json({ success: true });
     } catch (e: any) {
+      console.error('Approve error:', e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -1351,7 +1363,14 @@ async function startServer() {
       const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
       if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
       
-      const targetUserId = ticket[0].assignedTo || ticket[0].userId || 1;
+      const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.roleType, 'tenant_admin')).limit(1);
+      const adminUserId = adminUsers[0]?.id || 1;
+
+      let targetUserId = ticket[0].assignedTo || ticket[0].userId || adminUserId;
+      const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId)).limit(1);
+      if (!userExists.length) {
+        targetUserId = adminUserId;
+      }
 
       // Müşteri ismini users tablosundan çek
       const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
@@ -1370,7 +1389,7 @@ async function startServer() {
         // Adminlere bildirim gönder
         await tx.insert(notifications).values({
           tenantId: 1,
-          userId: 1,
+          userId: adminUserId,
           title: `Teklif Reddedildi: #${ticket[0].ticketNumber}`,
           message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu cihazının teklifini reddetti.`,
           type: 'warning',
@@ -1378,8 +1397,13 @@ async function startServer() {
           linkUrl: `/admin/servis`
         });
       });
+
+      // Müşteriye bildirim gönder (email + whatsapp)
+      await triggerStatusNotifications(ticket[0].id, 'iptal');
+
       res.json({ success: true });
     } catch (e: any) {
+      console.error('Decline error:', e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -1394,7 +1418,14 @@ async function startServer() {
       if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
       
       const tId = ticket[0].id;
-      const targetUserId = ticket[0].assignedTo || ticket[0].userId || 1;
+      const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.roleType, 'tenant_admin')).limit(1);
+      const adminUserId = adminUsers[0]?.id || 1;
+
+      let targetUserId = ticket[0].assignedTo || ticket[0].userId || adminUserId;
+      const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId)).limit(1);
+      if (!userExists.length) {
+        targetUserId = adminUserId;
+      }
 
       // Müşteri ismini users tablosundan çek
       const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
@@ -1431,7 +1462,7 @@ async function startServer() {
         // Adminlere bildirim gönder
         await tx.insert(notifications).values({
           tenantId: 1,
-          userId: 1,
+          userId: adminUserId,
           title: `Ödeme Yapıldı: #${ticket[0].ticketNumber}`,
           message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu servis için ${paymentMethod.toUpperCase()} ile ${grandTotal.toFixed(2)} TL ödeme yaptı.`,
           type: 'success',
@@ -1440,8 +1471,62 @@ async function startServer() {
         });
       });
 
+      // Müşteriye bildirim gönder (email + whatsapp)
+      if (userRecord.length) {
+        const u = userRecord[0];
+        const deviceName = `${ticket[0].deviceBrand || ''} ${ticket[0].deviceModel || ''}`.trim() || 'Cihazınız';
+        
+        // 1. Email notification
+        if (u.email && !u.email.includes('@noemail.local')) {
+          const html = `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+              <div style="background-color: #16a34a; padding: 20px; text-align: center; color: white;">
+                <h2 style="margin: 0;">Kerim Bilgisayar Ödeme Onayı</h2>
+              </div>
+              <div style="padding: 30px; background-color: #ffffff; color: #374151;">
+                <p style="font-size: 16px;">Sayın <strong>${u.firstName} ${u.lastName}</strong>,</p>
+                <p style="font-size: 16px;"><strong>${deviceName}</strong> cihazınızın onarım ödemesi alınmıştır.</p>
+                
+                <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #16a34a;">
+                  <p style="margin: 0; font-size: 14px; color: #6b7280;">Kayıt Numarası:</p>
+                  <p style="margin: 5px 0 15px 0; font-size: 16px; font-weight: bold; color: #111827;">${ticket[0].ticketNumber}</p>
+                  
+                  <p style="margin: 0; font-size: 14px; color: #6b7280;">Ödeme Yöntemi:</p>
+                  <p style="margin: 5px 0 15px 0; font-size: 16px; font-weight: bold; color: #374151;">${paymentMethod.toUpperCase()}</p>
+
+                  <p style="margin: 0; font-size: 14px; color: #6b7280;">Toplam Ödenen Tutar:</p>
+                  <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: #16a34a;">${grandTotal.toFixed(2)} TL</p>
+                </div>
+                
+                <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">${paymentMethod === 'havale_eft' ? 'Havale/EFT bildiriminiz kontrol edildikten sonra onaylanacaktır.' : 'Ödemeniz başarıyla doğrulanmıştır.'} Teşekkür ederiz.</p>
+              </div>
+              <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb;">
+                © ${new Date().getFullYear()} Kerim Bilgisayar - Tüm Hakları Saklıdır.
+              </div>
+            </div>
+          `;
+          sendTicketEmail(u.email, `Ödeme Alındı: ${ticket[0].ticketNumber}`, html).catch(console.error);
+        }
+
+        // 2. WhatsApp notification
+        if (u.phone) {
+          const allSettings = await db.select().from(settings);
+          const settingsMap: Record<string, string> = {};
+          allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
+
+          if (settingsMap.whatsappApiEnabled === 'true') {
+            const statusMsg = paymentMethod === 'havale_eft' 
+              ? `Havale/EFT ödeme bildiriminiz alınmıştır (Onay bekleniyor). Tutar: ${grandTotal.toFixed(2)} TL.`
+              : `Ödemeniz başarıyla alınmıştır. Tutar: ${grandTotal.toFixed(2)} TL.`;
+            const text = `Sayın ${u.firstName} ${u.lastName}, ${ticket[0].ticketNumber} numaralı cihazınız için: ${statusMsg}`;
+            sendWhatsAppMessage(u.phone, text).catch(console.error);
+          }
+        }
+      }
+
       res.json({ success: true, grandTotal });
     } catch (e: any) {
+      console.error('Pay error:', e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -1818,6 +1903,74 @@ async function startServer() {
       }
     } catch (err) {
       console.error('Failed to send WhatsApp message:', err);
+    }
+  }
+
+  // STATUS CHANGE NOTIFICATION DISPATCHER (Email + WhatsApp Helper)
+  async function triggerStatusNotifications(ticketId: number, status: string) {
+    try {
+      const ticketInfo = await db.select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        customerName: users.firstName,
+        customerPhone: users.phone,
+        customerEmail: users.email,
+        deviceBrand: devices.brand,
+        deviceModel: devices.model,
+        deviceType: devices.deviceType
+      }).from(tickets)
+        .leftJoin(users, eq(tickets.userId, users.id))
+        .leftJoin(devices, eq(tickets.deviceId, devices.id))
+        .where(eq(tickets.id, ticketId))
+        .limit(1);
+
+      if (ticketInfo.length > 0) {
+        const t = ticketInfo[0];
+        const deviceName = `${t.deviceBrand || ''} ${t.deviceModel || ''}`.trim() || t.deviceType || 'Cihazınız';
+
+        const statusMapDb: any = {
+          'yeni': 'Yeni Kayıt',
+          'isleme_alindi': 'İşleme Alındı / Onarımda',
+          'parca_bekliyor': 'Parça Bekleniyor',
+          'musteri_onayi_bekliyor': 'Müşteri Onayı Bekleniyor',
+          'cozuldu': 'Onarıldı / Hazır',
+          'kapatildi': 'Teslim Edildi',
+          'iptal': 'İptal Edildi'
+        };
+        const statusText = statusMapDb[status] || status;
+
+        // 1. Email notification
+        if (t.customerEmail && !t.customerEmail.includes('@noemail.local')) {
+          const html = getStatusEmailTemplate(t.customerName || 'Müşterimiz', t.ticketNumber, deviceName, statusText);
+          sendTicketEmail(t.customerEmail, `Servis Durumu Güncellendi: ${t.ticketNumber}`, html).catch(console.error);
+        }
+
+        // 2. WhatsApp notification
+        if (t.customerPhone) {
+          const allSettings = await db.select().from(settings);
+          const settingsMap: Record<string, string> = {};
+          allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
+
+          if (settingsMap.whatsappApiEnabled === 'true') {
+            const siteUrl = settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com';
+            const trackingLink = `${siteUrl}/ariza-sorgulama?no=${t.ticketNumber}`;
+
+            const defaultTemplate = "Sayın [Musteri], [No] numaralı [Cihaz] cihazınızın servis durumu '[Durum]' olarak güncellenmiştir. Takip linkiniz: [Link]";
+            const template = settingsMap.whatsappTemplate || defaultTemplate;
+
+            const text = template
+              .replace('[Musteri]', t.customerName || 'Müşterimiz')
+              .replace('[No]', t.ticketNumber || '')
+              .replace('[Cihaz]', deviceName)
+              .replace('[Durum]', statusText)
+              .replace('[Link]', trackingLink);
+
+            sendWhatsAppMessage(t.customerPhone, text).catch(console.error);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to trigger status notifications:', err);
     }
   }
 
