@@ -5,18 +5,29 @@ import 'dotenv/config';
 
 // To avoid crashing if run on the client or during build without env variables
 function getConnectionString() {
-  if (process.env.DATABASE_URL?.startsWith('mysql')) {
-    return process.env.DATABASE_URL;
+  let dbUrl = process.env.DATABASE_URL;
+  let dbHost = process.env.DATABASE_HOST;
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (dbUrl?.startsWith('mysql')) {
+    if (isProd && dbUrl.includes('@45.43.152.5')) {
+      dbUrl = dbUrl.replace('@45.43.152.5', '@127.0.0.1');
+    }
+    return dbUrl;
   }
 
-  const { DATABASE_HOST, DATABASE_NAME, DATABASE_PASSWORD, DATABASE_PORT, DATABASE_USER } = process.env;
-  if (!DATABASE_HOST || !DATABASE_NAME || !DATABASE_USER) {
+  const { DATABASE_NAME, DATABASE_PASSWORD, DATABASE_PORT, DATABASE_USER } = process.env;
+  if (!dbHost || !DATABASE_NAME || !DATABASE_USER) {
     return '';
+  }
+
+  if (isProd && dbHost === '45.43.152.5') {
+    dbHost = '127.0.0.1';
   }
 
   const password = DATABASE_PASSWORD ? `:${encodeURIComponent(DATABASE_PASSWORD)}` : '';
   const port = DATABASE_PORT || '3306';
-  return `mysql://${encodeURIComponent(DATABASE_USER)}${password}@${DATABASE_HOST}:${port}/${DATABASE_NAME}?connectTimeout=10000`;
+  return `mysql://${encodeURIComponent(DATABASE_USER)}${password}@${dbHost}:${port}/${DATABASE_NAME}?connectTimeout=10000`;
 }
 
 const connectionString = getConnectionString();
