@@ -18,3 +18,8 @@ These rules are specific to this codebase and must be followed by any AI agent w
 ## 4. CI/CD Deployment Environment Variables
 * **Rule:** When modifying [.github/workflows/deploy.yml](file:///c:/xampp/htdocs/kerimbilgisayar/.github/workflows/deploy.yml), make sure `JWT_SECRET` and `ALLOWED_ORIGINS` are correctly generated/passed and written to the remote `.env` during SSH setup.
 * **Reasoning:** The server relies on `JWT_SECRET` for secure session validation. If missing, it falls back to a derived secret, printing security warnings.
+
+## 5. Media Uploads and Serving (.htaccess)
+* **Rule:** Do NOT rewrite `/uploads/*` requests to `/dist/uploads/*` in [.htaccess](file:///c:/xampp/htdocs/kerimbilgisayar/.htaccess). Serve them directly from the root `/uploads/` folder using `RewriteRule ^uploads/ - [L]`.
+* **Reasoning:** User-uploaded media files are stored dynamically in the root `/uploads/` folder. Rewriting them to `/dist/uploads/` causes newly uploaded files to return 404 (broken image) because they only exist in `/uploads/` and are not present in `/dist/uploads/` (which is only populated during build/compilation).
+

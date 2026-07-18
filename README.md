@@ -41,3 +41,7 @@ Canlı ortamın çökmesini ve kararsız çalışmasını önlemek için gelişt
 ### 4. CI/CD Dağıtımı (Deploy Workflow)
 * **Kural:** [.github/workflows/deploy.yml](.github/workflows/deploy.yml) dosyasında güncelleme yaparken, sunucuya yazılan `.env` bloğunda `JWT_SECRET` ve `ALLOWED_ORIGINS` değişkenlerinin eksiksiz yer aldığından emin olun.
 * **Gerekçe:** Aksi takdirde sunucu oturum doğrulamaları için güvensiz yedek anahtarlara döner ve güvenlik uyarıları üretir.
+
+### 5. Medya Yüklemeleri ve Sunumu (.htaccess)
+* **Kural:** [.htaccess](.htaccess) dosyasında `/uploads/*` isteklerini `/dist/uploads/*` klasörüne yönlendirmeyin. Doğrudan ana dizindeki `/uploads/` klasöründen sunulması için `RewriteRule ^uploads/ - [L]` kuralını koruyun.
+* **Gerekçe:** Kullanıcılar tarafından yüklenen dosyalar dinamik olarak `/uploads/` klasörüne yazılır. `/dist/uploads/` yönlendirmesi yeni yüklenen dosyaların 404 (kırık resim) hatası vermesine sebep olur, çünkü bu klasör yalnızca build aşamasında kopyalanan dosyaları içerir.
