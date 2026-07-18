@@ -1474,7 +1474,13 @@ async function startServer() {
       // Müşteriye bildirim gönder (email + whatsapp)
       if (userRecord.length) {
         const u = userRecord[0];
-        const deviceName = `${ticket[0].deviceBrand || ''} ${ticket[0].deviceModel || ''}`.trim() || 'Cihazınız';
+        let deviceName = 'Cihazınız';
+        if (ticket[0].deviceId) {
+          const deviceRecord = await db.select().from(devices).where(eq(devices.id, ticket[0].deviceId)).limit(1);
+          if (deviceRecord.length) {
+            deviceName = `${deviceRecord[0].brand || ''} ${deviceRecord[0].model || ''}`.trim() || deviceRecord[0].deviceType || 'Cihazınız';
+          }
+        }
         
         // 1. Email notification
         if (u.email && !u.email.includes('@noemail.local')) {

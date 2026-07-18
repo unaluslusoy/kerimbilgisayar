@@ -1,10 +1,12 @@
 const uploadCacheVersion = '20260707';
 
 export function mediaUrl(url?: string | null, width?: number): string {
-  if (!url) return '';
+  if (!url) return '/assets/images/default-placeholder.svg';
 
   let trimmedUrl = url.trim();
-  if (!trimmedUrl) return '';
+  if (!trimmedUrl || trimmedUrl === '#' || trimmedUrl === 'null' || trimmedUrl === 'undefined') {
+    return '/assets/images/default-placeholder.svg';
+  }
 
   // Unsplash Optimization
   if (trimmedUrl.includes('images.unsplash.com')) {
