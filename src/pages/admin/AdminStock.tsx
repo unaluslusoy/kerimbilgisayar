@@ -23,6 +23,7 @@ export default function AdminStock() {
   const [saving, setSaving] = useState(false);
   const [adjustingId, setAdjustingId] = useState<number | null>(null);
   const [adjustAmount, setAdjustAmount] = useState('');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'items' | 'categories'>('items');
   const [categories, setCategories] = useState<any[]>([]);
@@ -477,7 +478,13 @@ export default function AdminStock() {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               {item.imageUrl ? (
-                                <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-10 h-10 object-cover rounded-lg border animate-fade-in" />
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewImage(mediaUrl(item.imageUrl))}
+                                  className="focus:outline-none cursor-zoom-in"
+                                >
+                                  <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-10 h-10 object-cover rounded-lg border animate-fade-in" />
+                                </button>
                               ) : (
                                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center border text-gray-400">
                                   <FileText className="w-5 h-5" />
@@ -789,7 +796,13 @@ export default function AdminStock() {
                   </div>
                   {data.imageUrl && (
                     <div className="mt-2 relative w-16 h-16 border rounded-lg overflow-hidden bg-white">
-                      <img src={mediaUrl(data.imageUrl)} alt="Önizleme" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage(mediaUrl(data.imageUrl))}
+                        className="w-full h-full text-left focus:outline-none cursor-zoom-in"
+                      >
+                        <img src={mediaUrl(data.imageUrl)} alt="Önizleme" className="w-full h-full object-cover" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => setField('imageUrl', '')}
@@ -915,6 +928,32 @@ export default function AdminStock() {
                 <Printer className="w-4 h-4" /> Yazdır
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-sm cursor-zoom-out animate-fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div 
+            className="relative max-w-5xl max-h-[90vh] p-1.5 bg-white rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden m-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-3 right-3 z-50 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img 
+              src={previewImage} 
+              alt="Önizleme" 
+              className="max-w-full max-h-[85vh] object-contain rounded-xl"
+            />
           </div>
         </div>
       )}

@@ -118,6 +118,7 @@ export default function ServiceManager() {
   const [editCustomerAddress, setEditCustomerAddress] = useState('');
   const [newTicketPhotos, setNewTicketPhotos] = useState<any[]>([]);
   const [newTicketPhotoUploading, setNewTicketPhotoUploading] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [modalTab, setModalTab] = useState<'musteri'|'cihaz'|'servis'|'medya'>('musteri');
   
   // Advanced filters and pagination
@@ -1751,13 +1752,17 @@ export default function ServiceManager() {
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                         {ticketAttachments.map(att => (
                           <div key={att.id} className="relative group border border-gray-100 rounded-xl overflow-hidden aspect-video bg-gray-50 flex items-center justify-center">
-                            <a href={mediaUrl(att.fileUrl)} target="_blank" rel="noopener noreferrer" className="w-full h-full">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImage(mediaUrl(att.fileUrl))}
+                              className="w-full h-full text-left focus:outline-none cursor-zoom-in"
+                            >
                               <img
                                 src={mediaUrl(att.fileUrl)}
                                 alt={att.fileName}
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                               />
-                            </a>
+                            </button>
                             <button
                               onClick={() => handleDeleteAttachment(att.id)}
                               className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-md"
@@ -2351,7 +2356,13 @@ export default function ServiceManager() {
                           {file.fileType?.startsWith('video/') ? (
                             <video src={file.fileUrl} className="w-full h-full object-cover" controls />
                           ) : (
-                            <img src={file.fileUrl} alt={file.fileName} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImage(file.fileUrl)}
+                              className="w-full h-full text-left focus:outline-none cursor-zoom-in"
+                            >
+                              <img src={file.fileUrl} alt={file.fileName} className="w-full h-full object-cover" />
+                            </button>
                           )}
                           <button type="button"
                             onClick={() => setNewTicketPhotos(prev => prev.filter((_, idx) => idx !== index))}
@@ -2485,6 +2496,32 @@ export default function ServiceManager() {
           }
         }}
       />
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-sm cursor-zoom-out animate-fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div 
+            className="relative max-w-5xl max-h-[90vh] p-1.5 bg-white rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden m-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-3 right-3 z-50 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img 
+              src={previewImage} 
+              alt="Önizleme" 
+              className="max-w-full max-h-[85vh] object-contain rounded-xl"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
