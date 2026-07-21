@@ -378,13 +378,51 @@ async function startServer() {
     return (raw || req.ip || '').replace(/^::ffff:/, '').trim();
   };
 
-  const readSettingsMap = async () => {
-    const allSettings = await db.select().from(settings);
-    const settingsMap: Record<string, string> = {};
-    allSettings.forEach(s => {
-      if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
-    });
-    return settingsMap;
+  let settingsCache: { data: Record<string, string>; fetchedAt: number } | null = null;
+  const SETTINGS_CACHE_TTL = 15_000; // 15 seconds
+
+  const readSettingsMap = async (forceRefresh = false) => {
+    const now = Date.now();
+    if (!forceRefresh && settingsCache && (now - settingsCache.fetchedAt < SETTINGS_CACHE_TTL)) {
+      return settingsCache.data;
+    }
+    try {
+      const allSettings = await db.select().from(settings);
+      const settingsMap: Record<string, string> = {};
+      allSettings.forEach(s => {
+        if (s.value !== null && s.value !== undefined) settingsMap[s.key] = s.value;
+      });
+      settingsCache = { data: settingsMap, fetchedAt: now };
+      return settingsMap;
+    } catch (err) {
+      if (settingsCache) return settingsCache.data;
+      return {};
+    }
+  };
+
+  let activeDbBlockedIpsCache: { map: Map<string, number>; fetchedAt: number } | null = null;
+  const DB_BLOCKED_IPS_CACHE_TTL = 30_000; // 30 seconds
+
+  const getActiveDbBlockedIps = async () => {
+    const now = Date.now();
+    if (activeDbBlockedIpsCache && (now - activeDbBlockedIpsCache.fetchedAt < DB_BLOCKED_IPS_CACHE_TTL)) {
+      return activeDbBlockedIpsCache.map;
+    }
+    try {
+      const rows = await db.select().from(blockedIps);
+      const ipMap = new Map<string, number>();
+      for (const row of rows) {
+        const until = new Date(row.blockedUntil).getTime();
+        if (until > now) {
+          ipMap.set(row.ipAddress, until);
+        }
+      }
+      activeDbBlockedIpsCache = { map: ipMap, fetchedAt: now };
+      return ipMap;
+    } catch {
+      if (activeDbBlockedIpsCache) return activeDbBlockedIpsCache.map;
+      return new Map<string, number>();
+    }
   };
 
   const verifyTurnstile = async (req: express.Request) => {
@@ -432,18 +470,11 @@ async function startServer() {
         return res.status(403).json({ error: 'Erişim engellendi' });
       }
 
-      // Check persistent DB-based block list
-      const dbBlock = await db.select().from(blockedIps)
-        .where(eq(blockedIps.ipAddress, ip))
-        .limit(1);
-      if (dbBlock.length > 0) {
-        const blockedUntil = new Date(dbBlock[0].blockedUntil).getTime();
-        if (blockedUntil > now) {
-          return res.status(403).json({ error: 'Erişim engellendi' });
-        } else {
-          // Expired block — clean up from DB
-          await db.delete(blockedIps).where(eq(blockedIps.ipAddress, ip)).catch(() => {});
-        }
+      // Check persistent DB-based block list using in-memory cached map
+      const activeDbBlocks = await getActiveDbBlockedIps();
+      const dbBlockedUntil = activeDbBlocks.get(ip) || 0;
+      if (dbBlockedUntil > now) {
+        return res.status(403).json({ error: 'Erişim engellendi' });
       }
 
       if ((req.path.startsWith('/admin') || req.path.startsWith('/api/admin')) && adminAllowlist.length > 0 && !adminAllowlist.includes(ip)) {
@@ -460,6 +491,7 @@ async function startServer() {
         requestCounters.set(ip, bucket);
         if (bucket.count > limit) {
           autoBlockedIps.set(ip, now + blockMs);
+          activeDbBlockedIpsCache = null;
           // Persist auto-block to DB so it survives restarts
           const blockedUntilDate = new Date(now + blockMs);
           await db.insert(blockedIps).values({
@@ -3983,6 +4015,7 @@ async function startServer() {
           await db.insert(settings).values({ tenantId: 1, key, value, group: 'general' });
         }
       }
+      settingsCache = null;
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
