@@ -435,10 +435,10 @@ export default function DeviceStatus() {
 
                         {/* Turnstile / Captcha Kontrolü */}
                         <div className="my-2 flex justify-center">
-                          <TurnstileWidget 
-                             enabled={settings?.captchaEnabled === 'true'} 
-                             siteKey={settings?.turnstileSiteKey} 
-                             onVerify={(token) => setTurnstileToken(token)} 
+                          <TurnstileWidget
+                             enabled={settings?.captchaEnabled === 'true'}
+                             siteKey={settings?.turnstileSiteKey}
+                             onVerify={setTurnstileToken}
                           />
                         </div>
 

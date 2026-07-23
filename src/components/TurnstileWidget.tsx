@@ -25,9 +25,14 @@ export default function TurnstileWidget({ siteKey, enabled = true, onVerify }: T
 
   const activeSiteKey = siteKey || (import.meta as any).env?.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAAAhK8Wn21-sY5-P8';
 
+  // onVerify sık sık yeni bir fonksiyon referansı olarak gelebilir (örn. inline arrow prop);
+  // widget'ı her render'da söküp yeniden kurmamak için son halini ref üzerinden okuyoruz.
+  const onVerifyRef = useRef(onVerify);
+  onVerifyRef.current = onVerify;
+
   useEffect(() => {
     if (!enabled) {
-      onVerify('disabled-bypassed-token');
+      onVerifyRef.current('disabled-bypassed-token');
       return;
     }
 
@@ -40,7 +45,7 @@ export default function TurnstileWidget({ siteKey, enabled = true, onVerify }: T
           sitekey: activeSiteKey,
           callback: (token: string) => {
             setIsChecked(true);
-            onVerify(token);
+            onVerifyRef.current(token);
           },
           'error-callback': () => {
             if (isMounted) setScriptFailed(true);
@@ -83,7 +88,7 @@ export default function TurnstileWidget({ siteKey, enabled = true, onVerify }: T
         widgetIdRef.current = null;
       }
     };
-  }, [enabled, onVerify, activeSiteKey]);
+  }, [enabled, activeSiteKey]);
 
   const handleManualCheck = () => {
     const newToken = 'verified-turnstile-' + Date.now();
