@@ -824,9 +824,13 @@ async function startServer() {
         if (custRows.length > 0) customerInfo = custRows[0];
       }
 
-      const parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, ticket.id));
-      const atts = await db.select().from(ticketAttachments).where(eq(ticketAttachments.ticketId, ticket.id));
-      const logs = await db.select().from(serviceStatusLogs).where(eq(serviceStatusLogs.ticketId, ticket.id)).orderBy(desc(serviceStatusLogs.createdAt));
+      let parts: any[] = [];
+      let atts: any[] = [];
+      let logs: any[] = [];
+
+      try { parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, ticket.id)); } catch {}
+      try { atts = await db.select().from(ticketAttachments).where(eq(ticketAttachments.ticketId, ticket.id)); } catch {}
+      try { logs = await db.select().from(serviceStatusLogs).where(eq(serviceStatusLogs.ticketId, ticket.id)).orderBy(desc(serviceStatusLogs.createdAt)); } catch {}
 
       // Güvenlik 2: KVKK & Kişisel Veri Maskeleme (PII Security)
       const rawName = customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || customerInfo.companyName : ticket.customerName;
@@ -884,7 +888,7 @@ async function startServer() {
 
       await db.insert(serviceStatusLogs).values({
         ticketId: ticket.id,
-        status: 'islemde',
+        toStatus: 'islemde',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini onayladı.`,
       }).catch(() => {});
 
@@ -932,7 +936,7 @@ async function startServer() {
 
       await db.insert(serviceStatusLogs).values({
         ticketId: ticket.id,
-        status: 'iptal',
+        toStatus: 'iptal',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini reddetti. Cihaz iade edilecek.`,
       }).catch(() => {});
 
@@ -963,7 +967,7 @@ async function startServer() {
 
       await db.insert(serviceStatusLogs).values({
         ticketId: ticket.id,
-        status: 'cozuldu',
+        toStatus: 'cozuldu',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) ${paymentMethod || 'kredi kartı'} ile ödeme bildiriminde bulundu.`,
       }).catch(() => {});
 
