@@ -818,15 +818,21 @@ async function startServer() {
         return res.status(400).json({ error: 'Geçersiz takip kodu biçimi' });
       }
 
-      // Kesin Birebir Takip Numarası Eşleşmesi (Strict Ticket Number Only - No ID matching for short inputs like "2")
+      const whereConditions: any[] = [
+        eq(tickets.ticketNumber, cleanCode),
+        eq(tickets.ticketNumber, cleanCode.toUpperCase())
+      ];
+
+      if (cleanCode.length >= 4) {
+        whereConditions.push(
+          eq(tickets.ticketNumber, `SRV-2026-${cleanCode}`),
+          eq(tickets.ticketNumber, `KB-2026-${cleanCode}`)
+        );
+      }
+
       const rows = await db.select()
         .from(tickets)
-        .where(
-          or(
-            eq(tickets.ticketNumber, cleanCode),
-            eq(tickets.ticketNumber, cleanCode.toUpperCase())
-          )
-        )
+        .where(or(...whereConditions))
         .limit(1);
 
       if (rows.length === 0) {
