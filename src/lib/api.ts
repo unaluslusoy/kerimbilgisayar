@@ -701,6 +701,19 @@ export async function fetchAdminReportSummary(params?: { startDate?: string; end
   return adminRequest(`/api/admin/reports/summary${qs ? '?' + qs : ''}`);
 }
 
+// Tahsilat (manuel ödeme kaydı)
+export async function fetchTicketPayments(ticketId: number) {
+  return adminRequest(`/api/admin/payments?ticketId=${ticketId}`);
+}
+
+export async function createAdminPayment(data: { ticketId: number; amount: number | string; paymentMethod: string; notes?: string; isRefund?: boolean }) {
+  return adminRequest('/api/admin/payments', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function reverseAdminPayment(paymentId: number) {
+  return adminRequest(`/api/admin/payments/${paymentId}/reverse`, { method: 'POST' });
+}
+
 // ============================================================
 // ÖDEAL PAYMENT API HELPERS
 // ============================================================

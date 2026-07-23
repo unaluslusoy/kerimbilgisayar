@@ -1,8 +1,8 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
@@ -110,6 +110,12 @@ export default function ServiceManager() {
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
   const [stockItems, setStockItems] = useState<any[]>([]);
   const [ticketParts, setTicketParts] = useState<any[]>([]);
+  const [ticketPayments, setTicketPayments] = useState<any[]>([]);
+  const [isAddingPayment, setIsAddingPayment] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('nakit');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentIsRefund, setPaymentIsRefund] = useState(false);
   const [isAddingPart, setIsAddingPart] = useState(false);
   const [selectedStockId, setSelectedStockId] = useState('');
   const [partQuantity, setPartQuantity] = useState('1');
@@ -807,6 +813,17 @@ export default function ServiceManager() {
     }
 
     try {
+      const pays = await fetchTicketPayments(ticket.id);
+      setTicketPayments(pays || []);
+    } catch (e) {
+      setTicketPayments([]);
+    }
+    setPaymentAmount('');
+    setPaymentMethod('nakit');
+    setPaymentNotes('');
+    setPaymentIsRefund(false);
+
+    try {
       const msgs = await fetchTicketMessages(ticket.id);
       setTicketNotes(msgs);
       setTimeout(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -956,6 +973,40 @@ export default function ServiceManager() {
       setTicketParts(parts || []);
     } catch (e: any) {
       alert('Silme hatası: ' + e.message);
+    }
+  };
+
+  const handleAddPayment = async () => {
+    if (!detailTicket || !paymentAmount || parseFloat(paymentAmount) <= 0) return;
+    setIsAddingPayment(true);
+    try {
+      await createAdminPayment({
+        ticketId: detailTicket.id,
+        amount: parseFloat(paymentAmount),
+        paymentMethod,
+        notes: paymentNotes.trim() || undefined,
+        isRefund: paymentIsRefund,
+      });
+      const pays = await fetchTicketPayments(detailTicket.id);
+      setTicketPayments(pays || []);
+      setPaymentAmount('');
+      setPaymentNotes('');
+      setPaymentIsRefund(false);
+    } catch (e: any) {
+      alert('Tahsilat kaydedilirken hata: ' + e.message);
+    } finally {
+      setIsAddingPayment(false);
+    }
+  };
+
+  const handleReversePayment = async (paymentId: number) => {
+    if (!window.confirm('Bu ödeme kaydını iptal etmek istediğinize emin misiniz? Ters kayıt oluşturulacaktır.')) return;
+    try {
+      await reverseAdminPayment(paymentId);
+      const pays = await fetchTicketPayments(detailTicket.id);
+      setTicketPayments(pays || []);
+    } catch (e: any) {
+      alert('İptal hatası: ' + e.message);
     }
   };
 
@@ -1981,6 +2032,107 @@ export default function ServiceManager() {
                       )}
                     </div>
                   </div>
+
+                  {/* Tahsilat */}
+                  {(() => {
+                    const grandTotal = (parseFloat(detailTicket.laborCost) || 0) + ticketParts.reduce((sum, p) => sum + parseFloat(p.totalPrice), 0);
+                    const collected = ticketPayments.filter(p => p.status === 'basarili').reduce((s, p) => s + parseFloat(p.amount), 0);
+                    const refunded = ticketPayments.filter(p => p.status === 'iade').reduce((s, p) => s + parseFloat(p.amount), 0);
+                    const balance = grandTotal - collected + refunded;
+                    return (
+                      <div className="border border-gray-200 rounded-2xl p-4 bg-slate-50/30">
+                        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1 mb-4">
+                          <Wallet className="w-3.5 h-3.5" /> Tahsilat
+                        </p>
+
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-2.5 text-center">
+                            <p className="text-[9px] text-gray-400 font-bold uppercase">Genel Toplam</p>
+                            <p className="text-sm font-black text-gray-900">₺{grandTotal.toLocaleString('tr-TR')}</p>
+                          </div>
+                          <div className="bg-white border border-gray-200 rounded-xl p-2.5 text-center">
+                            <p className="text-[9px] text-gray-400 font-bold uppercase">Tahsil Edilen</p>
+                            <p className="text-sm font-black text-emerald-700">₺{collected.toLocaleString('tr-TR')}</p>
+                          </div>
+                          <div className={cn('rounded-xl p-2.5 text-center border', balance > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200')}>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase">Kalan Bakiye</p>
+                            <p className={cn('text-sm font-black', balance > 0 ? 'text-red-600' : 'text-gray-900')}>₺{balance.toLocaleString('tr-TR')}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-3 rounded-xl border border-gray-200 mb-3 shadow-sm flex flex-col md:flex-row gap-2 items-stretch md:items-center">
+                          <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none">
+                            <option value="nakit">Nakit</option>
+                            <option value="kredi_karti">Kredi Kartı</option>
+                            <option value="havale_eft">Havale / EFT</option>
+                            <option value="diger">Diğer</option>
+                          </select>
+                          <div className="relative w-28">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₺</span>
+                            <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)}
+                              className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-primary outline-none"
+                              placeholder="Tutar" />
+                          </div>
+                          <input type="text" value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)}
+                            className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Not (opsiyonel)" />
+                          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 shrink-0">
+                            <input type="checkbox" checked={paymentIsRefund} onChange={e => setPaymentIsRefund(e.target.checked)} className="rounded border-gray-300" />
+                            İade
+                          </label>
+                          <button onClick={handleAddPayment} disabled={isAddingPayment || !paymentAmount}
+                            className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 shrink-0">
+                            {isAddingPayment ? '...' : 'Kaydet'}
+                          </button>
+                        </div>
+
+                        {ticketPayments.length > 0 && (
+                          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                                <tr>
+                                  <th className="px-3 py-2 font-semibold">Tarih</th>
+                                  <th className="px-3 py-2 font-semibold">Yöntem</th>
+                                  <th className="px-3 py-2 font-semibold text-right">Tutar</th>
+                                  <th className="px-3 py-2 font-semibold text-center">Durum</th>
+                                  <th className="px-3 py-2 text-center"></th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {ticketPayments.map((p) => (
+                                  <tr key={p.id} className="hover:bg-gray-50">
+                                    <td className="px-3 py-2 text-gray-500">{formatDate(p.createdAt)}</td>
+                                    <td className="px-3 py-2 font-semibold text-gray-800">
+                                      {p.paymentMethod === 'nakit' ? 'Nakit' : p.paymentMethod === 'kredi_karti' ? 'Kredi Kartı' : p.paymentMethod === 'havale_eft' ? 'Havale/EFT' : 'Diğer'}
+                                      {p.notes && <p className="text-[10px] text-gray-400 font-normal">{p.notes}</p>}
+                                    </td>
+                                    <td className={cn('px-3 py-2 text-right font-black', p.status === 'iade' ? 'text-orange-600' : 'text-gray-900')}>₺{parseFloat(p.amount).toLocaleString('tr-TR')}</td>
+                                    <td className="px-3 py-2 text-center">
+                                      <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold',
+                                        p.status === 'basarili' ? 'bg-emerald-100 text-emerald-700' :
+                                        p.status === 'iade' ? 'bg-orange-100 text-orange-700' :
+                                        'bg-gray-100 text-gray-500'
+                                      )}>
+                                        {p.status === 'basarili' ? 'Tahsilat' : p.status === 'iade' ? 'İade' : 'İptal'}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-center">
+                                      {p.status !== 'iptal' && !p.reversalOfId && (
+                                        <button onClick={() => handleReversePayment(p.id)} className="text-red-500 hover:text-red-700 p-1" title="İptal Et">
+                                          <RotateCcw className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Durum Değiştir */}
                   <div className="border border-gray-200 rounded-2xl p-4">

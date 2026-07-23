@@ -3113,6 +3113,46 @@ async function startServer() {
     }
   });
 
+  // Manuel tahsilat / iade kaydı ekle (nakit/kart/havale elden alınan ödeme)
+  app.post('/api/admin/payments', requireAdmin, async (req, res) => {
+    try {
+      const { ticketId, amount, paymentMethod, notes, isRefund } = req.body;
+      const amt = parseFloat(amount);
+      if (!ticketId || !amt || amt <= 0) {
+        return res.status(400).json({ error: 'Geçerli bir servis kaydı ve tutar giriniz.' });
+      }
+      if (!['kredi_karti', 'havale_eft', 'nakit', 'diger'].includes(paymentMethod)) {
+        return res.status(400).json({ error: 'Geçersiz ödeme yöntemi.' });
+      }
+      const adminUser = (req as any).adminUser;
+      const [ticket] = await db.select().from(tickets).where(eq(tickets.id, parseInt(ticketId))).limit(1);
+      if (!ticket) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+
+      const [result] = await db.insert(payments).values({
+        tenantId: ticket.tenantId || 1,
+        ticketId: ticket.id,
+        amount: amt.toFixed(2),
+        paymentMethod,
+        status: isRefund ? 'iade' : 'basarili',
+        notes: notes || null,
+      });
+      const paymentId = (result as any).insertId;
+
+      await db.insert(auditLogs).values({
+        tenantId: ticket.tenantId || 1,
+        userId: adminUser?.userId || null,
+        action: isRefund ? 'payment.refund' : 'payment.collected',
+        entityType: 'Ticket',
+        entityId: ticket.id,
+        details: { paymentId, amount: amt.toFixed(2), paymentMethod, notes: notes || null },
+      }).catch((e) => console.error('auditLogs insert error:', e));
+
+      res.json({ success: true, id: paymentId });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Ödemeleri listele (ticketId filter desteği eklendi)
   app.get('/api/admin/payments', requireAdmin, async (req, res) => {
     try {
