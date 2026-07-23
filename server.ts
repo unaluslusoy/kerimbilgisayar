@@ -818,31 +818,15 @@ async function startServer() {
         return res.status(400).json({ error: 'Geçersiz takip kodu biçimi' });
       }
 
-      const isNumeric = /^\d+$/.test(cleanCode);
-      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
-
-      // Kesin Birebir Eşleşme (Exact Match with Padded Format Support)
-      const whereConditions: any[] = [
-        eq(tickets.ticketNumber, cleanCode),
-        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
-        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
-      ];
-
-      if (isNumeric && numVal > 0) {
-        whereConditions.push(eq(tickets.id, numVal));
-        const padded4 = String(numVal).padStart(4, '0');
-        const padded6 = String(numVal).padStart(6, '0');
-        whereConditions.push(
-          eq(tickets.ticketNumber, `KB-2026-${padded4}`),
-          eq(tickets.ticketNumber, `KB-${padded6}`),
-          eq(tickets.ticketNumber, `KB-${numVal}`),
-          eq(tickets.ticketNumber, `SRV-${numVal}`)
-        );
-      }
-
+      // Kesin Birebir Takip Numarası Eşleşmesi (Strict Ticket Number Only - No ID matching for short inputs like "2")
       const rows = await db.select()
         .from(tickets)
-        .where(or(...whereConditions))
+        .where(
+          or(
+            eq(tickets.ticketNumber, cleanCode),
+            eq(tickets.ticketNumber, cleanCode.toUpperCase())
+          )
+        )
         .limit(1);
 
       if (rows.length === 0) {
@@ -932,27 +916,18 @@ async function startServer() {
       const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
       if (!cleanCode) return res.status(400).json({ error: 'Geçersiz takip kodu' });
 
-      // Güvenlik 3: Turnstile / Captcha Kontrolü (varsa)
-      const captchaValid = await verifyTurnstile(req);
-      if (!captchaValid) {
-        return res.status(400).json({ error: 'Güvenlik doğrulaması (Captcha) başarısız. Lütfen tekrar deneyin.' });
-      }
-
-      const isNumeric = /^\d+$/.test(cleanCode);
-      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
-      const whereConditions: any[] = [
-        eq(tickets.ticketNumber, cleanCode),
-        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
-        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
-      ];
-      if (isNumeric && numVal > 0) whereConditions.push(eq(tickets.id, numVal));
-
-      const rows = await db.select().from(tickets).where(or(...whereConditions)).limit(1);
+      const rows = await db.select().from(tickets).where(
+        or(
+          eq(tickets.ticketNumber, cleanCode),
+          eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+          sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
+        )
+      ).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
 
-      // Güvenlik 4: Durum Geçiş Kontrolü (State Transition Security)
+      // Durum Geçiş Kontrolü (State Transition Security)
       if (['cozuldu', 'teslim_edildi', 'iptal'].includes(ticket.status)) {
         return res.status(400).json({ error: 'Bu servis kaydı tamamlanmış veya kapatılmış durumdadır.' });
       }
@@ -989,21 +964,13 @@ async function startServer() {
       const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
       if (!cleanCode) return res.status(400).json({ error: 'Geçersiz takip kodu' });
 
-      const captchaValid = await verifyTurnstile(req);
-      if (!captchaValid) {
-        return res.status(400).json({ error: 'Güvenlik doğrulaması (Captcha) başarısız.' });
-      }
-
-      const isNumeric = /^\d+$/.test(cleanCode);
-      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
-      const whereConditions: any[] = [
-        eq(tickets.ticketNumber, cleanCode),
-        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
-        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
-      ];
-      if (isNumeric && numVal > 0) whereConditions.push(eq(tickets.id, numVal));
-
-      const rows = await db.select().from(tickets).where(or(...whereConditions)).limit(1);
+      const rows = await db.select().from(tickets).where(
+        or(
+          eq(tickets.ticketNumber, cleanCode),
+          eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+          sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
+        )
+      ).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
@@ -1037,16 +1004,13 @@ async function startServer() {
       const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
       const { paymentMethod } = req.body;
 
-      const isNumeric = /^\d+$/.test(cleanCode);
-      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
-      const whereConditions: any[] = [
-        eq(tickets.ticketNumber, cleanCode),
-        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
-        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
-      ];
-      if (isNumeric && numVal > 0) whereConditions.push(eq(tickets.id, numVal));
-
-      const rows = await db.select().from(tickets).where(or(...whereConditions)).limit(1);
+      const rows = await db.select().from(tickets).where(
+        or(
+          eq(tickets.ticketNumber, cleanCode),
+          eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+          sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
+        )
+      ).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
