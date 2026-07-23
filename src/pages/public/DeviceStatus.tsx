@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { fetchTicket } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 import { Link, useParams } from 'react-router-dom';
+import TurnstileWidget from '../../components/TurnstileWidget';
 
 export default function DeviceStatus() {
   usePageTitle('Cihaz Durumu Sorgula');
@@ -16,6 +17,7 @@ export default function DeviceStatus() {
   const [error, setError] = useState(false);
 
   // Approval/Rejection & Payment State
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [processingAction, setProcessingAction] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'bank' | 'cash' | null>(null);
   const [cardHolder, setCardHolder] = useState('');
@@ -88,13 +90,14 @@ export default function DeviceStatus() {
   };
 
   const handleApprove = async () => {
-    if (!result) return;
+    if (!result || !turnstileToken) return;
     setProcessingAction(true);
     const code = result.ticketNumber || result.id || ticketId;
     try {
       const res = await fetch(`/api/tickets/${code}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turnstileToken })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Onaylama işlemi başarısız.');
@@ -110,14 +113,15 @@ export default function DeviceStatus() {
   };
 
   const handleDecline = async () => {
-    if (!result) return;
+    if (!result || !turnstileToken) return;
     if (!window.confirm('Teklifi reddetmek istediğinize emin misiniz? Cihaz işlem yapılmadan iade edilecektir.')) return;
     setProcessingAction(true);
     const code = result.ticketNumber || result.id || ticketId;
     try {
       const res = await fetch(`/api/tickets/${code}/decline`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turnstileToken })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'İşlem başarısız.');
@@ -398,6 +402,12 @@ export default function DeviceStatus() {
                             </p>
                           </div>
                         </div>
+
+                        {/* Turnstile / Captcha Kontrolü */}
+                        <div className="my-2 flex justify-center">
+                          <TurnstileWidget onVerify={(token) => setTurnstileToken(token)} />
+                        </div>
+
                         <div className="flex gap-3 pt-2">
                           <button
                             onClick={handleApprove}
@@ -560,22 +570,7 @@ export default function DeviceStatus() {
                       </div>
                     )}
 
-                    {/* CTA */}
-                    <div className="mt-6 pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
-                      <Link
-                        to="/randevu"
-                        className="flex-1 inline-flex items-center justify-center gap-2 bg-primary hover:bg-secondary text-white font-bold py-3 px-5 rounded-theme transition-colors shadow-sm"
-                      >
-                        <CalendarPlus className="w-4 h-4" />
-                        Yeni Servis Talebi
-                      </Link>
-                      <Link
-                        to="/iletisim"
-                        className="flex-1 inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-3 px-5 rounded-theme transition-colors"
-                      >
-                        Bize Ulaşın <ArrowRight className="w-4 h-4" />
-                      </Link>
-                    </div>
+
                   </div>
                 </div>
               ) : (

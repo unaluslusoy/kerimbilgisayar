@@ -818,21 +818,15 @@ async function startServer() {
         return res.status(400).json({ error: 'Geçersiz takip kodu biçimi' });
       }
 
-      const whereConditions: any[] = [
-        eq(tickets.ticketNumber, cleanCode),
-        eq(tickets.ticketNumber, cleanCode.toUpperCase())
-      ];
-
-      if (cleanCode.length >= 4) {
-        whereConditions.push(
-          eq(tickets.ticketNumber, `SRV-2026-${cleanCode}`),
-          eq(tickets.ticketNumber, `KB-2026-${cleanCode}`)
-        );
-      }
-
+      // Kesin Birebir Takip Numarası Eşleşmesi (Strict Exact Match - No Prefix Padding)
       const rows = await db.select()
         .from(tickets)
-        .where(or(...whereConditions))
+        .where(
+          or(
+            eq(tickets.ticketNumber, cleanCode),
+            eq(tickets.ticketNumber, cleanCode.toUpperCase())
+          )
+        )
         .limit(1);
 
       if (rows.length === 0) {
