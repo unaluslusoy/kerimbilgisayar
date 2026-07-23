@@ -2,7 +2,7 @@ import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
@@ -46,6 +46,18 @@ const TYPE_LABELS: Record<string, string> = {
   'bakim': 'Bakım',
   'diger': 'Diğer',
 };
+
+// IMEI Luhn algoritması doğrulaması (GSMA standardı — 15 hane). Server tarafında da tekrar kontrol edilir.
+function isValidImei(imei: string): boolean {
+  if (!/^\d{15}$/.test(imei)) return false;
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    let d = Number(imei[i]);
+    if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
 
 function formatDate(d: string) {
   if (!d) return '—';
@@ -114,6 +126,7 @@ export default function ServiceManager() {
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [dealers, setDealers] = useState<any[]>([]);
   const [cameraUploading, setCameraUploading] = useState(false);
+  const [deviceTypes, setDeviceTypes] = useState<any[]>([]);
 
   // Edit Details Mode State
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -142,6 +155,9 @@ export default function ServiceManager() {
   const [editPinPassword, setEditPinPassword] = useState('');
   const [editDeviceEmail, setEditDeviceEmail] = useState('');
   const [editDeviceEmailPassword, setEditDeviceEmailPassword] = useState('');
+  const [editDeviceTypeId, setEditDeviceTypeId] = useState<string | number>('');
+  const [editColor, setEditColor] = useState('');
+  const [editVariant, setEditVariant] = useState('');
   const [editCustomerAddress, setEditCustomerAddress] = useState('');
   const [newTicketPhotos, setNewTicketPhotos] = useState<any[]>([]);
   const [newTicketPhotoUploading, setNewTicketPhotoUploading] = useState(false);
@@ -165,8 +181,11 @@ export default function ServiceManager() {
     customerPhone: '',
     customerEmail: '',
     deviceType: '',
+    deviceTypeId: '' as string | number,
     deviceBrand: '',
     deviceModel: '',
+    color: '',
+    variant: '',
     deviceSerial: '',
     imei: '',
     patternLock: '',
@@ -260,10 +279,11 @@ export default function ServiceManager() {
 
   const loadDependencies = async () => {
     try {
-      const [users, stock, dealersData] = await Promise.all([
+      const [users, stock, dealersData, deviceTypesData] = await Promise.all([
         fetchAdminUsers(),
         fetchAdminStock(),
-        adminRequest('/api/admin/dealers').catch(() => [])
+        adminRequest('/api/admin/dealers').catch(() => []),
+        fetchAdminDeviceTypes().catch(() => [])
       ]);
       // Sadece admin ve teknisyenleri filtrele
       const staff = users.filter((u: any) => u.roleType === 'superadmin' || u.roleType === 'tenant_admin' || u.roleType === 'staff' || u.roleType === 'technician');
@@ -271,6 +291,7 @@ export default function ServiceManager() {
       setAllUsers(users);
       setStockItems(stock);
       setDealers(Array.isArray(dealersData) ? dealersData : []);
+      setDeviceTypes(Array.isArray(deviceTypesData) ? deviceTypesData : []);
     } catch (e) {
       console.error(e);
     }
@@ -373,8 +394,11 @@ export default function ServiceManager() {
         customerPhone: '',
         customerEmail: '',
         deviceType: '',
+        deviceTypeId: '',
         deviceBrand: '',
         deviceModel: '',
+        color: '',
+        variant: '',
         deviceSerial: '',
         imei: '',
         patternLock: '',
@@ -592,8 +616,11 @@ export default function ServiceManager() {
         technicianNotes: editTechnicianNotes,
         description: editDescription,
         deviceType: editDeviceType,
+        deviceTypeId: editDeviceTypeId,
         deviceBrand: editDeviceBrand,
         deviceModel: editDeviceModel,
+        color: editColor,
+        variant: editVariant,
         imei: editImei,
         deviceSerial: editDeviceSerial,
         patternLock: editPatternLock,
@@ -754,8 +781,11 @@ export default function ServiceManager() {
     setEditTechnicianNotes(ticket.technicianNotes || '');
     setEditDescription(ticket.description || '');
     setEditDeviceType(ticket.deviceType || '');
+    setEditDeviceTypeId(ticket.deviceTypeId || '');
     setEditDeviceBrand(ticket.deviceBrand || '');
     setEditDeviceModel(ticket.deviceModel || '');
+    setEditColor(ticket.color || '');
+    setEditVariant(ticket.variant || '');
     setEditImei(ticket.imei || '');
     setEditDeviceSerial(ticket.deviceSerial || ticket.serialNumber || '');
     setEditPatternLock(ticket.patternLock || '');
@@ -1409,8 +1439,18 @@ export default function ServiceManager() {
                               setEditTechnicianNotes(detailTicket.technicianNotes || '');
                               setEditDescription(detailTicket.description || '');
                               setEditDeviceType(detailTicket.deviceType || '');
+                              setEditDeviceTypeId(detailTicket.deviceTypeId || '');
                               setEditDeviceBrand(detailTicket.deviceBrand || '');
                               setEditDeviceModel(detailTicket.deviceModel || '');
+                              setEditColor(detailTicket.color || '');
+                              setEditVariant(detailTicket.variant || '');
+                              setEditImei(detailTicket.imei || '');
+                              setEditDeviceSerial(detailTicket.deviceSerial || detailTicket.serialNumber || '');
+                              setEditPatternLock(detailTicket.patternLock || '');
+                              setEditPinPassword(detailTicket.pinPassword || '');
+                              setEditDeviceEmail(detailTicket.deviceEmail || '');
+                              setEditDeviceEmailPassword(detailTicket.deviceEmailPassword || '');
+                              setEditCustomerAddress(detailTicket.address || detailTicket.customerAddress || '');
                               setIsEditingDetails(true);
                             }}
                             className="bg-primary hover:bg-secondary text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm"
@@ -1461,12 +1501,18 @@ export default function ServiceManager() {
                       </div>
                       <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Cihaz Türü</label>
-                        <input
-                          type="text"
+                        <select
                           value={editDeviceType}
-                          onChange={e => setEditDeviceType(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
-                        />
+                          onChange={e => {
+                            const profile = deviceTypes.find(dt => dt.name === e.target.value);
+                            setEditDeviceType(e.target.value);
+                            setEditDeviceTypeId(profile?.id || '');
+                          }}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none bg-white"
+                        >
+                          <option value="">Seçiniz...</option>
+                          {deviceTypes.map(dt => <option key={dt.id} value={dt.name}>{dt.name}</option>)}
+                        </select>
                       </div>
                       <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Marka</label>
@@ -1484,6 +1530,27 @@ export default function ServiceManager() {
                           value={editDeviceModel}
                           onChange={e => setEditDeviceModel(e.target.value)}
                           className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Renk</label>
+                        <input
+                          type="text"
+                          value={editColor}
+                          onChange={e => setEditColor(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-1">
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                          {(() => { const p = deviceTypes.find(dt => dt.name === editDeviceType); return p?.variantLabel || 'Kapasite / Konfigürasyon'; })()}
+                        </label>
+                        <input
+                          type="text"
+                          value={editVariant}
+                          onChange={e => setEditVariant(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none"
+                          placeholder={(() => { const p = deviceTypes.find(dt => dt.name === editDeviceType); return p?.variantPlaceholder || ''; })()}
                         />
                       </div>
                     </div>
@@ -1582,32 +1649,54 @@ export default function ServiceManager() {
                               placeholder="Seri No"
                             />
                           </div>
-                          <div className="space-y-1">
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider">IMEI</label>
-                            <input
-                              type="text"
-                              value={editImei}
-                              onChange={e => setEditImei(e.target.value)}
-                              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none font-mono text-xs"
-                              placeholder="IMEI"
-                            />
-                          </div>
+                          {(() => {
+                            const p = deviceTypes.find(dt => dt.name === editDeviceType);
+                            if (p && !p.hasImei) return <div />;
+                            const imeiOk = editImei ? isValidImei(editImei) : null;
+                            return (
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                                  IMEI
+                                  {imeiOk === true && <span className="text-emerald-600 text-[10px] font-bold normal-case">✓ Doğrulandı</span>}
+                                  {imeiOk === false && <span className="text-red-500 text-[10px] font-bold normal-case">✗ Geçersiz</span>}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editImei}
+                                  onChange={e => setEditImei(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                                  className={cn(
+                                    "w-full border rounded-lg p-2 focus:ring-1 focus:ring-primary outline-none font-mono text-xs",
+                                    imeiOk === false ? "border-red-300" : "border-gray-300"
+                                  )}
+                                  placeholder="15 haneli IMEI" inputMode="numeric"
+                                />
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         <div className="bg-amber-50/50 border border-amber-200/75 rounded-xl p-4 space-y-3">
                           <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">🔐 Cihaz Kilit & Hesap Bilgileri</p>
                           <div className="flex gap-4 flex-wrap">
-                            <div className="flex flex-col items-center gap-1 shrink-0">
-                              <label className="block text-[10px] font-semibold text-gray-600 mb-1 self-start">Desen Kilidi</label>
-                              <PatternLockPicker
-                                value={editPatternLock}
-                                onChange={val => setEditPatternLock(val)}
-                                size={148}
-                              />
-                            </div>
+                            {(() => {
+                              const p = deviceTypes.find(dt => dt.name === editDeviceType);
+                              if (p && !p.hasPatternLock) return null;
+                              return (
+                                <div className="flex flex-col items-center gap-1 shrink-0">
+                                  <label className="block text-[10px] font-semibold text-gray-600 mb-1 self-start">Desen Kilidi</label>
+                                  <PatternLockPicker
+                                    value={editPatternLock}
+                                    onChange={val => setEditPatternLock(val)}
+                                    size={148}
+                                  />
+                                </div>
+                              );
+                            })()}
                             <div className="flex-1 min-w-[160px] space-y-2">
                               <div>
-                                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">PIN / Ekran Şifresi</label>
+                                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                                  {(() => { const p = deviceTypes.find(dt => dt.name === editDeviceType); return p?.lockLabel || 'PIN / Ekran Şifresi'; })()}
+                                </label>
                                 <input
                                   type="text"
                                   value={editPinPassword}
@@ -2347,10 +2436,15 @@ export default function ServiceManager() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Cihaz Türü</label>
-                      <input type="text" value={newTicket.deviceType}
-                        onChange={e => setNewTicket({ ...newTicket, deviceType: e.target.value })}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        placeholder="Örn: Laptop, Telefon" />
+                      <select value={newTicket.deviceType}
+                        onChange={e => {
+                          const profile = deviceTypes.find(dt => dt.name === e.target.value);
+                          setNewTicket({ ...newTicket, deviceType: e.target.value, deviceTypeId: profile?.id || '' });
+                        }}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none bg-white">
+                        <option value="">Seçiniz...</option>
+                        {deviceTypes.map(dt => <option key={dt.id} value={dt.name}>{dt.name}</option>)}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Marka</label>
@@ -2370,19 +2464,52 @@ export default function ServiceManager() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Renk</label>
+                      <input type="text" value={newTicket.color}
+                        onChange={e => setNewTicket({ ...newTicket, color: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="Örn: Siyah" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                        {(() => { const p = deviceTypes.find(dt => dt.name === newTicket.deviceType); return p?.variantLabel || 'Kapasite / Konfigürasyon'; })()}
+                      </label>
+                      <input type="text" value={newTicket.variant}
+                        onChange={e => setNewTicket({ ...newTicket, variant: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                        placeholder={(() => { const p = deviceTypes.find(dt => dt.name === newTicket.deviceType); return p?.variantPlaceholder || ''; })()} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Seri No</label>
                       <input type="text" value={newTicket.deviceSerial}
                         onChange={e => setNewTicket({ ...newTicket, deviceSerial: e.target.value })}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none font-mono"
                         placeholder="Seri Numarası" />
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">IMEI</label>
-                      <input type="text" value={newTicket.imei}
-                        onChange={e => setNewTicket({ ...newTicket, imei: e.target.value })}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none font-mono"
-                        placeholder="IMEI Numarası" />
-                    </div>
+                    {(() => {
+                      const p = deviceTypes.find(dt => dt.name === newTicket.deviceType);
+                      if (p && !p.hasImei) return <div />;
+                      const imeiOk = newTicket.imei ? isValidImei(newTicket.imei) : null;
+                      return (
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1.5">
+                            IMEI
+                            {imeiOk === true && <span className="text-emerald-600 text-[10px] font-bold">✓ Doğrulandı</span>}
+                            {imeiOk === false && <span className="text-red-500 text-[10px] font-bold">✗ Geçersiz (Luhn)</span>}
+                          </label>
+                          <input type="text" value={newTicket.imei}
+                            onChange={e => setNewTicket({ ...newTicket, imei: e.target.value.replace(/\D/g, '').slice(0, 15) })}
+                            className={cn(
+                              "w-full border rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none font-mono",
+                              imeiOk === false ? "border-red-300" : "border-gray-300"
+                            )}
+                            placeholder="15 haneli IMEI numarası" inputMode="numeric" />
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-3">
@@ -2392,18 +2519,26 @@ export default function ServiceManager() {
                     </p>
                     <div className="flex gap-4 flex-wrap">
                       {/* Sol: Desen Kilidi - görsel */}
-                      <div className="flex flex-col items-center gap-1">
-                        <label className="block text-xs font-semibold text-gray-600 mb-1 self-start">Desen Kilidi</label>
-                        <PatternLockPicker
-                          value={newTicket.patternLock}
-                          onChange={val => setNewTicket({ ...newTicket, patternLock: val })}
-                          size={172}
-                        />
-                      </div>
+                      {(() => {
+                        const p = deviceTypes.find(dt => dt.name === newTicket.deviceType);
+                        if (p && !p.hasPatternLock) return null;
+                        return (
+                          <div className="flex flex-col items-center gap-1">
+                            <label className="block text-xs font-semibold text-gray-600 mb-1 self-start">Desen Kilidi</label>
+                            <PatternLockPicker
+                              value={newTicket.patternLock}
+                              onChange={val => setNewTicket({ ...newTicket, patternLock: val })}
+                              size={172}
+                            />
+                          </div>
+                        );
+                      })()}
                       {/* Sağ: PIN, E-posta, Parola */}
                       <div className="flex-1 min-w-[180px] space-y-3">
                         <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">PIN / Parola</label>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">
+                            {(() => { const p = deviceTypes.find(dt => dt.name === newTicket.deviceType); return p?.lockLabel || 'PIN / Parola'; })()}
+                          </label>
                           <input type="text" value={newTicket.pinPassword}
                             onChange={e => setNewTicket({ ...newTicket, pinPassword: e.target.value })}
                             className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
@@ -2432,7 +2567,7 @@ export default function ServiceManager() {
                     <input type="text" value={newTicket.accessories}
                       onChange={e => setNewTicket({ ...newTicket, accessories: e.target.value })}
                       className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
-                      placeholder="Örn: Şarj aleti, kılıf, çanta, kutu..." />
+                      placeholder={(() => { const p = deviceTypes.find(dt => dt.name === newTicket.deviceType); return p?.accessoriesHint || 'Örn: Şarj aleti, kılıf, çanta, kutu...'; })()} />
                   </div>
                 </div>
               )}

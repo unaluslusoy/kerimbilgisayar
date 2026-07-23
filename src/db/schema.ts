@@ -193,10 +193,13 @@ export const devices = mysqlTable('devices', {
   tenantId: int('tenant_id').references(() => tenants.id),
   userId: int('user_id').references(() => users.id),
   companyId: int('company_id').references(() => companies.id),
+  deviceTypeId: int('device_type_id').references(() => deviceTypes.id),
   name: varchar('name', { length: 255 }),
-  deviceType: varchar('device_type', { length: 100 }).notNull(), 
+  deviceType: varchar('device_type', { length: 100 }).notNull(),
   brand: varchar('brand', { length: 100 }),
   model: varchar('model', { length: 100 }),
+  color: varchar('color', { length: 40 }),
+  variant: varchar('variant', { length: 100 }),
   serialNumber: varchar('serial_number', { length: 100 }),
   imei: varchar('imei', { length: 100 }),
   patternLock: varchar('pattern_lock', { length: 100 }),
@@ -210,6 +213,31 @@ export const devices = mysqlTable('devices', {
   details: text('details'),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// Cihaz türü profilleri (dinamik) — sabit kod yerine DB'den okunur, yeni tür
+// eklemek migration gerektirmez.
+export const deviceTypes = mysqlTable('device_types', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  name: varchar('name', { length: 50 }).notNull().unique(),
+  hasImei: boolean('has_imei').default(false),
+  hasPatternLock: boolean('has_pattern_lock').default(false),
+  lockLabel: varchar('lock_label', { length: 60 }),
+  variantLabel: varchar('variant_label', { length: 60 }),
+  variantPlaceholder: varchar('variant_placeholder', { length: 100 }),
+  accessoriesHint: varchar('accessories_hint', { length: 200 }),
+  sortOrder: int('sort_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const deviceTypeTests = mysqlTable('device_type_tests', {
+  id: int('id').autoincrement().primaryKey(),
+  deviceTypeId: int('device_type_id').notNull().references(() => deviceTypes.id, { onDelete: 'cascade' }),
+  testName: varchar('test_name', { length: 80 }).notNull(),
+  sortOrder: int('sort_order').default(0),
+}, (t) => ({
+  deviceTypeIdx: index('idx_device_type_tests_type').on(t.deviceTypeId),
+}));
 
 export const serviceCategories = mysqlTable('service_categories', {
   id: int('id').autoincrement().primaryKey(),

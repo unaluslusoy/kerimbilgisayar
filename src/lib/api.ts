@@ -183,6 +183,11 @@ export async function deleteTicketPart(partId: number) {
   return adminRequest(`/api/admin/tickets/parts/${partId}`, { method: 'DELETE' });
 }
 
+// Cihaz Profilleri
+export async function fetchAdminDeviceTypes() {
+  return adminRequest('/api/admin/device-types');
+}
+
 // Stock
 export async function fetchAdminStock() {
   return adminRequest('/api/admin/stock');

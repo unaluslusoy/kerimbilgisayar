@@ -133,6 +133,8 @@ import {
   ticketAttachmentMeta,
   auditLogs,
   maintenanceContracts,
+  deviceTypes,
+  deviceTypeTests,
 } from './src/db/schema';
 
 import { eq, desc, and, or, sql, asc, like } from 'drizzle-orm';
@@ -406,6 +408,18 @@ async function startServer() {
     } catch (e) {
       console.error('notifyStaff error:', e);
     }
+  };
+
+  // IMEI Luhn algoritması doğrulaması (GSMA standardı — 15 hane).
+  const isValidImei = (imei: string): boolean => {
+    if (!/^\d{15}$/.test(imei)) return false;
+    let sum = 0;
+    for (let i = 0; i < 15; i++) {
+      let d = Number(imei[i]);
+      if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+      sum += d;
+    }
+    return sum % 10 === 0;
   };
 
   let settingsCache: { data: Record<string, string>; fetchedAt: number } | null = null;
@@ -2020,6 +2034,24 @@ async function startServer() {
   }
 
   // ============================================================
+  // ADMIN API — CİHAZ PROFİLLERİ (Cihaz türüne göre dinamik form/checklist)
+  // ============================================================
+
+  app.get('/api/admin/device-types', requireAdmin, async (req, res) => {
+    try {
+      const rowsTypes = await db.select().from(deviceTypes).where(eq(deviceTypes.tenantId, 1)).orderBy(asc(deviceTypes.sortOrder));
+      const rowsTests = await db.select().from(deviceTypeTests).orderBy(asc(deviceTypeTests.sortOrder));
+      const testsByType: Record<number, string[]> = {};
+      for (const t of rowsTests) {
+        (testsByType[t.deviceTypeId] ||= []).push(t.testName);
+      }
+      res.json(rowsTypes.map(dt => ({ ...dt, tests: testsByType[dt.id] || [] })));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
   // ADMIN API — TICKETS (Servis Kayıtları)
   // ============================================================
 
@@ -2050,9 +2082,20 @@ async function startServer() {
         customerLastName: users.lastName,
         customerPhone: users.phone,
         deviceName: devices.name,
+        deviceTypeId: devices.deviceTypeId,
         deviceType: devices.deviceType,
         deviceBrand: devices.brand,
         deviceModel: devices.model,
+        color: devices.color,
+        variant: devices.variant,
+        deviceSerial: devices.serialNumber,
+        imei: devices.imei,
+        patternLock: devices.patternLock,
+        pinPassword: devices.pinPassword,
+        deviceEmail: devices.deviceEmail,
+        deviceEmailPassword: devices.deviceEmailPassword,
+        customerEmail: users.email,
+        address: users.address,
         assignedTo: tickets.assignedTo,
         laborCost: tickets.laborCost,
         dealerId: tickets.dealerId,
@@ -2079,9 +2122,13 @@ async function startServer() {
     try {
       const {
         subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost, dealerId, source, assignedTo, accessories, technicianNotes,
-        deviceSerial, imei, patternLock, pinPassword, deviceEmail, deviceEmailPassword,
+        deviceSerial, imei, patternLock, pinPassword, deviceEmail, deviceEmailPassword, deviceTypeId, color, variant,
         customerType, companyName, taxId, taxOffice, address,
       } = req.body;
+
+      if (imei && !isValidImei(imei)) {
+        return res.status(400).json({ error: 'IMEI numarası geçersiz (15 haneli olmalı ve Luhn doğrulamasını geçmeli).' });
+      }
 
       let userId: number | null = null;
       let deviceId: number | null = null;
@@ -2188,9 +2235,12 @@ async function startServer() {
           const newDevice = await tx.insert(devices).values({
             tenantId: 1,
             userId: userId,
+            deviceTypeId: deviceTypeId ? parseInt(deviceTypeId as string) : null,
             deviceType: deviceType || 'Bilinmeyen',
             brand: deviceBrand || '',
             model: deviceModel || '',
+            color: color || null,
+            variant: variant || null,
             name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType || 'Cihaz',
             serialNumber: deviceSerial || null,
             imei: imei || null,
@@ -2245,9 +2295,14 @@ async function startServer() {
       const {
         status, priority, cost, assignedTo, laborCost, technicianNotes, accessories, description,
         customerName, customerPhone, customerEmail, address,
-        deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword,
+        deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword, deviceTypeId, color, variant,
         deliverySignature, customerSignature,
       } = req.body;
+
+      if (imei && !isValidImei(imei)) {
+        return res.status(400).json({ error: 'IMEI numarası geçersiz (15 haneli olmalı ve Luhn doğrulamasını geçmeli).' });
+      }
+
       const updateData: any = { updatedAt: new Date() };
       if (status) updateData.status = status;
       if (priority) updateData.priority = priority;
@@ -2310,7 +2365,7 @@ async function startServer() {
         }
 
         // Update device details if provided (mevcut cihaz kaydı yoksa oluştur)
-        const deviceFieldsProvided = [deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword].some((v) => v !== undefined);
+        const deviceFieldsProvided = [deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword, deviceTypeId, color, variant].some((v) => v !== undefined);
         if (deviceFieldsProvided) {
           const deviceUpdate: any = {};
           if (deviceType !== undefined) deviceUpdate.deviceType = deviceType;
@@ -2322,6 +2377,9 @@ async function startServer() {
           if (pinPassword !== undefined) deviceUpdate.pinPassword = pinPassword;
           if (deviceEmail !== undefined) deviceUpdate.deviceEmail = deviceEmail;
           if (deviceEmailPassword !== undefined) deviceUpdate.deviceEmailPassword = deviceEmailPassword;
+          if (deviceTypeId !== undefined) deviceUpdate.deviceTypeId = deviceTypeId ? parseInt(deviceTypeId as string) : null;
+          if (color !== undefined) deviceUpdate.color = color;
+          if (variant !== undefined) deviceUpdate.variant = variant;
 
           if (ticketRec?.deviceId) {
             await tx.update(devices).set(deviceUpdate).where(eq(devices.id, ticketRec.deviceId));
