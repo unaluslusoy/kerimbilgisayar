@@ -2523,6 +2523,65 @@ async function startServer() {
     }
   });
 
+  // Birleşik aktivite akışı: not + durum geçmişi + sistem/audit olayları tek kronolojik listede.
+  // Not: mevcut 3 kaynağı (service_status_logs, ticket_messages, audit_logs) birleştirir —
+  // veri taşıma yapılmadı, sadece okuma katmanında birleştirilir.
+  app.get('/api/admin/tickets/:id/activity', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+
+      const [statusRows, noteRows, auditRows] = await Promise.all([
+        db.select({
+          id: serviceStatusLogs.id,
+          fromStatus: serviceStatusLogs.fromStatus,
+          toStatus: serviceStatusLogs.toStatus,
+          notes: serviceStatusLogs.notes,
+          createdAt: serviceStatusLogs.createdAt,
+          actorName: sql<string>`CONCAT(${users.firstName}, ' ', COALESCE(${users.lastName}, ''))`,
+        }).from(serviceStatusLogs)
+          .leftJoin(users, eq(serviceStatusLogs.changedById, users.id))
+          .where(eq(serviceStatusLogs.ticketId, ticketId)),
+        db.select({
+          id: ticketMessages.id,
+          message: ticketMessages.message,
+          createdAt: ticketMessages.createdAt,
+          actorName: sql<string>`CONCAT(${users.firstName}, ' ', COALESCE(${users.lastName}, ''))`,
+        }).from(ticketMessages)
+          .leftJoin(users, eq(ticketMessages.senderId, users.id))
+          .where(eq(ticketMessages.ticketId, ticketId)),
+        db.select({
+          id: auditLogs.id,
+          action: auditLogs.action,
+          details: auditLogs.details,
+          createdAt: auditLogs.createdAt,
+          actorName: sql<string>`CONCAT(${users.firstName}, ' ', COALESCE(${users.lastName}, ''))`,
+        }).from(auditLogs)
+          .leftJoin(users, eq(auditLogs.userId, users.id))
+          .where(and(eq(auditLogs.entityType, 'Ticket'), eq(auditLogs.entityId, ticketId))),
+      ]);
+
+      const feed = [
+        ...statusRows.map(r => ({
+          id: `status-${r.id}`, type: 'status' as const, createdAt: r.createdAt,
+          actorName: r.actorName?.trim() || 'Sistem',
+          fromStatus: r.fromStatus, toStatus: r.toStatus, notes: r.notes,
+        })),
+        ...noteRows.map(r => ({
+          id: `note-${r.id}`, type: 'note' as const, createdAt: r.createdAt,
+          actorName: r.actorName?.trim() || 'Sistem', message: r.message,
+        })),
+        ...auditRows.map(r => ({
+          id: `audit-${r.id}`, type: 'audit' as const, createdAt: r.createdAt,
+          actorName: r.actorName?.trim() || 'Sistem', action: r.action, details: r.details,
+        })),
+      ].sort((a, b) => new Date(a.createdAt as any).getTime() - new Date(b.createdAt as any).getTime());
+
+      res.json(feed);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // DELETE ticket and all its attachments, parts, and messages
   app.delete('/api/admin/tickets/:id', requireAdmin, async (req, res) => {
     try {
@@ -2676,6 +2735,15 @@ async function startServer() {
         }
       });
 
+      await db.insert(auditLogs).values({
+        tenantId: 1,
+        userId: createdBy,
+        action: 'ticket_part.added',
+        entityType: 'Ticket',
+        entityId: parseInt(req.params.id),
+        details: { name: isManual ? name?.trim() : undefined, stockItemId: isManual ? null : parseInt(stockItemId), quantity: q, unitPrice: price, source: isManual ? 'manuel' : 'stok' },
+      }).catch((e) => console.error('auditLogs insert error:', e));
+
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -2685,9 +2753,13 @@ async function startServer() {
   app.delete('/api/admin/tickets/parts/:partId', requireAdmin, async (req, res) => {
     try {
       const removedBy = (req as any).adminUser?.userId || null;
+      let affectedTicketId: number | null = null;
+      let removedPartName: string | null = null;
       await db.transaction(async (tx) => {
         const part = await tx.select().from(ticketParts).where(eq(ticketParts.id, parseInt(req.params.partId))).limit(1);
         if (part.length > 0) {
+          affectedTicketId = part[0].ticketId;
+          removedPartName = part[0].name;
           // Restore stock (yalnızca stoktan düşülmüş kalemler için)
           if (part[0].stockItemId) {
             const item = await tx.select().from(stockItems).where(eq(stockItems.id, part[0].stockItemId)).limit(1);
@@ -2700,6 +2772,16 @@ async function startServer() {
           await tx.update(ticketParts).set({ removedAt: new Date(), removedBy }).where(eq(ticketParts.id, parseInt(req.params.partId)));
         }
       });
+      if (affectedTicketId) {
+        await db.insert(auditLogs).values({
+          tenantId: 1,
+          userId: removedBy,
+          action: 'ticket_part.removed',
+          entityType: 'Ticket',
+          entityId: affectedTicketId,
+          details: { name: removedPartName },
+        }).catch((e) => console.error('auditLogs insert error:', e));
+      }
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

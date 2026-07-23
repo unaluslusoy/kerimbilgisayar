@@ -1,8 +1,8 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw, History, Settings2 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment, fetchTicketActivity } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
@@ -90,7 +90,6 @@ export default function ServiceManager() {
 
   // Detay paneli
   const [detailTicket, setDetailTicket] = useState<any>(null);
-  const [ticketNotes, setTicketNotes] = useState<any[]>([]);
   const [ticketAttachments, setTicketAttachments] = useState<any[]>([]);
   const [ticketShipment, setTicketShipment] = useState<any | null>(null);
   const [isCreatingShipment, setIsCreatingShipment] = useState(false);
@@ -127,8 +126,8 @@ export default function ServiceManager() {
   const [laborCostValue, setLaborCostValue] = useState('');
   const [isSavingLabor, setIsSavingLabor] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
-  const [statusLogs, setStatusLogs] = useState<any[]>([]);
-  const [rightPanelTab, setRightPanelTab] = useState<'notes' | 'timeline'>('notes');
+  const [activityFeed, setActivityFeed] = useState<any[]>([]);
+  const [activityFilter, setActivityFilter] = useState<'all' | 'note' | 'status' | 'audit'>('all');
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -481,8 +480,7 @@ export default function ServiceManager() {
       setTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t));
       if (detailTicket?.id === id) {
         setDetailTicket((prev: any) => ({ ...prev, status }));
-        const logs = await fetchTicketStatusLogs(id).catch(() => []);
-        setStatusLogs(logs || []);
+        loadActivityFeed(id);
       }
     } catch (e: any) {
       alert('Hata: ' + e.message);
@@ -602,9 +600,8 @@ export default function ServiceManager() {
       
       const atts = await fetchTicketAttachments(detailTicket.id).catch(() => []);
       setTicketAttachments(atts || []);
-      const logs = await fetchTicketStatusLogs(detailTicket.id).catch(() => []);
-      setStatusLogs(logs || []);
-      
+      loadActivityFeed(detailTicket.id);
+
       setShowSignatureModal(false);
       alert('Cihaz başarıyla dijital imza ile teslim edildi!');
     } catch (e: any) {
@@ -776,6 +773,15 @@ export default function ServiceManager() {
     }
   };
 
+  const loadActivityFeed = async (ticketId: number) => {
+    try {
+      const feed = await fetchTicketActivity(ticketId);
+      setActivityFeed(feed || []);
+    } catch (e) {
+      setActivityFeed([]);
+    }
+  };
+
   const openDetail = async (ticket: any) => {
     setDetailTicket(ticket);
     setCostValue(ticket.cost || '');
@@ -805,6 +811,8 @@ export default function ServiceManager() {
     setEditCustomerAddress(ticket.address || ticket.customerAddress || '');
     setIsEditingDetails(false);
     
+    loadActivityFeed(ticket.id);
+
     try {
       const parts = await fetchTicketParts(ticket.id);
       setTicketParts(parts || []);
@@ -823,13 +831,7 @@ export default function ServiceManager() {
     setPaymentNotes('');
     setPaymentIsRefund(false);
 
-    try {
-      const msgs = await fetchTicketMessages(ticket.id);
-      setTicketNotes(msgs);
-      setTimeout(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    } catch (e) {
-      setTicketNotes([]);
-    }
+    setTimeout(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
     try {
       const atts = await fetchTicketAttachments(ticket.id);
       setTicketAttachments(atts || []);
@@ -842,12 +844,6 @@ export default function ServiceManager() {
       setTicketShipment(match || null);
     } catch (e) {
       setTicketShipment(null);
-    }
-    try {
-      const logs = await fetchTicketStatusLogs(ticket.id);
-      setStatusLogs(logs || []);
-    } catch (e) {
-      setStatusLogs([]);
     }
     try {
       const pluginsData = await adminRequest('/api/admin/plugins').catch(() => []);
@@ -872,8 +868,7 @@ export default function ServiceManager() {
     setNoteSending(true);
     try {
       await createTicketMessage({ ticketId: detailTicket.id, message: noteText.trim(), isInternal: true });
-      const msgs = await fetchTicketMessages(detailTicket.id);
-      setTicketNotes(msgs);
+      loadActivityFeed(detailTicket.id);
       setNoteText('');
       setTimeout(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (e: any) {
@@ -951,6 +946,7 @@ export default function ServiceManager() {
       });
       const parts = await fetchTicketParts(detailTicket.id);
       setTicketParts(parts || []);
+      loadActivityFeed(detailTicket.id);
       setSelectedStockId('');
       setPartQuantity('1');
       setPartUnitPrice('');
@@ -971,6 +967,7 @@ export default function ServiceManager() {
       await deleteTicketPart(partId);
       const parts = await fetchTicketParts(detailTicket?.id);
       setTicketParts(parts || []);
+      loadActivityFeed(detailTicket?.id);
     } catch (e: any) {
       alert('Silme hatası: ' + e.message);
     }
@@ -989,6 +986,7 @@ export default function ServiceManager() {
       });
       const pays = await fetchTicketPayments(detailTicket.id);
       setTicketPayments(pays || []);
+      loadActivityFeed(detailTicket.id);
       setPaymentAmount('');
       setPaymentNotes('');
       setPaymentIsRefund(false);
@@ -2343,100 +2341,108 @@ export default function ServiceManager() {
                   </div>
                 </div>
 
-                {/* Right Area: Chat & Internal Notes / Timeline */}
+                {/* Right Area: Birleşik Aktivite Akışı (Not + Durum + Sistem/Denetim) */}
                 <div className="w-full lg:w-2/5 flex flex-col min-h-0 bg-slate-50/50 border-t lg:border-t-0 lg:border-l border-gray-200">
-                  <div className="border-b border-gray-200 shrink-0 bg-white flex">
+                  <div className="border-b border-gray-200 shrink-0 bg-white px-3 pt-3 pb-2 flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-gray-400 shrink-0" />
+                    <p className="text-xs font-bold text-gray-700 mr-1">Aktivite</p>
+                    {([
+                      { key: 'all', label: 'Tümü' },
+                      { key: 'note', label: 'Notlar' },
+                      { key: 'status', label: 'Durum' },
+                      { key: 'audit', label: 'Sistem' },
+                    ] as const).map(f => (
+                      <button key={f.key} type="button" onClick={() => setActivityFilter(f.key)}
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors',
+                          activityFilter === f.key ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        )}>
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {activityFeed.filter(a => activityFilter === 'all' || a.type === activityFilter).length === 0 && (
+                      <p className="text-xs text-gray-400 italic text-center py-8">Henüz kayıt bulunmuyor.</p>
+                    )}
+                    {activityFeed.filter(a => activityFilter === 'all' || a.type === activityFilter).map((a) => {
+                      if (a.type === 'note') {
+                        return (
+                          <div key={a.id} className="bg-amber-50 border border-amber-100 rounded-xl p-3 shadow-sm">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs font-bold text-amber-800 flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {a.actorName}</span>
+                              <span className="text-[10px] text-amber-600 font-medium">{formatDate(a.createdAt)}</span>
+                            </div>
+                            <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{a.message}</p>
+                          </div>
+                        );
+                      }
+                      if (a.type === 'status') {
+                        return (
+                          <div key={a.id} className="bg-white border border-gray-150 rounded-xl p-3 shadow-sm">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs font-bold text-gray-800 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-primary" /> {STATUS_LABELS[a.fromStatus] || 'Başlangıç'} ➜ {STATUS_LABELS[a.toStatus] || a.toStatus}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-medium">{formatDate(a.createdAt)}</span>
+                            </div>
+                            {a.notes && <p className="text-xs text-gray-600 mb-1.5 italic">"{a.notes}"</p>}
+                            <div className="flex items-center gap-1 text-[10px] text-gray-400 font-semibold">
+                              <span>👤 {a.actorName}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      // audit / system
+                      const auditLabels: Record<string, string> = {
+                        'payment.collected': 'Tahsilat kaydedildi',
+                        'payment.refund': 'İade kaydedildi',
+                        'ticket_part.added': 'Parça/işlem eklendi',
+                        'ticket_part.removed': 'Parça/işlem kaldırıldı',
+                      };
+                      const d = a.details || {};
+                      return (
+                        <div key={a.id} className="bg-slate-100/70 border border-slate-200 rounded-xl p-3">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                              <Settings2 className="w-3 h-3" /> {auditLabels[a.action] || a.action}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">{formatDate(a.createdAt)}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {d.name && <>{d.name} </>}
+                            {d.amount !== undefined && <>₺{d.amount} </>}
+                            {d.quantity !== undefined && <>× {d.quantity} </>}
+                          </p>
+                          <div className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold mt-0.5">
+                            <span>👤 {a.actorName}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={notesEndRef} />
+                  </div>
+
+                  <div className="p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
+                    <textarea
+                      rows={2}
+                      value={noteText}
+                      onChange={e => setNoteText(e.target.value)}
+                      placeholder="Dahili not ekle... (Ctrl+Enter ile gönder)"
+                      className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
+                      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
+                    />
                     <button
                       type="button"
-                      onClick={() => setRightPanelTab('notes')}
-                      className={cn(
-                        'flex-1 py-3 text-center text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5',
-                        rightPanelTab === 'notes' ? 'border-primary text-primary bg-slate-50/30' : 'border-transparent text-gray-500 hover:text-gray-800'
-                      )}
+                      onClick={handleSendNote}
+                      disabled={noteSending || !noteText.trim()}
+                      className="px-4 py-2 bg-primary hover:bg-secondary text-white rounded-xl transition-colors disabled:opacity-50 shrink-0 flex items-center justify-center"
+                      title="Gönder (Ctrl+Enter)"
                     >
-                      <MessageSquare className="w-3.5 h-3.5" /> Dahili Notlar ({ticketNotes.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRightPanelTab('timeline')}
-                      className={cn(
-                        'flex-1 py-3 text-center text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5',
-                        rightPanelTab === 'timeline' ? 'border-primary text-primary bg-slate-50/30' : 'border-transparent text-gray-500 hover:text-gray-800'
-                      )}
-                    >
-                      <Clock className="w-3.5 h-3.5" /> Durum Geçmişi ({statusLogs.length})
+                      <Send className="w-4 h-4" />
                     </button>
                   </div>
-                  
-                  {rightPanelTab === 'notes' ? (
-                    <>
-                      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                        {ticketNotes.length === 0 && (
-                          <p className="text-xs text-gray-400 italic text-center py-8">Henüz not eklenmemiş.</p>
-                        )}
-                        {ticketNotes.map(note => (
-                          <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-xl p-3 shadow-sm">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-xs font-bold text-amber-800">{note.senderName}</span>
-                              <span className="text-[10px] text-amber-600 font-medium">{formatDate(note.createdAt)}</span>
-                            </div>
-                            <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{note.message}</p>
-                          </div>
-                        ))}
-                        <div ref={notesEndRef} />
-                      </div>
-
-                      <div className="p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
-                        <textarea
-                          rows={2}
-                          value={noteText}
-                          onChange={e => setNoteText(e.target.value)}
-                          placeholder="Dahili not ekle... (Ctrl+Enter ile gönder)"
-                          className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
-                          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSendNote}
-                          disabled={noteSending || !noteText.trim()}
-                          className="px-4 py-2 bg-primary hover:bg-secondary text-white rounded-xl transition-colors disabled:opacity-50 shrink-0 flex items-center justify-center"
-                          title="Gönder (Ctrl+Enter)"
-                        >
-                          <Send className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                      {statusLogs.length === 0 && (
-                        <p className="text-xs text-gray-400 italic text-center py-8">İşlem geçmişi bulunmuyor.</p>
-                      )}
-                      <div className="relative border-l-2 border-gray-200 ml-3 pl-5 space-y-5">
-                        {statusLogs.map((log) => (
-                          <div key={log.id} className="relative">
-                            {/* Timeline Node Icon */}
-                            <div className="absolute -left-[27px] top-1 w-3 h-3 rounded-full bg-primary border-2 border-white ring-4 ring-slate-100" />
-                            
-                            <div className="bg-white border border-gray-150 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow">
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs font-bold text-gray-800">
-                                  {STATUS_LABELS[log.fromStatus] || 'Başlangıç'} ➜ {STATUS_LABELS[log.toStatus] || log.toStatus}
-                                </span>
-                                <span className="text-[10px] text-gray-400 font-medium">
-                                  {formatDate(log.createdAt)}
-                                </span>
-                              </div>
-                              <p className="text-xs text-gray-600 mb-1.5 italic">"{log.notes || 'Açıklama belirtilmemiş'}"</p>
-                              <div className="flex items-center gap-1 text-[10px] text-gray-400 font-semibold">
-                                <span>👤 Güncelleyen:</span>
-                                <span className="text-gray-600">{log.changedByName || 'Sistem'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

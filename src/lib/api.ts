@@ -507,6 +507,10 @@ export async function fetchTicketStatusLogs(ticketId: number) {
   return adminRequest(`/api/admin/tickets/${ticketId}/status-logs`);
 }
 
+export async function fetchTicketActivity(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/activity`);
+}
+
 // ============================================================
 // LEADS — CONVERT TO TICKET
 // ============================================================
