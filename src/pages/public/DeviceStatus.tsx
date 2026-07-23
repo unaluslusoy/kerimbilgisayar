@@ -90,12 +90,17 @@ export default function DeviceStatus() {
   const handleApprove = async () => {
     if (!result) return;
     setProcessingAction(true);
+    const code = result.ticketNumber || result.id || ticketId;
     try {
-      const res = await fetch(`/api/tickets/${result.ticketNumber}/approve`, { method: 'POST' });
-      if (!res.ok) throw new Error('Onaylama işlemi başarısız.');
+      const res = await fetch(`/api/tickets/${code}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Onaylama işlemi başarısız.');
       // Refresh ticket info
-      const data = await fetchTicket(result.ticketNumber);
-      setResult(data);
+      const refreshed = await fetchTicket(code);
+      setResult(refreshed);
       alert('Onarım onayınız başarıyla iletildi. Cihazınız sıraya alınmıştır.');
     } catch (err: any) {
       alert('Hata: ' + err.message);
@@ -108,11 +113,16 @@ export default function DeviceStatus() {
     if (!result) return;
     if (!window.confirm('Teklifi reddetmek istediğinize emin misiniz? Cihaz işlem yapılmadan iade edilecektir.')) return;
     setProcessingAction(true);
+    const code = result.ticketNumber || result.id || ticketId;
     try {
-      const res = await fetch(`/api/tickets/${result.ticketNumber}/decline`, { method: 'POST' });
-      if (!res.ok) throw new Error('İşlem başarısız.');
-      const data = await fetchTicket(result.ticketNumber);
-      setResult(data);
+      const res = await fetch(`/api/tickets/${code}/decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'İşlem başarısız.');
+      const refreshed = await fetchTicket(code);
+      setResult(refreshed);
       alert('Talebiniz alınmıştır. Cihaz iade edilmek üzere hazırlanacaktır.');
     } catch (err: any) {
       alert('Hata: ' + err.message);
@@ -124,13 +134,15 @@ export default function DeviceStatus() {
   const handleMockPayment = async (method: 'kredi_karti' | 'havale_eft' | 'nakit') => {
     if (!result) return;
     setProcessingAction(true);
+    const code = result.ticketNumber || result.id || ticketId;
     try {
-      const res = await fetch(`/api/tickets/${result.ticketNumber}/pay`, {
+      const res = await fetch(`/api/tickets/${code}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentMethod: method })
       });
-      if (!res.ok) throw new Error('Ödeme kaydı oluşturulamadı.');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Ödeme kaydı oluşturulamadı.');
       
       setPaymentSuccess(true);
       if (method === 'kredi_karti') {
@@ -141,9 +153,8 @@ export default function DeviceStatus() {
         setPaymentMsg('Elden nakit ödeme tercihiniz kaydedildi.');
       }
       
-      // Refresh data
-      const data = await fetchTicket(result.ticketNumber);
-      setResult(data);
+      const refreshed = await fetchTicket(code);
+      setResult(refreshed);
     } catch (err: any) {
       alert('Ödeme hatası: ' + err.message);
     } finally {
@@ -153,28 +164,28 @@ export default function DeviceStatus() {
 
   const statusMap: Record<string, { label: string; icon: any; color: string; bg: string }> = {
     'pending': { label: 'Kayıt Kabul / Alındı', icon: Package, color: 'text-gray-500', bg: 'bg-gray-100' },
-    'diagnosing': { label: 'Analiz / Arıza Tespiti', icon: Search, color: 'text-purple-600', bg: 'bg-purple-100' },
-    'waiting_parts': { label: 'Parça / Müşteri Onayı Bekleniyor', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-100' },
-    'repairing': { label: 'Aktif Onarım / Tamirde', icon: Wrench, color: 'text-primary', bg: 'bg-primary/10' },
-    'ready': { label: 'Test Sürecinde / Teslime Hazır', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' },
-    'delivered': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-500', bg: 'bg-gray-100' },
-    
-    // Raw Turkish status maps
-    'yeni': { label: 'Servise Alındı', icon: Package, color: 'text-blue-600', bg: 'bg-blue-100' },
-    'isleme_alindi': { label: 'Arıza Tespiti / İşlemde', icon: Wrench, color: 'text-purple-600', bg: 'bg-purple-100' },
-    'parca_bekliyor': { label: 'Parça Bekleniyor', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-100' },
+    'yeni': { label: 'Kayıt Kabul / Alındı', icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
+    'in_progress': { label: 'İşlemde / Tamirde', icon: Wrench, color: 'text-amber-600', bg: 'bg-amber-50' },
+    'islemde': { label: 'İşlemde / Tamirde', icon: Wrench, color: 'text-amber-600', bg: 'bg-amber-50' },
+    'isleme_alindi': { label: 'İşleme Alındı', icon: Wrench, color: 'text-amber-600', bg: 'bg-amber-50' },
+    'parca_bekliyor': { label: 'Yedek Parça Bekleniyor', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50' },
     'musteri_onayi_bekliyor': { label: 'Müşteri Onayı Bekleniyor', icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-100' },
-    'cozuldu': { label: 'Onarım Tamamlandı', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' },
-    'kapatildi': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-500', bg: 'bg-gray-100' },
-    'teslim_edildi': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-500', bg: 'bg-gray-100' },
-    'iptal': { label: 'İptal Edildi', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-100' },
+    'ready': { label: 'Hazır / Test Edildi', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
+    'cozuldu': { label: 'Onarım Tamamlandı (Teslime Hazır)', icon: CheckCircle2, color: 'text-emerald-700', bg: 'bg-emerald-100' },
+    'teslim_edildi': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-700', bg: 'bg-gray-200' },
+    'completed': { label: 'Teslim Edildi', icon: CheckCircle2, color: 'text-gray-700', bg: 'bg-gray-200' },
+    'kapatildi': { label: 'Kapandı', icon: CheckCircle2, color: 'text-gray-600', bg: 'bg-gray-100' },
+    'iptal': { label: 'İade / İptal Edildi', icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' }
   };
 
-  const getStatusInfo = (status: string) => statusMap[status] ?? { label: status, icon: FileText, color: 'text-gray-500', bg: 'bg-gray-100' };
+  const getStatusInfo = (st: string) => {
+    return statusMap[st] || { label: st || 'İşlemde', icon: Package, color: 'text-gray-600', bg: 'bg-gray-100' };
+  };
 
-  // Sum parts + labor
-  const partsTotal = result?.parts ? result.parts.reduce((sum: number, p: any) => sum + parseFloat(p.totalPrice || '0'), 0) : 0;
-  const grandTotal = partsTotal + (parseFloat(result?.laborCost) || 0);
+  // Fiş toplam maliyeti hesabı
+  const partsCost = result?.parts?.reduce((acc: number, p: any) => acc + (parseFloat(p.totalPrice) || 0), 0) || 0;
+  const laborCost = parseFloat(result?.laborCost) || 0;
+  const grandTotal = partsCost + laborCost > 0 ? partsCost + laborCost : (parseFloat(result?.estimatedCost) || 0);
 
   const bankIban = 'TR 0400 0100 0851 6494 6919 5006';
   const bankName = 'Ziraat Bankası';
@@ -182,28 +193,24 @@ export default function DeviceStatus() {
   const qrBankUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(`iban=${bankIban}&name=${bankAccount}`)}`;
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 min-h-screen">
-      {/* Page Header */}
-      <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Arıza Sorgulama' }]} />
-          <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
-            Cihaz Durumu Sorgulama
-          </h1>
-          <p className="text-lg text-gray-600 max-w-3xl leading-relaxed">
-            Takip numaranız ile cihazınızın onarım aşamalarını ve maliyet detaylarını anlık görebilir, onay verebilir ve online ödeme yapabilirsiniz.
+    <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
+        <Breadcrumb items={[{ label: 'Anasayfa', href: '/' }, { label: 'Arıza Sorgulama' }]} />
+
+        <div className="text-center mb-8">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">Cihaz Durumu Sorgulama</h1>
+          <p className="text-gray-600 mt-2 text-sm md:text-base">
+            Servisteki cihazınızın canlı durumunu, teknik dökümünü ve masraf onaylarını takip edin.
           </p>
         </div>
-      </div>
 
-      <div className="py-16 md:py-24 px-4 flex justify-center">
-        <div className="max-w-3xl w-full">
+        <div className="max-w-3xl w-full mx-auto">
 
-          <form onSubmit={handleSearch} className="bg-white p-2 rounded-theme border border-gray-200 shadow-sm flex items-center mb-10 font-sans">
+          <form onSubmit={handleSearch} className="bg-white p-2 rounded-theme border border-gray-200 shadow-sm flex items-center mb-8 font-sans">
             <Search className="w-6 h-6 text-gray-400 ml-4 mr-2 shrink-0" />
             <input 
               type="text" 
-              placeholder="Örn: SRV-2026-60160"
+              placeholder="Örn: KB-2026-60160 veya 2"
               aria-label="Takip Numarası"
               className="flex-1 w-full bg-transparent border-none focus:outline-none text-gray-900 font-medium py-3 text-lg placeholder:text-gray-400 min-w-0 disabled:opacity-50"
               value={ticketId}
@@ -229,12 +236,12 @@ export default function DeviceStatus() {
                    <p className="text-gray-500 font-medium">Lütfen bekleyin, cihazınızın durumu kontrol ediliyor.</p>
                 </div>
               ) : result && !error ? (
-                <div className="bg-white rounded-theme border border-gray-200 overflow-hidden shadow-xl shadow-gray-200/50">
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xl shadow-gray-200/50">
                   {/* Header */}
-                  <div className="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gray-50">
+                  <div className="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gray-50/80">
                     <div>
-                      <p className="text-sm font-medium text-gray-500 mb-1">Takip Numarası</p>
-                      <p className="text-xl font-bold font-mono text-gray-900">{result.id}</p>
+                      <p className="text-xs font-semibold text-gray-500 mb-0.5">Takip Numarası</p>
+                      <p className="text-xl font-bold font-mono text-gray-900">#{result.ticketNumber || result.id}</p>
                     </div>
                     <div className={cn('px-4 py-2 rounded-full flex items-center text-sm font-bold', getStatusInfo(result.rawStatus).bg, getStatusInfo(result.rawStatus).color)}>
                       {(() => { const Icon = getStatusInfo(result.rawStatus).icon; return <Icon className="w-4 h-4 mr-2" />; })()}
@@ -243,10 +250,10 @@ export default function DeviceStatus() {
                   </div>
 
                   <div className="p-6 space-y-6">
-                    {/* Device details */}
+                    {/* Customer & Device details Grid */}
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-4">
-                        <h3 className="text-lg font-bold text-gray-900">
+                        <h3 className="text-lg font-extrabold text-gray-900">
                           {[result.deviceBrand, result.deviceModel].filter(Boolean).join(' ') || result.deviceType || result.subject || 'Cihaz Bilgisi'}
                         </h3>
                         {result.isUnderWarranty !== undefined && (
@@ -256,43 +263,55 @@ export default function DeviceStatus() {
                         )}
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
-                        {result.customerName && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-gray-50/80 p-5 rounded-2xl border border-gray-200/80 shadow-inner">
+                        {/* Müşteri Bilgileri (** Maskeli KVKK Uyumlu) */}
+                        <div>
+                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Müşteri Adı</p>
+                          <p className="font-bold text-gray-800">{result.customerName || 'Müşteri Kaydı'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Telefon Numarası</p>
+                          <p className="font-mono font-bold text-gray-800">{result.customerPhone || '05** *** ** **'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">E-Posta Adresi</p>
+                          <p className="font-bold text-gray-800">{result.customerEmail || 'mus****@***.com'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Teslimat / Kayıt Adresi</p>
+                          <p className="font-bold text-gray-800">{result.customerAddress || 'Adres Kayıtlı'}</p>
+                        </div>
+
+                        {/* Ürün & Cihaz Bilgileri */}
+                        <div className="md:col-span-2 border-t border-gray-200 pt-3 mt-1 grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Müşteri</p>
-                            <p className="font-bold text-gray-800">{result.customerName}</p>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Cihaz Türü / Kategorisi</p>
+                            <p className="font-bold text-gray-900 capitalize">{result.deviceType || 'Bilgisayar / Elektronik'}</p>
                           </div>
-                        )}
-                        {result.deviceType && (
                           <div>
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Cihaz Türü</p>
-                            <p className="font-bold text-gray-800 capitalize">{result.deviceType}</p>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Seri Numarası / Kodu</p>
+                            <p className="font-mono font-bold text-gray-900">{result.serialNumber || 'Seri No Kayıtlı Değil'}</p>
                           </div>
-                        )}
-                        {result.serialNumber && (
-                          <div>
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Seri Numarası / Kodu</p>
-                            <p className="font-mono font-bold text-gray-800">{result.serialNumber}</p>
-                          </div>
-                        )}
+                        </div>
+
                         {result.accessories && (
-                          <div className="md:col-span-2">
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Emanet Alınan Aksesuarlar</p>
-                            <p className="font-bold text-gray-800 bg-amber-50/60 border border-amber-200/60 rounded-xl p-2.5">{result.accessories}</p>
+                          <div className="md:col-span-2 border-t border-gray-200 pt-3">
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Emanet Alınan Aksesuarlar</p>
+                            <p className="font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-2.5">{result.accessories}</p>
                           </div>
                         )}
                         {(result.issueDescription || result.description || result.subject) && (
-                          <div className="md:col-span-2">
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Arıza Şikayeti / Bildirilen Sorun</p>
+                          <div className="md:col-span-2 border-t border-gray-200 pt-3">
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Arıza Şikayeti / Bildirilen Sorun</p>
                             <div className="text-gray-800 bg-white p-3.5 rounded-xl border border-gray-200 leading-relaxed font-medium whitespace-pre-wrap shadow-sm">
                               {result.issueDescription || result.description || result.subject}
                             </div>
                           </div>
                         )}
                         {result.technicianNotes && (
-                          <div className="md:col-span-2">
+                          <div className="md:col-span-2 border-t border-blue-100 pt-3">
                             <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-0.5">Servis Personeli Görüş / Notu</p>
-                            <div className="text-blue-900 bg-blue-50/80 p-3.5 rounded-xl border border-blue-100 leading-relaxed font-semibold whitespace-pre-wrap">
+                            <div className="text-blue-900 bg-blue-50 p-3.5 rounded-xl border border-blue-200 leading-relaxed font-semibold whitespace-pre-wrap">
                               {result.technicianNotes}
                             </div>
                           </div>

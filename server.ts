@@ -765,37 +765,46 @@ async function startServer() {
   });
 
   // Helper: PII Masking (Kişisel Veri Maskeleme - KVKK Güvenliği)
-  function maskString(str: string, keepStart = 1, keepEnd = 1): string {
-    if (!str || str.trim().length <= 2) return '***';
+  function maskString(str: string, keepStart = 2, keepEnd = 2): string {
+    if (!str || !str.trim()) return '***';
     const trimmed = str.trim();
-    if (trimmed.length <= keepStart + keepEnd) return trimmed[0] + '***';
-    return trimmed.substring(0, keepStart) + '***' + trimmed.substring(trimmed.length - keepEnd);
+    if (trimmed.length <= keepStart + keepEnd) return trimmed[0] + '**';
+    return trimmed.substring(0, keepStart) + '**' + trimmed.substring(trimmed.length - keepEnd);
   }
 
   function maskName(fullName: string): string {
     if (!fullName || !fullName.trim()) return 'Müşteri Kaydı';
     const parts = fullName.trim().split(/\s+/);
-    if (parts.length === 1) {
-      const p = parts[0];
-      if (p.length <= 2) return p + '*';
-      return p.substring(0, 2) + '***';
-    }
-    const firstName = parts.slice(0, -1).join(' ');
-    const lastName = parts[parts.length - 1];
-    return `${firstName} ${lastName.substring(0, 1)}.***`;
+    return parts.map(part => {
+      if (part.length <= 2) return part[0] + '*';
+      if (part.length <= 4) return part.substring(0, 2) + '**';
+      return part.substring(0, 2) + '**' + part.substring(part.length - 1);
+    }).join(' ');
   }
 
   function maskPhone(phone: string): string {
-    if (!phone) return '***';
+    if (!phone || !phone.trim()) return '05** *** ** **';
     const digits = phone.replace(/\D/g, '');
-    if (digits.length < 7) return '***';
+    if (digits.length < 7) return '05** *** ** **';
     return digits.substring(0, 4) + ' *** ** ' + digits.substring(digits.length - 2);
   }
 
   function maskEmail(email: string): string {
-    if (!email || !email.includes('@')) return '***';
+    if (!email || !email.includes('@')) return 'mus****@***.com';
     const [name, domain] = email.split('@');
-    return maskString(name, 1, 1) + '@' + domain;
+    const maskedName = name.length <= 3 ? name[0] + '**' : name.substring(0, 2) + '**' + name[name.length - 1];
+    return maskedName + '@' + domain;
+  }
+
+  function maskAddress(addr: string): string {
+    if (!addr || !addr.trim()) return 'Adres Kayıtlı';
+    const words = addr.trim().split(/\s+/);
+    if (words.length <= 2) return words[0] + ' ***';
+    return words.map((w, idx) => {
+      if (idx >= words.length - 2) return w;
+      if (w.length <= 3) return w[0] + '*';
+      return w.substring(0, 2) + '**';
+    }).join(' ');
   }
 
   app.get(['/api/tickets/:ticketNumber', '/api/public/ticket/query'], ticketQueryLimiter, async (req, res) => {
@@ -857,8 +866,9 @@ async function startServer() {
       const deviceBrand = deviceInfo?.brand || (ticket as any).deviceBrand || (ticket as any).brand || '';
       const deviceModel = deviceInfo?.model || (ticket as any).deviceModel || (ticket as any).model || '';
       const deviceType = deviceInfo?.deviceType || (ticket as any).deviceType || deviceInfo?.name || ticket.subject || 'Teknik Servis Cihazı';
-      const serialNumber = deviceInfo?.serialNumber || (ticket as any).serialNumber || '';
+      const serialNumber = deviceInfo?.serialNumber || (ticket as any).serialNumber || deviceInfo?.imei || '';
       const issueDescription = ticket.description || ticket.subject || 'Arıza şikayeti belirtilmedi.';
+      const accessories = ticket.accessories || (deviceInfo as any)?.accessories || 'Yok';
 
       res.json({
         ...ticket,
@@ -868,10 +878,11 @@ async function startServer() {
         deviceType,
         serialNumber,
         issueDescription,
+        accessories,
         customerName: maskName(rawName || ''),
         customerPhone: maskPhone(rawPhone || ''),
         customerEmail: maskEmail(rawEmail || ''),
-        customerAddress: maskString(rawAddress || '', 3, 2),
+        customerAddress: maskAddress(rawAddress || ''),
         companyName: maskString(customerInfo?.companyName || (ticket as any).companyName || '', 2, 2),
         parts,
         attachments: atts,
