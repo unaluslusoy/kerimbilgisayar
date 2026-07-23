@@ -245,10 +245,18 @@ export default function DeviceStatus() {
                   <div className="p-6 space-y-6">
                     {/* Device details */}
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900 mb-4">
-                        {[result.deviceBrand, result.deviceModel].filter(Boolean).join(' ') || result.deviceType || 'Cihaz Bilgisi'}
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-center justify-between gap-2 mb-4">
+                        <h3 className="text-lg font-bold text-gray-900">
+                          {[result.deviceBrand, result.deviceModel].filter(Boolean).join(' ') || result.deviceType || result.subject || 'Cihaz Bilgisi'}
+                        </h3>
+                        {result.isUnderWarranty !== undefined && (
+                          <span className={cn('text-xs font-bold px-3 py-1 rounded-full border', result.isUnderWarranty ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-700 border-gray-200')}>
+                            {result.isUnderWarranty ? '✓ Garantili Cihaz' : 'Garanti Dışı'}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
                         {result.customerName && (
                           <div>
                             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Müşteri</p>
@@ -261,16 +269,32 @@ export default function DeviceStatus() {
                             <p className="font-bold text-gray-800 capitalize">{result.deviceType}</p>
                           </div>
                         )}
+                        {result.serialNumber && (
+                          <div>
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Seri Numarası / Kodu</p>
+                            <p className="font-mono font-bold text-gray-800">{result.serialNumber}</p>
+                          </div>
+                        )}
                         {result.accessories && (
                           <div className="md:col-span-2">
                             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Emanet Alınan Aksesuarlar</p>
-                            <p className="font-bold text-gray-800 bg-amber-50/40 border border-amber-100 rounded-lg p-2.5">{result.accessories}</p>
+                            <p className="font-bold text-gray-800 bg-amber-50/60 border border-amber-200/60 rounded-xl p-2.5">{result.accessories}</p>
                           </div>
                         )}
-                        {result.issueDescription && (
+                        {(result.issueDescription || result.description || result.subject) && (
                           <div className="md:col-span-2">
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Şikayet / Açıklama</p>
-                            <p className="text-gray-700 bg-gray-50 p-3.5 rounded-theme border border-gray-150 leading-relaxed font-medium whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: result.issueDescription }}></p>
+                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-0.5">Arıza Şikayeti / Bildirilen Sorun</p>
+                            <div className="text-gray-800 bg-white p-3.5 rounded-xl border border-gray-200 leading-relaxed font-medium whitespace-pre-wrap shadow-sm">
+                              {result.issueDescription || result.description || result.subject}
+                            </div>
+                          </div>
+                        )}
+                        {result.technicianNotes && (
+                          <div className="md:col-span-2">
+                            <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-0.5">Servis Personeli Görüş / Notu</p>
+                            <div className="text-blue-900 bg-blue-50/80 p-3.5 rounded-xl border border-blue-100 leading-relaxed font-semibold whitespace-pre-wrap">
+                              {result.technicianNotes}
+                            </div>
                           </div>
                         )}
                       </div>

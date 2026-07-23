@@ -773,11 +773,16 @@ async function startServer() {
   }
 
   function maskName(fullName: string): string {
-    if (!fullName) return '***';
-    return fullName.split(' ').map(part => {
-      if (part.length <= 2) return part[0] + '*';
-      return part.substring(0, 1) + '***' + (part.length > 4 ? part.substring(part.length - 1) : '');
-    }).join(' ');
+    if (!fullName || !fullName.trim()) return 'Müşteri Kaydı';
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) {
+      const p = parts[0];
+      if (p.length <= 2) return p + '*';
+      return p.substring(0, 2) + '***';
+    }
+    const firstName = parts.slice(0, -1).join(' ');
+    const lastName = parts[parts.length - 1];
+    return `${firstName} ${lastName.substring(0, 1)}.***`;
   }
 
   function maskPhone(phone: string): string {
@@ -827,6 +832,14 @@ async function startServer() {
         if (custRows.length > 0) customerInfo = custRows[0];
       }
 
+      let deviceInfo: any = null;
+      if (ticket.deviceId) {
+        try {
+          const devRows = await db.select().from(devices).where(eq(devices.id, ticket.deviceId)).limit(1);
+          if (devRows.length > 0) deviceInfo = devRows[0];
+        } catch {}
+      }
+
       let parts: any[] = [];
       let atts: any[] = [];
       let logs: any[] = [];
@@ -835,20 +848,31 @@ async function startServer() {
       try { atts = await db.select().from(ticketAttachments).where(eq(ticketAttachments.ticketId, ticket.id)); } catch {}
       try { logs = await db.select().from(serviceStatusLogs).where(eq(serviceStatusLogs.ticketId, ticket.id)).orderBy(desc(serviceStatusLogs.createdAt)); } catch {}
 
-      // Güvenlik 2: KVKK & Kişisel Veri Maskeleme (PII Security)
-      const rawName = customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || customerInfo.companyName : ticket.customerName;
-      const rawPhone = customerInfo?.phone || ticket.customerPhone;
-      const rawEmail = customerInfo?.email || ticket.customerEmail;
-      const rawAddress = customerInfo?.address || ticket.customerAddress;
+      // KVKK & Kişisel Veri Maskeleme
+      const rawName = customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || customerInfo.companyName : (ticket as any).customerName;
+      const rawPhone = customerInfo?.phone || (ticket as any).customerPhone;
+      const rawEmail = customerInfo?.email || (ticket as any).customerEmail;
+      const rawAddress = customerInfo?.address || (ticket as any).customerAddress;
+
+      const deviceBrand = deviceInfo?.brand || (ticket as any).deviceBrand || (ticket as any).brand || '';
+      const deviceModel = deviceInfo?.model || (ticket as any).deviceModel || (ticket as any).model || '';
+      const deviceType = deviceInfo?.deviceType || (ticket as any).deviceType || deviceInfo?.name || ticket.subject || 'Teknik Servis Cihazı';
+      const serialNumber = deviceInfo?.serialNumber || (ticket as any).serialNumber || '';
+      const issueDescription = ticket.description || ticket.subject || 'Arıza şikayeti belirtilmedi.';
 
       res.json({
         ...ticket,
         rawStatus: ticket.status,
+        deviceBrand,
+        deviceModel,
+        deviceType,
+        serialNumber,
+        issueDescription,
         customerName: maskName(rawName || ''),
         customerPhone: maskPhone(rawPhone || ''),
         customerEmail: maskEmail(rawEmail || ''),
         customerAddress: maskString(rawAddress || '', 3, 2),
-        companyName: maskString(customerInfo?.companyName || ticket.companyName || '', 2, 2),
+        companyName: maskString(customerInfo?.companyName || (ticket as any).companyName || '', 2, 2),
         parts,
         attachments: atts,
         statusLogs: logs
