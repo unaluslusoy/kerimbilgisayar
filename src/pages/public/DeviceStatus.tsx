@@ -398,6 +398,14 @@ export default function DeviceStatus() {
                       </div>
                     </div>
 
+                    {/* Teknisyen Görüşü / Servis Personeli Notu */}
+                    {result.technicianNotes && (
+                      <div className="border-t border-gray-100 pt-6">
+                        <h4 className="text-sm font-bold text-gray-900 mb-2">Servis Personeli Görüş / Notu</h4>
+                        <div className="text-xs text-blue-900 bg-blue-50/80 border border-blue-200 rounded-xl p-4 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: result.technicianNotes }}></div>
+                      </div>
+                    )}
+
                     {/* Müşteri Onayı Ekranı (musteri_onayi_bekliyor durumunda çıkar) */}
                     {result.rawStatus === 'musteri_onayi_bekliyor' && (
                       <div className="border-2 border-amber-200 bg-amber-50/30 rounded-2xl p-5 space-y-4">
@@ -570,13 +578,7 @@ export default function DeviceStatus() {
                       </div>
                     )}
 
-                    {/* Teknisyen Görüşü */}
-                    {result.technicianNotes && (
-                      <div className="border-t border-gray-100 pt-6">
-                        <h4 className="text-sm font-bold text-gray-900 mb-2">Servis Personeli Görüş / Notu</h4>
-                        <p className="text-xs text-gray-600 bg-slate-50 border border-slate-100 rounded-xl p-3.5 italic leading-relaxed" dangerouslySetInnerHTML={{ __html: result.technicianNotes }}></p>
-                      </div>
-                    )}
+
 
 
                   </div>
