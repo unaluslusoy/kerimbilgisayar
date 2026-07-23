@@ -622,3 +622,87 @@ export async function fetchDealerUsers(dealerId: number) {
 export async function createDealerUser(dealerId: number, data: any) {
   return adminRequest(`/api/admin/dealers/${dealerId}/users`, { method: 'POST', body: JSON.stringify(data) });
 }
+
+// ============================================================
+// AUDIT LOGS (Denetim Logları)
+// ============================================================
+export async function fetchAuditLogs(params?: { page?: number; limit?: number; userId?: number; action?: string; entityType?: string; startDate?: string; endDate?: string }) {
+  const q = new URLSearchParams();
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.userId) q.set('userId', String(params.userId));
+  if (params?.action) q.set('action', params.action);
+  if (params?.entityType) q.set('entityType', params.entityType);
+  if (params?.startDate) q.set('startDate', params.startDate);
+  if (params?.endDate) q.set('endDate', params.endDate);
+  const qs = q.toString();
+  return adminRequest(`/api/admin/audit-logs${qs ? '?' + qs : ''}`);
+}
+
+// ============================================================
+// INVOICES (Fatura Yönetimi)
+// ============================================================
+export async function fetchAdminInvoices() {
+  return adminRequest('/api/admin/invoices');
+}
+
+export async function fetchAdminInvoice(id: number) {
+  return adminRequest(`/api/admin/invoices/${id}`);
+}
+
+export async function createAdminInvoice(data: any) {
+  return adminRequest('/api/admin/invoices', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateAdminInvoice(id: number, data: any) {
+  return adminRequest(`/api/admin/invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function deleteAdminInvoice(id: number) {
+  return adminRequest(`/api/admin/invoices/${id}`, { method: 'DELETE' });
+}
+
+export async function createInvoiceFromTicket(ticketId: number) {
+  return adminRequest(`/api/admin/invoices/from-ticket/${ticketId}`, { method: 'POST' });
+}
+
+// ============================================================
+// CONTRACTS (Bakım Sözleşmeleri)
+// ============================================================
+export async function fetchAdminContracts() {
+  return adminRequest('/api/admin/contracts');
+}
+
+export async function createAdminContract(data: any) {
+  return adminRequest('/api/admin/contracts', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateAdminContract(id: number, data: any) {
+  return adminRequest(`/api/admin/contracts/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function deleteAdminContract(id: number) {
+  return adminRequest(`/api/admin/contracts/${id}`, { method: 'DELETE' });
+}
+
+// ============================================================
+// REPORTS (Raporlar)
+// ============================================================
+export async function fetchAdminReportSummary(params?: { startDate?: string; endDate?: string }) {
+  const q = new URLSearchParams();
+  if (params?.startDate) q.set('startDate', params.startDate);
+  if (params?.endDate) q.set('endDate', params.endDate);
+  const qs = q.toString();
+  return adminRequest(`/api/admin/reports/summary${qs ? '?' + qs : ''}`);
+}
+
+// ============================================================
+// ÖDEAL PAYMENT API HELPERS
+// ============================================================
+export async function createOdealPaymentLink(data: { amount: number | string; title?: string; description?: string; customerPhone?: string; customerEmail?: string; ticketId?: number; invoiceId?: number }) {
+  return adminRequest('/api/payments/odeal/init-link', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function initOdeal3DSecurePayment(data: any) {
+  return adminRequest('/api/payments/odeal/init-3d', { method: 'POST', body: JSON.stringify(data) });
+}

@@ -98,7 +98,8 @@ export default function AdminLayout() {
           ]
         },
         { name: 'Mesajlar', path: '/admin/mesajlar', icon: MessageSquare },
-        { name: 'Bildirimler', path: '/admin/bildirimler', icon: Bell }
+        { name: 'Bildirimler', path: '/admin/bildirimler', icon: Bell },
+        { name: 'Raporlar', path: '/admin/raporlar', icon: BarChart3 }
       ]
     },
     {
@@ -109,8 +110,10 @@ export default function AdminLayout() {
           icon: DollarSign,
           subItems: [
             { name: 'POS Hızlı Satış', path: '/admin/satis-pos' },
+            { name: 'Faturalar', path: '/admin/faturalar' },
             { name: 'Gider & Masraflar', path: '/admin/masraflar' },
-            { name: 'Stok & Depo', path: '/admin/stok' }
+            { name: 'Stok & Depo', path: '/admin/stok' },
+            { name: 'Bakım Sözleşmeleri', path: '/admin/sozlesmeler' }
           ]
         }
       ]
@@ -187,6 +190,7 @@ export default function AdminLayout() {
             { name: 'Dil Yönetimi', path: '/admin/diller' },
             { name: 'Eklentiler', path: '/admin/eklentiler' },
             { name: 'Güvenlik', path: '/admin/guvenlik' },
+            { name: 'Denetim Logları', path: '/admin/denetim-loglari' },
             { name: 'Sistem Sağlığı', path: '/admin/sistem-sagligi' },
             { name: 'API Anahtarları', path: '/admin/api-anahtarlari' },
             { name: 'Webhooks', path: '/admin/webhooks' }

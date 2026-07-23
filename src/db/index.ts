@@ -21,7 +21,7 @@ function getConnectionString() {
     return '';
   }
 
-  if (isProd && dbHost === '45.43.152.5') {
+  if (isProd && (dbHost === '45.43.152.5' || dbHost === 'localhost')) {
     dbHost = '127.0.0.1';
   }
 
@@ -39,9 +39,9 @@ if (!connectionString) {
 const poolConnection = mysql.createPool({ 
   uri: connectionString,
   waitForConnections: true,
-  connectionLimit: 10,
-  maxIdle: 10, // max idle connections, the default value is the same as `connectionLimit`
-  idleTimeout: 60000, // idle connections timeout, in milliseconds, the default value 60000
+  connectionLimit: 25,
+  maxIdle: 25,
+  idleTimeout: 30000,
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0

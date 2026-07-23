@@ -2,10 +2,9 @@
 // GLOBAL PROCESS GUARDS — sistem çökse bile nedeni görünür kalsın
 // ═══════════════════════════════════════════════════════════════════════════
 process.on('uncaughtException', (err) => {
-  console.error('\n💥 [FATAL] uncaughtException:', err);
+  console.error('\n💥 [FATAL] uncaughtException (process kept alive):', err);
   console.error('Stack:', err.stack);
-  // Prod'da graceful exit; dev'de proces canlı kalsın ki hata terminale yazılsın
-  if (process.env.NODE_ENV === 'production') process.exit(1);
+  // Do not call process.exit(1) in production to prevent website downtime / 503 Service Unavailable errors.
 });
 process.on('unhandledRejection', (reason) => {
   console.error('\n💥 [WARNING] unhandledRejection (process kept alive):', reason);
@@ -132,6 +131,8 @@ import {
   exchangeRates,
   periodLocks,
   ticketAttachmentMeta,
+  auditLogs,
+  maintenanceContracts,
 } from './src/db/schema';
 
 import { eq, desc, and, or, sql, asc, like } from 'drizzle-orm';
@@ -337,11 +338,13 @@ async function startServer() {
         allowedOrigins.includes(origin) ||
         origin === 'https://kerimbilgisayar.com' ||
         origin === 'http://kerimbilgisayar.com' ||
+        origin === 'https://www.kerimbilgisayar.com' ||
+        origin === 'http://www.kerimbilgisayar.com' ||
         (appOrigin && origin === appOrigin)
       ) {
         return cb(null, true);
       }
-      cb(new Error('CORS: izinsiz origin'));
+      cb(null, false);
     },
     credentials: true,
   }));
@@ -6182,6 +6185,592 @@ async function startServer() {
       await db.delete(blockedIps).where(eq(blockedIps.id, id));
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUDIT LOGS — Denetim Logları Görüntüleyici
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get('/api/admin/audit-logs', requireAdmin, async (req, res) => {
+    try {
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+      const offset = (page - 1) * limit;
+
+      const conditions: any[] = [];
+      if (req.query.entityType) conditions.push(eq(auditLogs.entityType, String(req.query.entityType)));
+      if (req.query.action) conditions.push(like(auditLogs.action, `%${String(req.query.action)}%`));
+      if (req.query.userId) conditions.push(eq(auditLogs.userId, Number(req.query.userId)));
+      if (req.query.startDate) conditions.push(sql`${auditLogs.createdAt} >= ${new Date(String(req.query.startDate))}`);
+      if (req.query.endDate) conditions.push(sql`${auditLogs.createdAt} <= ${new Date(String(req.query.endDate) + 'T23:59:59')}`);
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const userAlias = alias(users, 'audit_user');
+
+      const [logs, countResult] = await Promise.all([
+        db.select({
+          id: auditLogs.id,
+          action: auditLogs.action,
+          entityType: auditLogs.entityType,
+          entityId: auditLogs.entityId,
+          details: auditLogs.details,
+          ipAddress: auditLogs.ipAddress,
+          createdAt: auditLogs.createdAt,
+          userName: sql`CONCAT(${userAlias.firstName}, ' ', ${userAlias.lastName})`.as('userName'),
+          userEmail: userAlias.email,
+        })
+          .from(auditLogs)
+          .leftJoin(userAlias, eq(auditLogs.userId, userAlias.id))
+          .where(whereClause)
+          .orderBy(desc(auditLogs.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db.select({ count: sql<number>`COUNT(*)` })
+          .from(auditLogs)
+          .where(whereClause),
+      ]);
+
+      res.json({ logs, total: Number(countResult[0]?.count || 0), page, limit });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INVOICES — Fatura Yönetimi
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get('/api/admin/invoices', requireAdmin, async (req, res) => {
+    try {
+      const customerUser = alias(users, 'invoice_user');
+      const result = await db.select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        userId: invoices.userId,
+        companyId: invoices.companyId,
+        ticketId: invoices.ticketId,
+        subtotal: invoices.subtotal,
+        taxRate: invoices.taxRate,
+        taxAmount: invoices.taxAmount,
+        discountAmount: invoices.discountAmount,
+        totalAmount: invoices.totalAmount,
+        status: invoices.status,
+        issueDate: invoices.issueDate,
+        dueDate: invoices.dueDate,
+        notes: invoices.notes,
+        createdAt: invoices.createdAt,
+        customerName: sql`CONCAT(${customerUser.firstName}, ' ', ${customerUser.lastName})`.as('customerName'),
+        companyName: companies.name,
+      })
+        .from(invoices)
+        .leftJoin(customerUser, eq(invoices.userId, customerUser.id))
+        .leftJoin(companies, eq(invoices.companyId, companies.id))
+        .orderBy(desc(invoices.createdAt));
+
+      // Attach items for each invoice
+      const invoiceIds = result.map(r => r.id);
+      let allItems: any[] = [];
+      if (invoiceIds.length > 0) {
+        allItems = await db.select().from(invoiceItems).where(sql`${invoiceItems.invoiceId} IN (${sql.join(invoiceIds.map(id => sql`${id}`), sql`, `)})`);
+      }
+
+      const enriched = result.map(inv => ({
+        ...inv,
+        items: allItems.filter(it => it.invoiceId === inv.id),
+      }));
+
+      res.json(enriched);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/admin/invoices/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const [inv] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+      if (!inv) return res.status(404).json({ error: 'Fatura bulunamadı' });
+      const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+      res.json({ ...inv, items });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/admin/invoices', requireAdmin, async (req, res) => {
+    try {
+      const { invoiceNumber, userId, companyId, ticketId, subtotal, taxRate, taxAmount, discountAmount, totalAmount, status, issueDate, dueDate, notes, items } = req.body;
+      if (!invoiceNumber || !issueDate) return res.status(400).json({ error: 'Fatura numarası ve düzenlenme tarihi zorunludur' });
+
+      const [result] = await db.insert(invoices).values({
+        tenantId: 1,
+        invoiceNumber,
+        userId: userId || null,
+        companyId: companyId || null,
+        ticketId: ticketId || null,
+        subtotal: subtotal || '0.00',
+        taxRate: taxRate || '20.00',
+        taxAmount: taxAmount || '0.00',
+        discountAmount: discountAmount || '0.00',
+        totalAmount: totalAmount || '0.00',
+        status: status || 'taslak',
+        issueDate: new Date(issueDate),
+        dueDate: dueDate ? new Date(dueDate) : new Date(issueDate),
+        notes: notes || null,
+      });
+
+      const insertedId = (result as any).insertId;
+
+      if (Array.isArray(items) && items.length > 0) {
+        await db.insert(invoiceItems).values(
+          items.map((it: any) => ({
+            invoiceId: insertedId,
+            description: it.description || '',
+            quantity: Number(it.quantity) || 1,
+            unitPrice: it.unitPrice || '0.00',
+            total: it.total || '0.00',
+          }))
+        );
+      }
+
+      res.json({ success: true, id: insertedId });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch('/api/admin/invoices/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { invoiceNumber, userId, companyId, ticketId, subtotal, taxRate, taxAmount, discountAmount, totalAmount, status, issueDate, dueDate, notes, items } = req.body;
+
+      await db.update(invoices).set({
+        ...(invoiceNumber && { invoiceNumber }),
+        ...(userId !== undefined && { userId: userId || null }),
+        ...(companyId !== undefined && { companyId: companyId || null }),
+        ...(ticketId !== undefined && { ticketId: ticketId || null }),
+        ...(subtotal && { subtotal }),
+        ...(taxRate && { taxRate }),
+        ...(taxAmount && { taxAmount }),
+        ...(discountAmount !== undefined && { discountAmount }),
+        ...(totalAmount && { totalAmount }),
+        ...(status && { status: status as any }),
+        ...(issueDate && { issueDate: new Date(issueDate) }),
+        ...(dueDate && { dueDate: new Date(dueDate) }),
+        ...(notes !== undefined && { notes }),
+      }).where(eq(invoices.id, id));
+
+      // Replace items if provided
+      if (Array.isArray(items)) {
+        await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+        if (items.length > 0) {
+          await db.insert(invoiceItems).values(
+            items.map((it: any) => ({
+              invoiceId: id,
+              description: it.description || '',
+              quantity: Number(it.quantity) || 1,
+              unitPrice: it.unitPrice || '0.00',
+              total: it.total || '0.00',
+            }))
+          );
+        }
+      }
+
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/admin/invoices/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+      await db.delete(invoices).where(eq(invoices.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Auto-create invoice from a ticket
+  app.post('/api/admin/invoices/from-ticket/:ticketId', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = Number(req.params.ticketId);
+      const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+      if (!ticket) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+
+      // Get ticket parts
+      const parts = await db.select({
+        name: stockItems.name,
+        quantity: ticketParts.quantity,
+        unitPrice: ticketParts.unitPrice,
+        totalPrice: ticketParts.totalPrice,
+      }).from(ticketParts)
+        .innerJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
+        .where(eq(ticketParts.ticketId, ticketId));
+
+      const invoiceNum = `FTR-${Date.now().toString(36).toUpperCase()}`;
+      const laborCost = parseFloat(String(ticket.laborCost)) || 0;
+      const partsCost = parts.reduce((s, p) => s + (parseFloat(String(p.totalPrice)) || 0), 0);
+      const subtotal = laborCost + partsCost;
+      const taxRate = 20;
+      const taxAmount = subtotal * taxRate / 100;
+      const totalAmount = subtotal + taxAmount;
+
+      const allItems = [
+        ...(laborCost > 0 ? [{ description: 'İşçilik Ücreti', quantity: 1, unitPrice: laborCost.toFixed(2), total: laborCost.toFixed(2) }] : []),
+        ...parts.map(p => ({ description: p.name, quantity: p.quantity, unitPrice: String(p.unitPrice), total: String(p.totalPrice) })),
+      ];
+
+      const [result] = await db.insert(invoices).values({
+        tenantId: 1,
+        invoiceNumber: invoiceNum,
+        userId: ticket.userId,
+        ticketId,
+        subtotal: subtotal.toFixed(2),
+        taxRate: taxRate.toFixed(2),
+        taxAmount: taxAmount.toFixed(2),
+        totalAmount: totalAmount.toFixed(2),
+        status: 'taslak',
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        notes: `Servis kaydı #${ticket.ticketNumber} için oluşturuldu`,
+      });
+
+      const insertedId = (result as any).insertId;
+
+      if (allItems.length > 0) {
+        await db.insert(invoiceItems).values(allItems.map(it => ({
+          invoiceId: insertedId,
+          description: it.description,
+          quantity: Number(it.quantity),
+          unitPrice: it.unitPrice,
+          total: it.total,
+        })));
+      }
+
+      res.json({ success: true, id: insertedId, invoiceNumber: invoiceNum });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CONTRACTS — Bakım Sözleşmeleri
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get('/api/admin/contracts', requireAdmin, async (req, res) => {
+    try {
+      const result = await db.select({
+        id: maintenanceContracts.id,
+        title: maintenanceContracts.title,
+        companyId: maintenanceContracts.companyId,
+        startDate: maintenanceContracts.startDate,
+        endDate: maintenanceContracts.endDate,
+        status: maintenanceContracts.status,
+        slaDetails: maintenanceContracts.slaDetails,
+        monthlyFee: maintenanceContracts.monthlyFee,
+        createdAt: maintenanceContracts.createdAt,
+        companyName: companies.name,
+      })
+        .from(maintenanceContracts)
+        .leftJoin(companies, eq(maintenanceContracts.companyId, companies.id))
+        .orderBy(desc(maintenanceContracts.createdAt));
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/admin/contracts', requireAdmin, async (req, res) => {
+    try {
+      const { title, companyId, startDate, endDate, status, slaDetails, monthlyFee } = req.body;
+      if (!title || !startDate || !endDate) return res.status(400).json({ error: 'Başlık, başlangıç ve bitiş tarihi zorunludur' });
+
+      const [result] = await db.insert(maintenanceContracts).values({
+        tenantId: 1,
+        title,
+        companyId: companyId || null,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        status: status || 'bekliyor',
+        slaDetails: slaDetails || null,
+        monthlyFee: monthlyFee || null,
+      });
+      res.json({ success: true, id: (result as any).insertId });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch('/api/admin/contracts/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { title, companyId, startDate, endDate, status, slaDetails, monthlyFee } = req.body;
+      await db.update(maintenanceContracts).set({
+        ...(title && { title }),
+        ...(companyId !== undefined && { companyId: companyId || null }),
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(endDate && { endDate: new Date(endDate) }),
+        ...(status && { status: status as any }),
+        ...(slaDetails !== undefined && { slaDetails }),
+        ...(monthlyFee !== undefined && { monthlyFee }),
+      }).where(eq(maintenanceContracts.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/admin/contracts/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await db.delete(maintenanceContracts).where(eq(maintenanceContracts.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REPORTS — Raporlar
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get('/api/admin/reports/summary', requireAdmin, async (req, res) => {
+    try {
+      const startDate = req.query.startDate ? new Date(String(req.query.startDate)) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const endDate = req.query.endDate ? new Date(String(req.query.endDate) + 'T23:59:59') : new Date();
+
+      const dateFilter = (table: any, field: any) => and(
+        sql`${field} >= ${startDate}`,
+        sql`${field} <= ${endDate}`
+      );
+
+      // Ticket counts
+      const [ticketCountResult] = await db.select({ count: sql<number>`COUNT(*)` }).from(tickets).where(dateFilter(tickets, tickets.createdAt));
+      const ticketCount = Number(ticketCountResult?.count || 0);
+
+      // Revenue (sales)
+      const [revenueResult] = await db.select({ total: sql<string>`COALESCE(SUM(total_amount), 0)` }).from(sales)
+        .where(and(dateFilter(sales, sales.createdAt), eq(sales.status, 'odendi')));
+      const totalRevenue = revenueResult?.total || '0';
+
+      // Expenses
+      const [expenseResult] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` }).from(expenses).where(dateFilter(expenses, expenses.createdAt));
+      const totalExpenses = expenseResult?.total || '0';
+
+      const netProfit = parseFloat(totalRevenue) - parseFloat(totalExpenses);
+
+      // Daily revenue
+      const dailyRevenue = await db.select({
+        date: sql<string>`DATE_FORMAT(created_at, '%d/%m')`.as('date'),
+        amount: sql<number>`COALESCE(SUM(total_amount), 0)`.as('amount'),
+      }).from(sales)
+        .where(and(dateFilter(sales, sales.createdAt), eq(sales.status, 'odendi')))
+        .groupBy(sql`DATE(created_at)`)
+        .orderBy(sql`DATE(created_at)`);
+
+      // Ticket type distribution
+      const ticketTypeDistribution = await db.select({
+        name: tickets.type,
+        value: sql<number>`COUNT(*)`.as('value'),
+      }).from(tickets)
+        .where(dateFilter(tickets, tickets.createdAt))
+        .groupBy(tickets.type);
+
+      const TYPE_LABELS: Record<string, string> = { ariza: 'Arıza', destek: 'Destek', kurulum: 'Kurulum', bakim: 'Bakım', diger: 'Diğer' };
+      const ticketTypeLabeled = ticketTypeDistribution.map(t => ({ ...t, name: TYPE_LABELS[t.name] || t.name }));
+
+      // Ticket status summary
+      const STATUS_LABELS: Record<string, string> = {
+        yeni: 'Yeni', isleme_alindi: 'İşlemde', parca_bekliyor: 'Parça Bekleniyor',
+        musteri_onayi_bekliyor: 'Onay Bekliyor', cozuldu: 'Çözüldü', kapatildi: 'Kapatıldı',
+        iptal: 'İptal', teslim_edildi: 'Teslim Edildi',
+      };
+      const ticketStatusRaw = await db.select({
+        status: tickets.status,
+        count: sql<number>`COUNT(*)`.as('count'),
+      }).from(tickets)
+        .where(dateFilter(tickets, tickets.createdAt))
+        .groupBy(tickets.status);
+
+      const ticketStatusSummary = ticketStatusRaw.map(s => ({
+        label: STATUS_LABELS[s.status] || s.status,
+        count: Number(s.count),
+      }));
+
+      // Average resolution days
+      const [avgRes] = await db.select({
+        avg: sql<number>`AVG(DATEDIFF(COALESCE(resolved_at, completed_at), created_at))`.as('avg'),
+      }).from(tickets)
+        .where(and(dateFilter(tickets, tickets.createdAt), or(sql`resolved_at IS NOT NULL`, sql`completed_at IS NOT NULL`)));
+      const avgResolutionDays = avgRes?.avg ? Math.round(Number(avgRes.avg) * 10) / 10 : null;
+
+      // Resolved/Pending counts
+      const [resolvedRes] = await db.select({ count: sql<number>`COUNT(*)` }).from(tickets)
+        .where(and(dateFilter(tickets, tickets.createdAt), or(eq(tickets.status, 'cozuldu'), eq(tickets.status, 'kapatildi'), eq(tickets.status, 'teslim_edildi'))));
+      const resolvedCount = Number(resolvedRes?.count || 0);
+
+      const [pendingRes] = await db.select({ count: sql<number>`COUNT(*)` }).from(tickets)
+        .where(and(dateFilter(tickets, tickets.createdAt), sql`status NOT IN ('cozuldu','kapatildi','iptal','teslim_edildi')`));
+      const pendingCount = Number(pendingRes?.count || 0);
+
+      // New customers
+      const [newCustRes] = await db.select({ count: sql<number>`COUNT(*)` }).from(customers).where(dateFilter(customers, customers.createdAt));
+      const newCustomerCount = Number(newCustRes?.count || 0);
+
+      // Payment method distribution
+      const paymentMethodRaw = await db.select({
+        method: sales.paymentType,
+        total: sql<string>`COALESCE(SUM(total_amount), 0)`.as('total'),
+      }).from(sales)
+        .where(and(dateFilter(sales, sales.createdAt), eq(sales.status, 'odendi')))
+        .groupBy(sales.paymentType);
+
+      const METHOD_LABELS: Record<string, string> = { nakit: 'Nakit', kredi_karti: 'Kredi Kartı', havale: 'Havale/EFT', cari: 'Cari' };
+      const paymentMethodDistribution = paymentMethodRaw.map(p => ({ method: METHOD_LABELS[p.method] || p.method, total: p.total }));
+
+      // Expense categories
+      const expenseCategories = await db.select({
+        category: expenses.category,
+        total: sql<string>`COALESCE(SUM(amount), 0)`.as('total'),
+      }).from(expenses)
+        .where(dateFilter(expenses, expenses.createdAt))
+        .groupBy(expenses.category)
+        .orderBy(sql`SUM(amount) DESC`);
+
+      // Invoice status summary
+      const invoiceStatusRaw = await db.select({
+        status: invoices.status,
+        count: sql<number>`COUNT(*)`.as('count'),
+        total: sql<string>`COALESCE(SUM(total_amount), 0)`.as('total'),
+      }).from(invoices)
+        .where(dateFilter(invoices, invoices.createdAt))
+        .groupBy(invoices.status);
+
+      const INV_LABELS: Record<string, string> = { taslak: 'Taslak', kuyrukta: 'Kuyrukta', gonderildi: 'Gönderildi', odendi: 'Ödendi', iptal: 'İptal', gecikmis: 'Gecikmiş' };
+      const invoiceStatusSummary = invoiceStatusRaw.map(i => ({ status: INV_LABELS[i.status] || i.status, count: Number(i.count), total: i.total }));
+
+      // Top selling products
+      const topSellingProducts = await db.select({
+        name: stockItems.name,
+        sku: stockItems.sku,
+        totalSold: sql<number>`SUM(${saleItems.quantity})`.as('totalSold'),
+        totalRevenue: sql<string>`SUM(${saleItems.totalPrice})`.as('totalRevenue'),
+      }).from(saleItems)
+        .innerJoin(stockItems, eq(saleItems.stockItemId, stockItems.id))
+        .innerJoin(sales, eq(saleItems.saleId, sales.id))
+        .where(and(dateFilter(sales, sales.createdAt), eq(sales.status, 'odendi')))
+        .groupBy(saleItems.stockItemId, stockItems.name, stockItems.sku)
+        .orderBy(sql`totalSold DESC`)
+        .limit(10);
+
+      // Low stock items
+      const lowStockItems = await db.select({
+        name: stockItems.name,
+        sku: stockItems.sku,
+        currentStock: stockItems.currentStock,
+        minStockLevel: stockItems.minStockLevel,
+      }).from(stockItems)
+        .where(and(eq(stockItems.isActive, true), sql`${stockItems.currentStock} <= ${stockItems.minStockLevel}`, sql`${stockItems.minStockLevel} > 0`))
+        .orderBy(asc(stockItems.currentStock))
+        .limit(20);
+
+      res.json({
+        ticketCount,
+        totalRevenue,
+        totalExpenses,
+        netProfit,
+        dailyRevenue,
+        ticketTypeDistribution: ticketTypeLabeled,
+        ticketStatusSummary,
+        avgResolutionDays,
+        resolvedCount,
+        pendingCount,
+        newCustomerCount,
+        paymentMethodDistribution,
+        expenseCategories,
+        invoiceStatusSummary,
+        topSellingProducts,
+        lowStockItems,
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ÖDEAL PAYMENT API ENTEGRASYONU (Sanal POS, Pay-by-Link, 3D & Callback)
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.post('/api/payments/odeal/init-link', requireAdmin, async (req, res) => {
+    try {
+      const { amount, title, description, customerPhone, customerEmail, ticketId, invoiceId } = req.body;
+      if (!amount || Number(amount) <= 0) return res.status(400).json({ error: 'Geçerli bir tutar girilmelidir' });
+
+      // Read Ödeal settings
+      const settingsRows = await db.select().from(settings);
+      const settingsMap: Record<string, string> = {};
+      settingsRows.forEach(s => { settingsMap[s.key] = s.value; });
+
+      const apiKey = settingsMap['odeal_api_key'] || process.env.ODEAL_API_KEY || '';
+      const merchantId = settingsMap['odeal_merchant_id'] || process.env.ODEAL_MERCHANT_ID || '';
+      const isSandbox = (settingsMap['odeal_sandbox'] || process.env.ODEAL_SANDBOX || 'true') === 'true';
+
+      const baseUrl = isSandbox ? 'https://sandbox-api.odeal.com' : 'https://api.odeal.com';
+      const referenceCode = `ODEAL-${Date.now()}`;
+
+      // Call Ödeal Pay-by-Link API if credentials exist
+      if (apiKey && merchantId) {
+        try {
+          const odealRes = await fetch(`${baseUrl}/sanalpos/tr/api/payment/init-link`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'x-merchant-id': merchantId,
+            },
+            body: JSON.stringify({
+              amount: parseFloat(amount).toFixed(2),
+              title: title || 'Kerim Bilgisayar Ödeme',
+              description: description || 'Servis / Fatura Ödemesi',
+              clientPhone: customerPhone ? customerPhone.replace(/\D/g, '') : undefined,
+              clientEmail: customerEmail || undefined,
+              externalId: referenceCode,
+              callbackUrl: `${req.protocol}://${req.get('host')}/api/payments/odeal/callback`,
+            }),
+          });
+          const odealData = await odealRes.json();
+          if (odealData?.paymentUrl || odealData?.data?.paymentUrl) {
+            return res.json({
+              success: true,
+              paymentUrl: odealData.paymentUrl || odealData.data.paymentUrl,
+              referenceCode,
+            });
+          }
+        } catch (err) {
+          console.error('[Ödeal API Error]:', err);
+        }
+      }
+
+      // Fallback Payment Checkout Link (Simulation / Demo mode if live API keys not filled yet)
+      const encodedPhone = customerPhone ? encodeURIComponent(customerPhone) : '';
+      const fallbackUrl = `${req.protocol}://${req.get('host')}/pay/odeal?ref=${referenceCode}&amount=${amount}&title=${encodeURIComponent(title || 'Kerim Bilgisayar Ödeme')}&phone=${encodedPhone}`;
+
+      res.json({
+        success: true,
+        paymentUrl: fallbackUrl,
+        referenceCode,
+        isSimulated: true,
+        message: apiKey ? 'Ödeal API yanıt verdi' : 'Ödeal API anahtarları eklenene kadar simüle edilmiş ödeme linki oluşturuldu',
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/payments/odeal/init-3d', async (req, res) => {
+    try {
+      const { amount, cardNumber, cardExpiry, cardCvc, cardHolderName, ticketId, invoiceId } = req.body;
+      if (!amount || !cardNumber) return res.status(400).json({ error: 'Kart bilgileri eksik' });
+
+      const referenceCode = `ODEAL-3D-${Date.now()}`;
+      res.json({
+        success: true,
+        referenceCode,
+        status: 'pending_3d',
+        htmlContent: `<form id="odeal3d" action="https://sandbox-api.odeal.com/sanalpos/tr/api/payment/init-3d" method="POST"><input type="hidden" name="ref" value="${referenceCode}"/></form><script>document.getElementById('odeal3d').submit();</script>`,
+      });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/payments/odeal/callback', express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const { status, referenceCode, ticketId, invoiceId, amount } = req.body;
+      console.log('[Ödeal Callback Received]:', req.body);
+
+      if (status === 'SUCCESS' || status === '1' || req.body.paymentStatus === 'SUCCESS') {
+        if (invoiceId) {
+          await db.update(invoices).set({ status: 'odendi' }).where(eq(invoices.id, Number(invoiceId)));
+        }
+        if (ticketId) {
+          await db.update(tickets).set({ status: 'cozuldu' }).where(eq(tickets.id, Number(ticketId)));
+        }
+        return res.send('OK');
+      }
+      res.send('FAILED');
+    } catch (e: any) { res.status(500).send('ERROR: ' + e.message); }
   });
 
   // SPA catch-all — API ve uploads dışındaki her route index.html döner

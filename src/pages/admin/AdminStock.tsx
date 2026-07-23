@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Search, AlertTriangle, X, TrendingUp, TrendingDown,
   Trash2, Barcode, Printer, Upload, Download, Layers, Eye, RefreshCw, FileText,
-  Image as ImageIcon
+  Image as ImageIcon, ShoppingCart, Send
 } from 'lucide-react';
 import { 
   fetchAdminStock, createStockItem, updateStockItem, deleteStockItem, 
@@ -18,6 +18,7 @@ export default function AdminStock() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showPoModal, setShowPoModal] = useState(false);
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
@@ -348,6 +349,13 @@ export default function AdminStock() {
           >
             <Upload className="w-4 h-4 mr-2 text-amber-600" /> CSV Yükle
           </button>
+          <button
+            onClick={() => setShowPoModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-purple-300 hover:bg-purple-50 text-purple-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-purple-50/50"
+            title="Kritik stoktaki ürünler için otomatik sipariş listesi"
+          >
+            <ShoppingCart className="w-4 h-4 mr-2 text-purple-600" /> Tedarik Sipariş Taslağı (PO)
+          </button>
           <a
             href="/api/admin/stock/export-excel"
             className="inline-flex items-center px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-white"
@@ -381,23 +389,41 @@ export default function AdminStock() {
 
       {activeTab === 'items' ? (
         <>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-              <p className="text-sm text-gray-500 font-medium mb-1">Toplam Çeşit</p>
-              <p className="text-3xl font-bold text-gray-900">{totalItems} <span className="text-sm font-normal text-gray-400">kalem</span></p>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-              <p className="text-sm text-gray-500 font-medium mb-1">Toplam Stok Adedi</p>
-              <p className="text-3xl font-bold text-gray-900">{totalQty.toLocaleString('tr-TR')} <span className="text-sm font-normal text-gray-400">adet</span></p>
-            </div>
-            <div className={`p-5 rounded-2xl border shadow-sm transition-all hover:shadow-md ${criticalCount > 0 ? 'bg-red-50/50 border-red-200' : 'bg-white border-gray-200'}`}>
-              <p className={`text-sm font-semibold mb-1 flex items-center gap-1.5 ${criticalCount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                {criticalCount > 0 && <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />} Kritik Stok
-              </p>
-              <p className="text-3xl font-bold text-gray-900">{criticalCount} <span className="text-sm font-normal text-gray-400">ürün</span></p>
-            </div>
-          </div>
+          {/* Summary Cards — Stok Değerleme & Analitik */}
+          {(() => {
+            const totalCostVal = items.reduce((s, i) => s + ((parseFloat(i.costPrice) || 0) * (parseInt(i.currentStock) || 0)), 0);
+            const totalSellingVal = items.reduce((s, i) => s + ((parseFloat(i.sellingPrice) || 0) * (parseInt(i.currentStock) || 0)), 0);
+            const estProfit = totalSellingVal - totalCostVal;
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Toplam Stok & Kalem</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalQty.toLocaleString('tr-TR')} <span className="text-xs font-normal text-gray-400">adet ({totalItems} kalem)</span></p>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Toplam Alış Maliyeti</p>
+                  <p className="text-2xl font-bold text-slate-800">₺{totalCostVal.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</p>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Potansiyel Satış Değeri</p>
+                  <p className="text-2xl font-bold text-emerald-600">₺{totalSellingVal.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</p>
+                  {estProfit > 0 && <p className="text-[10px] text-emerald-500 mt-0.5">+₺{estProfit.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} tahmini kâr</p>}
+                </div>
+                <div 
+                  onClick={() => setStatusFilter('critical')}
+                  className={`p-4 rounded-2xl border shadow-sm transition-all hover:shadow-md cursor-pointer ${criticalCount > 0 ? 'bg-red-50/50 border-red-200 hover:bg-red-100/50' : 'bg-white border-gray-200'}`}
+                >
+                  <p className={`text-xs font-semibold mb-1 flex items-center justify-between ${criticalCount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                    <span className="flex items-center gap-1">
+                      {criticalCount > 0 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 animate-pulse" />} Kritik Stok
+                    </span>
+                    <span className="text-[10px] underline">Filtrele</span>
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900">{criticalCount} <span className="text-xs font-normal text-gray-400">ürün ikazlı</span></p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Filtering and Table */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -954,6 +980,108 @@ export default function AdminStock() {
               alt="Önizleme" 
               className="max-w-full max-h-[85vh] object-contain rounded-xl"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Purchase Order (PO Generator) Modal */}
+      {showPoModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPoModal(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-purple-600" />
+                <h2 className="text-lg font-bold text-gray-900">Otomatik Tedarik Sipariş Taslağı (PO)</h2>
+              </div>
+              <button onClick={() => setShowPoModal(false)} className="p-2 hover:bg-gray-200 rounded-xl"><X className="w-5 h-5 text-gray-500" /></button>
+            </div>
+            {(() => {
+              const lowStockList = items.filter(i => (i.currentStock || 0) <= (i.minStockLevel || 0) && (i.minStockLevel || 0) > 0);
+              const totalEstCost = lowStockList.reduce((s, i) => {
+                const needed = Math.max(1, (i.minStockLevel || 5) - (i.currentStock || 0));
+                return s + (parseFloat(i.costPrice || 0) * needed);
+              }, 0);
+
+              const poText = lowStockList.map((i, idx) => {
+                const needed = Math.max(1, (i.minStockLevel || 5) - (i.currentStock || 0));
+                return `${idx + 1}. ${i.name} (SKU: ${i.sku}) - İstenen Miktar: ${needed} ${i.unit}`;
+              }).join('\n');
+
+              return (
+                <div className="p-6 space-y-4">
+                  <div className="flex justify-between items-center bg-purple-50 p-4 rounded-2xl border border-purple-100">
+                    <div>
+                      <p className="text-xs text-purple-700 font-semibold">Tedarik Edilecek Kalem Sayısı</p>
+                      <p className="text-2xl font-bold text-purple-900">{lowStockList.length} çeşit yedek parça/ürün</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-purple-700 font-semibold">Tahmini Sipariş Maliyeti</p>
+                      <p className="text-2xl font-bold text-purple-900">₺{totalEstCost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</p>
+                    </div>
+                  </div>
+
+                  {lowStockList.length === 0 ? (
+                    <p className="text-center py-8 text-emerald-600 font-medium text-sm">Tüm ürünlerin stok seviyesi yeterli!</p>
+                  ) : (
+                    <div className="border rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-gray-50 border-b text-gray-500 font-bold">
+                          <tr>
+                            <th className="p-3">Ürün / Parça</th>
+                            <th className="p-3 text-center">Mevcut</th>
+                            <th className="p-3 text-center">Min. Sınır</th>
+                            <th className="p-3 text-center text-purple-700">İstenen Miktar</th>
+                            <th className="p-3 text-right">B.Alış Fiyatı</th>
+                            <th className="p-3 text-right">Tahm. Toplam</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {lowStockList.map((item, idx) => {
+                            const needed = Math.max(1, (item.minStockLevel || 5) - (item.currentStock || 0));
+                            const itemCost = parseFloat(item.costPrice || 0) * needed;
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="p-3">
+                                  <p className="font-bold text-gray-800">{item.name}</p>
+                                  <p className="text-[10px] text-gray-400 font-mono">SKU: {item.sku}</p>
+                                </td>
+                                <td className="p-3 text-center font-bold text-red-600">{item.currentStock} {item.unit}</td>
+                                <td className="p-3 text-center text-gray-500">{item.minStockLevel} {item.unit}</td>
+                                <td className="p-3 text-center font-black text-purple-700 bg-purple-50/50">{needed} {item.unit}</td>
+                                <td className="p-3 text-right font-medium">₺{parseFloat(item.costPrice || 0).toLocaleString('tr-TR')}</td>
+                                <td className="p-3 text-right font-bold text-gray-900">₺{itemCost.toLocaleString('tr-TR')}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {lowStockList.length > 0 && (
+                    <div className="flex gap-3 pt-3 border-t">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(poText);
+                          alert('Sipariş listesi panoya kopyalandı!');
+                        }}
+                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl"
+                      >
+                        Listeyi Panoya Kopyala
+                      </button>
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(`Sayın Tedarikçimiz, aşağıdaki yedek parça siparişlerinin tarafımıza hazırlanmasını rica ederiz:\n\n${poText}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2"
+                      >
+                        <Send className="w-4 h-4" /> WhatsApp İle Tedarikçiye Yolla
+                      </a>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

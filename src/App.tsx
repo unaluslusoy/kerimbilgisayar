@@ -65,6 +65,7 @@ const CustomerAuth = lazy(() => import('./pages/customer/CustomerAuth'));
 const CustomerDashboard = lazy(() => import('./pages/customer/CustomerDashboard'));
 const CustomerTickets = lazy(() => import('./pages/customer/CustomerTickets'));
 const TicketPrintView = lazy(() => import('./pages/shared/TicketPrintView'));
+const PrintTicketTagView = lazy(() => import('./pages/shared/PrintTicketTagView'));
 
 const AdminLiveCustomizer = lazy(() => import('./pages/admin/AdminLiveCustomizer'));
 const AdminLayouts = lazy(() => import('./pages/admin/AdminLayouts'));
@@ -76,6 +77,10 @@ const AdminGoogleReviews = lazy(() => import('./pages/admin/google/AdminGoogleRe
 const AdminGoogleInfo = lazy(() => import('./pages/admin/google/AdminGoogleInfo'));
 const AdminGoogleInsights = lazy(() => import('./pages/admin/google/AdminGoogleInsights'));
 const AdminNotifications = lazy(() => import('./pages/admin/AdminNotifications'));
+const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
+const AdminInvoices = lazy(() => import('./pages/admin/AdminInvoices'));
+const AdminContracts = lazy(() => import('./pages/admin/AdminContracts'));
+const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
 
 
 function AppContent() {
@@ -209,6 +214,10 @@ function AppContent() {
             <Route path="kargo" element={<AdminShipments />} />
             <Route path="masraflar" element={<AdminExpenses />} />
             <Route path="bildirimler" element={<AdminNotifications />} />
+            <Route path="denetim-loglari" element={<AdminAuditLogs />} />
+            <Route path="faturalar" element={<AdminInvoices />} />
+            <Route path="sozlesmeler" element={<AdminContracts />} />
+            <Route path="raporlar" element={<AdminReports />} />
             
             {/* Google Business Routes */}
             <Route path="google" element={<AdminGoogleDashboard />} />
@@ -224,9 +233,10 @@ function AppContent() {
             <Route path="panel" element={<CustomerDashboard />} />
             <Route path="servis-gecmisi" element={<CustomerTickets />} />
          </Route>
-   
+         
          {/* Shared / Print Routes */}
          <Route path="/print/ticket/:ticketNumber" element={<TicketPrintView />} />
+         <Route path="/print/ticket-tag/:ticketNumber" element={<PrintTicketTagView />} />
       </Routes>
     </Suspense>
   );

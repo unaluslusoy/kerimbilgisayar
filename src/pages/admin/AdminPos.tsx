@@ -9,7 +9,7 @@ import { mediaUrl } from '../../lib/media';
 import { 
   fetchAdminStock, fetchAdminCustomers, createAdminCustomer, 
   createAdminSale, fetchAdminSales, fetchAdminSaleDetails,
-  fetchSettings
+  fetchSettings, createOdealPaymentLink
 } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
 
@@ -30,6 +30,7 @@ export default function AdminPos() {
   const [cart, setCart] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [paymentType, setPaymentType] = useState<'nakit' | 'kredi_karti' | 'havale' | 'cari'>('nakit');
+  const [cashGiven, setCashGiven] = useState('');
   const [discountAmount, setDiscountAmount] = useState('0');
   const [notes, setNotes] = useState('');
 
@@ -650,10 +651,11 @@ export default function AdminPos() {
               {/* Payment Type Selection */}
               <div className="space-y-1.5">
                 <span className="text-[10px] font-bold text-gray-400 uppercase">Ödeme Tipi</span>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-1.5">
                   {[
                     { type: 'nakit', label: 'Nakit', icon: Banknote, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
                     { type: 'kredi_karti', label: 'K. Kartı', icon: CreditCard, color: 'text-blue-600 bg-blue-50 border-blue-200' },
+                    { type: 'odeal', label: 'Ödeal POS', icon: CreditCard, color: 'text-purple-600 bg-purple-50 border-purple-200' },
                     { type: 'havale', label: 'Havale', icon: Landmark, color: 'text-amber-600 bg-amber-50 border-amber-200' },
                     { type: 'cari', label: 'Cari', icon: FileText, color: 'text-red-600 bg-red-50 border-red-200' },
                   ].map(p => {
@@ -674,6 +676,51 @@ export default function AdminPos() {
                   })}
                 </div>
               </div>
+
+              {/* Nakit Para Üstü Hesaplayıcı */}
+              {paymentType === 'nakit' && (
+                <div className="bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase">Alınan Nakit (₺)</span>
+                    <div className="flex gap-1">
+                      {[100, 200, 500, 1000].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setCashGiven(String(val))}
+                          className="px-1.5 py-0.5 bg-white border border-emerald-300 rounded text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 transition-colors"
+                        >
+                          ₺{val}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setCashGiven(total.toFixed(2))}
+                        className="px-1.5 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-700 transition-colors"
+                      >
+                        Tam
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      placeholder="Alınan miktar..."
+                      value={cashGiven}
+                      onChange={e => setCashGiven(e.target.value)}
+                      className="w-full border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-bold bg-white text-emerald-900 outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    {parseFloat(cashGiven) > 0 && (
+                      <div className="text-right shrink-0">
+                        <span className="text-[9px] font-bold text-emerald-600 uppercase block">Para Üstü</span>
+                        <span className={`text-sm font-extrabold ${parseFloat(cashGiven) >= total ? 'text-emerald-700' : 'text-red-500'}`}>
+                          ₺{Math.max(0, parseFloat(cashGiven) - total).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Notes */}
               <div>

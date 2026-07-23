@@ -1,8 +1,8 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, fetchTicketMessages, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, fetchTicketStatusLogs, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
@@ -108,6 +108,14 @@ export default function ServiceManager() {
   const [editDeviceBrand, setEditDeviceBrand] = useState('');
   const [editDeviceModel, setEditDeviceModel] = useState('');
   const [isDeletingTicket, setIsDeletingTicket] = useState(false);
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+  const [showWaModal, setShowWaModal] = useState(false);
+  const [selectedWaTemplate, setSelectedWaTemplate] = useState('1');
+
+  // Live Camera Capture State
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   // Detay paneli cihaz bilgileri düzenleme state'leri
   const [editImei, setEditImei] = useState('');
   const [editDeviceSerial, setEditDeviceSerial] = useState('');
@@ -585,6 +593,110 @@ export default function ServiceManager() {
       alert('Silme işlemi başarısız: ' + e.message);
     } finally {
       setIsDeletingTicket(false);
+    }
+  };
+
+  const handleCreateInvoiceFromTicket = async () => {
+    if (!detailTicket) return;
+    setIsCreatingInvoice(true);
+    try {
+      const res = await createInvoiceFromTicket(detailTicket.id);
+      if (res.success) {
+        alert(`Servis #${detailTicket.ticketNumber} için Fatura #${res.invoiceNumber} başarıyla oluşturuldu!`);
+        window.open('/admin/faturalar', '_blank');
+      }
+    } catch (e: any) {
+      alert('Fatura oluşturulurken hata: ' + e.message);
+    } finally {
+      setIsCreatingInvoice(false);
+    }
+  };
+
+  const handleSendOdealPaymentLink = async () => {
+    if (!detailTicket) return;
+    const amount = detailTicket.cost || '0';
+    if (parseFloat(amount) <= 0) {
+      alert('Lütfen önce servis tutarını belirleyin!');
+      return;
+    }
+    try {
+      const res = await createOdealPaymentLink({
+        amount,
+        title: `Servis #${detailTicket.ticketNumber} Ödemesi`,
+        customerPhone: detailTicket.customerPhone,
+        customerEmail: detailTicket.customerEmail,
+        ticketId: detailTicket.id,
+      });
+      if (res.paymentUrl) {
+        if (detailTicket.customerPhone) {
+          const waPhone = detailTicket.customerPhone.replace(/\D/g, '').startsWith('0') ? '90' + detailTicket.customerPhone.replace(/\D/g, '').substring(1) : detailTicket.customerPhone.replace(/\D/g, '').startsWith('90') ? detailTicket.customerPhone.replace(/\D/g, '') : '90' + detailTicket.customerPhone.replace(/\D/g, '');
+          const waMsg = encodeURIComponent(`Sayın Müşterimiz, ${detailTicket.ticketNumber} servis kaydınız için Ödeal ile kredi kartıyla güvenli ödeme bağlantınız: ${res.paymentUrl}`);
+          window.open(`https://wa.me/${waPhone}?text=${waMsg}`, '_blank');
+        } else {
+          prompt('Ödeal Ödeme Linki Oluşturuldu:', res.paymentUrl);
+        }
+      }
+    } catch (e: any) {
+      alert('Ödeal linki oluşturulamadı: ' + e.message);
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      setCameraStream(stream);
+      setShowCameraModal(true);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 200);
+    } catch (e: any) {
+      alert('Kamera erişimi sağlanamadı: ' + e.message);
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setShowCameraModal(false);
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !detailTicket) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth || 640;
+    canvas.height = videoRef.current.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `servis_foto_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadRes = await adminRequest('/api/admin/media/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (uploadRes.fileUrl) {
+        await createTicketAttachment(detailTicket.id, {
+          fileName: `Fotoğraf - ${new Date().toLocaleTimeString('tr-TR')}`,
+          fileUrl: uploadRes.fileUrl,
+          fileType: 'image/jpeg',
+          fileSize: file.size,
+        });
+        const atts = await fetchTicketAttachments(detailTicket.id).catch(() => []);
+        setTicketAttachments(atts || []);
+        stopCamera();
+        alert('Fotoğraf servis kaydına eklendi!');
+      }
     }
   };
 
@@ -1143,13 +1255,37 @@ export default function ServiceManager() {
                   <h2 className="font-black text-gray-900 text-base leading-none">{detailTicket.subject}</h2>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSendOdealPaymentLink}
+                    className="flex items-center gap-1.5 px-3 py-2 border border-blue-300 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors shadow-sm"
+                    title="Ödeal ile Kredi Kartı Ödeme Linki Gönder"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" /> Ödeal Link
+                  </button>
+                  <button
+                    onClick={handleCreateInvoiceFromTicket}
+                    disabled={isCreatingInvoice}
+                    className="flex items-center gap-1.5 px-3 py-2 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    {isCreatingInvoice ? 'Oluşturuluyor...' : 'Fatura Oluştur'}
+                  </button>
+                  <Link
+                    to={`/print/ticket-tag/${detailTicket.ticketNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-2 border border-purple-300 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors shadow-sm"
+                    title="58mm/80mm Termal QR Cihaz Etiketi"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Cihaz Etiketi
+                  </Link>
                   <Link
                     to={`/print/ticket/${detailTicket.ticketNumber}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-4 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-sm"
+                    className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-sm"
                   >
-                    <Printer className="w-3.5 h-3.5" /> Yazdır
+                    <Printer className="w-3.5 h-3.5" /> Servis Fişi
                   </Link>
                   <button 
                     onClick={() => setDetailTicket(null)} 
@@ -1737,6 +1873,13 @@ export default function ServiceManager() {
                             className="hidden"
                           />
                         </label>
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          className="text-xs text-purple-600 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Camera className="w-3.5 h-3.5" /> Canlı Kamera Çek
+                        </button>
                         <button
                           onClick={() => setIsMediaPickerOpen(true)}
                           className="text-xs text-blue-600 hover:underline font-bold flex items-center gap-1"
@@ -2519,6 +2662,29 @@ export default function ServiceManager() {
               alt="Önizleme" 
               className="max-w-full max-h-[85vh] object-contain rounded-xl"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Live Camera Stream Modal */}
+      {showCameraModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-5 max-w-lg w-full flex flex-col items-center gap-4 shadow-2xl">
+            <div className="flex justify-between items-center w-full border-b pb-3">
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                <Camera className="w-4 h-4 text-purple-600" /> Canlı Kamera Fotoğraf Çekimi
+              </h3>
+              <button onClick={stopCamera} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden flex items-center justify-center">
+              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            </div>
+            <div className="flex gap-3 w-full pt-2">
+              <button onClick={stopCamera} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50">Kapat</button>
+              <button onClick={capturePhoto} className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                <Camera className="w-4 h-4" /> Fotoğraf Çek & Ekle
+              </button>
+            </div>
           </div>
         </div>
       )}
