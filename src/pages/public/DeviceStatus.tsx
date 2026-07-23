@@ -405,7 +405,7 @@ export default function DeviceStatus() {
                             </div>
                           ))
                         ) : (
-                          <p className="text-xs text-gray-450 italic">Ekstra yedek parça bulunmuyor.</p>
+                          <p className="text-xs text-gray-500 italic">Ekstra yedek parça bulunmuyor.</p>
                         )}
                         
                         {result.laborCost > 0 && (
@@ -580,7 +580,7 @@ export default function DeviceStatus() {
                                   type="button"
                                   onClick={() => handleMockPayment('nakit')}
                                   disabled={processingAction}
-                                  className="w-full bg-gray-850 hover:bg-black text-white py-2 rounded-lg font-bold transition-all"
+                                  className="w-full bg-gray-900 hover:bg-black text-white py-2 rounded-lg font-bold transition-all"
                                 >
                                   Elden Nakit Ödeyeceğim
                                 </button>
