@@ -193,17 +193,21 @@ export default function DeviceStatus() {
   const qrBankUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(`iban=${bankIban}&name=${bankAccount}`)}`;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <Breadcrumb items={[{ label: 'Anasayfa', href: '/' }, { label: 'Arıza Sorgulama' }]} />
-
-        <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">Cihaz Durumu Sorgulama</h1>
-          <p className="text-gray-600 mt-2 text-sm md:text-base">
-            Servisteki cihazınızın canlı durumunu, teknik dökümünü ve masraf onaylarını takip edin.
+    <div className="flex-1 flex flex-col bg-gray-50 min-h-screen font-sans">
+      {/* Page Header (Standart Kurumsal Public Header) */}
+      <div className="bg-white pt-[140px] pb-12 border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Breadcrumb className="mb-6" items={[{ label: 'Anasayfa', href: '/' }, { label: 'Arıza Sorgulama' }]} />
+          <h1 className="text-4xl sm:text-5xl font-black text-gray-900 mb-4 tracking-tight">
+            Cihaz Durumu Sorgulama
+          </h1>
+          <p className="text-lg text-gray-600 max-w-3xl leading-relaxed">
+            Takip numaranız ile cihazınızın canlı durumunu, teknik dökümünü ve masraf onaylarını takip edin.
           </p>
         </div>
+      </div>
 
+      <div className="py-12 md:py-16 px-4 flex justify-center flex-1">
         <div className="max-w-3xl w-full mx-auto">
 
           <form onSubmit={handleSearch} className="bg-white p-2 rounded-theme border border-gray-200 shadow-sm flex items-center mb-8 font-sans">
