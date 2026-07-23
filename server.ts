@@ -867,7 +867,21 @@ async function startServer() {
       let atts: any[] = [];
       let logs: any[] = [];
 
-      try { parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, ticket.id)); } catch {}
+      try {
+        parts = await db.select({
+          id: ticketParts.id,
+          stockItemId: ticketParts.stockItemId,
+          name: stockItems.name,
+          quantity: ticketParts.quantity,
+          unitPrice: ticketParts.unitPrice,
+          totalPrice: ticketParts.totalPrice,
+        })
+        .from(ticketParts)
+        .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
+        .where(eq(ticketParts.ticketId, ticket.id));
+      } catch (e: any) {
+        console.error('Error fetching ticketParts:', e);
+      }
       try { atts = await db.select().from(ticketAttachments).where(eq(ticketAttachments.ticketId, ticket.id)); } catch {}
       try { logs = await db.select().from(serviceStatusLogs).where(eq(serviceStatusLogs.ticketId, ticket.id)).orderBy(desc(serviceStatusLogs.createdAt)); } catch {}
 

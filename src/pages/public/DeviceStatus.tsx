@@ -90,7 +90,11 @@ export default function DeviceStatus() {
   };
 
   const handleApprove = async () => {
-    if (!result || !turnstileToken) return;
+    if (!result) return;
+    if (!turnstileToken) {
+      alert('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
+      return;
+    }
     setProcessingAction(true);
     const code = result.ticketNumber || result.id || ticketId;
     try {
@@ -113,7 +117,11 @@ export default function DeviceStatus() {
   };
 
   const handleDecline = async () => {
-    if (!result || !turnstileToken) return;
+    if (!result) return;
+    if (!turnstileToken) {
+      alert('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
+      return;
+    }
     if (!window.confirm('Teklifi reddetmek istediğinize emin misiniz? Cihaz işlem yapılmadan iade edilecektir.')) return;
     setProcessingAction(true);
     const code = result.ticketNumber || result.id || ticketId;
@@ -368,8 +376,8 @@ export default function DeviceStatus() {
                         {result.parts && result.parts.length > 0 ? (
                           result.parts.map((p: any) => (
                             <div key={p.id} className="flex justify-between text-xs text-gray-700">
-                              <span>{p.name} (x{p.quantity})</span>
-                              <span className="font-bold text-gray-900">₺{parseFloat(p.totalPrice).toLocaleString('tr-TR')}</span>
+                              <span className="font-semibold text-gray-800">{p.name || 'Yedek Parça / İşlem'} (x{p.quantity || 1})</span>
+                              <span className="font-bold text-gray-900">₺{parseFloat(p.totalPrice || (parseFloat(p.unitPrice || '0') * (p.quantity || 1))).toLocaleString('tr-TR')}</span>
                             </div>
                           ))
                         ) : (
