@@ -1,12 +1,14 @@
-const CACHE_NAME = 'kerim-servis-cache-v1.2';
+const CACHE_NAME = 'kerim-servis-cache-v2.0';
 const ASSETS_TO_CACHE = [
+  '/',
   '/admin',
+  '/ariza-sorgulama',
   '/assets/images/favicon.svg',
   '/assets/images/kerim-logo.svg',
   '/assets/images/kerim-logo-beyaz.svg'
 ];
 
-// Install Event
+// Install Event - Pre-cache core shell
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -15,7 +17,7 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// Activate Event
+// Activate Event - Clean old caches
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
@@ -30,23 +32,23 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Fetch Event (Stale While Revalidate or Network First for API)
+// Fetch Event (Network First for API & dynamic pages, Stale-While-Revalidate for static assets)
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   
-  // API veya dinamik admin isteklerini cache'leme, doğrudan ağa git
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/admin/')) {
+  // Dynamic API & Admin routes -> Network First
+  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/admin')) {
     e.respondWith(
       fetch(e.request).catch(async (err) => {
         const cached = await caches.match(e.request);
         if (cached) return cached;
         if (url.pathname.startsWith('/api')) {
-          return new Response(JSON.stringify({ error: 'Network error', details: err.message }), {
+          return new Response(JSON.stringify({ error: 'İnternet bağlantısı kesildi.', details: err.message }), {
             status: 503,
             headers: { 'Content-Type': 'application/json' }
           });
         }
-        return new Response('Network error. Lütfen bağlantınızı kontrol edin.', {
+        return new Response('İnternet bağlantısı kesildi. Lütfen ağ bağlantınızı kontrol edip tekrar deneyin.', {
           status: 503,
           headers: { 'Content-Type': 'text/plain; charset=utf-8' }
         });
@@ -55,18 +57,18 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // Static Assets -> Stale-While-Revalidate
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Arka planda güncelle
-        fetch(e.request).then((networkResponse) => {
-          if (networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkResponse));
-          }
-        }).catch(() => {/* ignore network errors */});
-        return cachedResponse;
-      }
-      return fetch(e.request);
+      const fetchPromise = fetch(e.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, responseToCache));
+        }
+        return networkResponse;
+      }).catch(() => cachedResponse);
+
+      return cachedResponse || fetchPromise;
     })
   );
 });

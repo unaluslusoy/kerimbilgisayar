@@ -7,6 +7,7 @@ import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { AuthProvider } from './context/AuthContext';
 import { CustomerAuthProvider } from './context/CustomerAuthContext';
 import { ToastProvider } from './context/ToastContext';
+import PwaInstallBanner from './components/ui/PwaInstallBanner';
 
 // Lazy load layout components
 const AdminLayout = lazy(() => import('./layout/AdminLayout'));
@@ -251,6 +252,7 @@ export default function App() {
           <SettingsProvider>
             <ToastProvider>
               <AppContent />
+              <PwaInstallBanner />
             </ToastProvider>
           </SettingsProvider>
         </CustomerAuthProvider>

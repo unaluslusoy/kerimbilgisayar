@@ -1,13 +1,15 @@
 {
   "name": "Kerim Bilgisayar Teknik Servis & CRM Yönetim Paneli",
   "short_name": "Kerim Servis",
-  "description": "Kerim Bilgisayar teknik servis süreçleri, ön muhasebe ve CRM yönetim uygulaması.",
+  "description": "Kerim Bilgisayar teknik servis süreçleri, ön muhasebe, POS ve CRM yönetim uygulaması.",
   "start_url": "/admin",
   "display": "standalone",
-  "background_color": "#f0f0f1",
-  "theme_color": "#1d2327",
-  "orientation": "portrait",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "orientation": "any",
   "scope": "/",
+  "categories": ["business", "productivity", "utilities"],
   "icons": [
     {
       "src": "/assets/images/favicon.svg",
@@ -17,9 +19,45 @@
     },
     {
       "src": "/assets/images/kerim-logo.svg",
-      "sizes": "any",
+      "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "maskable"
+    },
+    {
+      "src": "/assets/images/kerim-logo-beyaz.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Yeni Servis Kaydı",
+      "short_name": "Servis Ekle",
+      "description": "Yeni arızalı cihaz veya servis kaydı açın",
+      "url": "/admin/servis?action=new",
+      "icons": [{ "src": "/assets/images/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "POS Kasa Satış",
+      "short_name": "POS Satış",
+      "description": "Hızlı barkodlu POS perakende satış ekranı",
+      "url": "/admin/pos",
+      "icons": [{ "src": "/assets/images/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Yeni Fatura Oluştur",
+      "short_name": "Fatura Ekle",
+      "description": "Müşteriye fatura oluşturun ve Ödeal link yollayın",
+      "url": "/admin/invoices?action=new",
+      "icons": [{ "src": "/assets/images/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Arıza Sorgulama",
+      "short_name": "Sorgula",
+      "description": "Müşteri arıza durum sorgulama sayfası",
+      "url": "/ariza-sorgulama",
+      "icons": [{ "src": "/assets/images/favicon.svg", "sizes": "any" }]
     }
   ]
 }

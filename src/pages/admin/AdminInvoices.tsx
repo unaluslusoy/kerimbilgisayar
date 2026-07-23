@@ -312,7 +312,7 @@ export default function AdminInvoices() {
       {/* Invoice Detail Modal */}
       {showDetail && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowDetail(null)}>
-          <div className="bg-white rounded-theme shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h3 className="text-lg font-bold text-gray-900">Fatura #{showDetail.invoiceNumber}</h3>
               <button onClick={() => setShowDetail(null)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
@@ -376,7 +376,7 @@ export default function AdminInvoices() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-theme shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h3 className="text-lg font-bold text-gray-900">{editing ? 'Faturayı Düzenle' : 'Yeni Fatura'}</h3>
               <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
