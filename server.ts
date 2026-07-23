@@ -740,6 +740,154 @@ async function startServer() {
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC ARIZA SORGULAMA, ONAYLAMA & ÖDEME API ENDPOINTLERİ
+  // ═══════════════════════════════════════════════════════════════════════════
+  app.get(['/api/tickets/:ticketNumber', '/api/public/ticket/query'], async (req, res) => {
+    try {
+      const code = (req.params.ticketNumber || req.query.no as string || '').trim();
+      if (!code) return res.status(400).json({ error: 'Takip numarası giriniz' });
+
+      const rows = await db.select()
+        .from(tickets)
+        .where(
+          or(
+            eq(tickets.ticketNumber, code),
+            eq(tickets.ticketNumber, code.toUpperCase()),
+            sql`CAST(${tickets.id} AS CHAR) = ${code}`
+          )
+        )
+        .limit(1);
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+      }
+
+      const ticket = rows[0];
+
+      let customerInfo: any = null;
+      if (ticket.customerId) {
+        const custRows = await db.select().from(customers).where(eq(customers.id, ticket.customerId)).limit(1);
+        if (custRows.length > 0) customerInfo = custRows[0];
+      }
+
+      const parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, ticket.id));
+      const atts = await db.select().from(ticketAttachments).where(eq(ticketAttachments.ticketId, ticket.id));
+      const logs = await db.select().from(serviceStatusLogs).where(eq(serviceStatusLogs.ticketId, ticket.id)).orderBy(desc(serviceStatusLogs.createdAt));
+
+      res.json({
+        ...ticket,
+        rawStatus: ticket.status,
+        customerName: customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || customerInfo.companyName : ticket.customerName,
+        customerPhone: customerInfo?.phone || ticket.customerPhone,
+        customerEmail: customerInfo?.email || ticket.customerEmail,
+        customerAddress: customerInfo?.address || ticket.customerAddress,
+        companyName: customerInfo?.companyName || ticket.companyName,
+        parts,
+        attachments: atts,
+        statusLogs: logs
+      });
+    } catch (e: any) {
+      console.error('Public ticket query error:', e);
+      res.status(500).json({ error: 'Sorgulama işlemi sırasında hata oluştu' });
+    }
+  });
+
+  // Müşteri Onarım Onayı (Approve Repair Quote)
+  app.post('/api/tickets/:ticketNumber/approve', async (req, res) => {
+    try {
+      const code = (req.params.ticketNumber || '').trim();
+      const rows = await db.select().from(tickets).where(
+        or(eq(tickets.ticketNumber, code), sql`CAST(${tickets.id} AS CHAR) = ${code}`)
+      ).limit(1);
+
+      if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+      const ticket = rows[0];
+
+      await db.update(tickets).set({
+        status: 'islemde',
+        updatedAt: new Date(),
+      }).where(eq(tickets.id, ticket.id));
+
+      await db.insert(serviceStatusLogs).values({
+        ticketId: ticket.id,
+        status: 'islemde',
+        notes: 'Müşteri web üzerinden onarım teklifini onayladı.',
+      }).catch(() => {});
+
+      await db.insert(notifications).values({
+        type: 'ticket_approval',
+        title: `Onarım Onayı: #${ticket.ticketNumber}`,
+        message: `Müşteri #${ticket.ticketNumber} numaralı servis kaydı için onarım teklifini onayladı.`,
+        isRead: false,
+      }).catch(() => {});
+
+      res.json({ success: true, message: 'Onarım onayınız başarıyla iletildi.' });
+    } catch (e: any) {
+      console.error('Ticket approve error:', e);
+      res.status(500).json({ error: e.message || 'Onaylama işlemi başarısız.' });
+    }
+  });
+
+  // Müşteri Teklif Reddi (Decline Repair Quote)
+  app.post('/api/tickets/:ticketNumber/decline', async (req, res) => {
+    try {
+      const code = (req.params.ticketNumber || '').trim();
+      const rows = await db.select().from(tickets).where(
+        or(eq(tickets.ticketNumber, code), sql`CAST(${tickets.id} AS CHAR) = ${code}`)
+      ).limit(1);
+
+      if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+      const ticket = rows[0];
+
+      await db.update(tickets).set({
+        status: 'iptal',
+        updatedAt: new Date(),
+      }).where(eq(tickets.id, ticket.id));
+
+      await db.insert(serviceStatusLogs).values({
+        ticketId: ticket.id,
+        status: 'iptal',
+        notes: 'Müşteri web üzerinden onarım teklifini reddetti. Cihaz iade edilecek.',
+      }).catch(() => {});
+
+      res.json({ success: true, message: 'Teklif reddedildi. Cihaz iade edilmek üzere hazırlanacaktır.' });
+    } catch (e: any) {
+      console.error('Ticket decline error:', e);
+      res.status(500).json({ error: e.message || 'İşlem başarısız.' });
+    }
+  });
+
+  // Müşteri Web Üzerinden Ödeme Kaydı (Pay)
+  app.post('/api/tickets/:ticketNumber/pay', async (req, res) => {
+    try {
+      const code = (req.params.ticketNumber || '').trim();
+      const { paymentMethod } = req.body;
+      const rows = await db.select().from(tickets).where(
+        or(eq(tickets.ticketNumber, code), sql`CAST(${tickets.id} AS CHAR) = ${code}`)
+      ).limit(1);
+
+      if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+      const ticket = rows[0];
+
+      await db.update(tickets).set({
+        status: 'cozuldu',
+        updatedAt: new Date(),
+      }).where(eq(tickets.id, ticket.id));
+
+      await db.insert(serviceStatusLogs).values({
+        ticketId: ticket.id,
+        status: 'cozuldu',
+        notes: `Müşteri web üzerinden ${paymentMethod || 'kredi kartı'} ile ödeme bildiriminde bulundu.`,
+      }).catch(() => {});
+
+      res.json({ success: true, message: 'Ödeme kaydınız işleme alındı.' });
+    } catch (e: any) {
+      console.error('Ticket pay error:', e);
+      res.status(500).json({ error: e.message || 'Ödeme kaydı oluşturulamadı.' });
+    }
+  });
+
   app.get('/api/public/menus', async (req, res) => {
     try {
       const allMenus = await db.select().from(menus);
