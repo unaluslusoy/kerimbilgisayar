@@ -64,51 +64,74 @@ export default function PrintTicketTagView() {
       </div>
 
       {/* Printable Tag Container */}
-      <div className="print:m-0 print:p-0 print:shadow-none bg-white border border-gray-300 shadow-lg p-3 w-[220px] rounded-lg font-sans text-black">
-        <div className="text-center border-b border-black pb-1.5 mb-1.5">
-          <p className="font-extrabold text-xs tracking-tight uppercase">KERİM BİLGİSAYAR</p>
-          <p className="text-[10px] font-bold text-gray-700">CİHAZ SERVİS ETİKETİ</p>
+      <div className="thermal-tag-card bg-white border border-gray-300 shadow-lg p-4 w-[280px] print:w-[76mm] rounded-lg font-sans text-black">
+        <div className="text-center border-b-2 border-black pb-2 mb-2">
+          <p className="font-extrabold text-sm tracking-tight uppercase">KERİM BİLGİSAYAR</p>
+          <p className="text-[11px] font-bold text-gray-800">TEKNİK SERVİS CİHAZ ETİKETİ</p>
         </div>
 
-        <div className="text-center my-1">
-          <span className="font-mono text-sm font-extrabold bg-black text-white px-2 py-0.5 rounded">
+        <div className="text-center my-2">
+          <span className="font-mono text-base font-extrabold bg-black text-white px-3 py-1 rounded inline-block">
             {ticket.ticketNumber}
           </span>
         </div>
 
-        <div className="text-[11px] space-y-0.5 border-b border-dashed border-gray-400 py-1.5 my-1">
-          <div className="flex justify-between">
-            <span className="font-bold text-gray-600">Müşteri:</span>
-            <span className="font-extrabold truncate max-w-[120px]">{ticket.customerName || '—'}</span>
+        <div className="text-[12px] space-y-1 border-y border-dashed border-gray-800 py-2 my-2">
+          <div className="flex justify-between items-center">
+            <span className="font-bold text-gray-700">Müşteri:</span>
+            <span className="font-extrabold text-black truncate max-w-[170px]">{ticket.customerName || '—'}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="font-bold text-gray-600">Cihaz:</span>
-            <span className="font-bold truncate max-w-[120px]">{[ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || ticket.deviceType || '—'}</span>
+          <div className="flex justify-between items-center">
+            <span className="font-bold text-gray-700">Cihaz:</span>
+            <span className="font-extrabold text-black truncate max-w-[170px]">{[ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || ticket.deviceType || '—'}</span>
           </div>
           {ticket.deviceSerial && (
-            <div className="flex justify-between">
-              <span className="font-bold text-gray-600">Seri No:</span>
-              <span className="font-mono text-[10px] font-semibold">{ticket.deviceSerial}</span>
+            <div className="flex justify-between items-center">
+              <span className="font-bold text-gray-700">Seri No:</span>
+              <span className="font-mono text-[11px] font-bold text-black">{ticket.deviceSerial}</span>
             </div>
           )}
-          <div className="flex justify-between">
-            <span className="font-bold text-gray-600">Tarih:</span>
-            <span className="text-[10px] font-semibold">{new Date(ticket.createdAt).toLocaleDateString('tr-TR')}</span>
+          <div className="flex justify-between items-center">
+            <span className="font-bold text-gray-700">Tarih:</span>
+            <span className="text-[11px] font-bold text-black">{new Date(ticket.createdAt).toLocaleDateString('tr-TR')}</span>
           </div>
         </div>
 
         {/* QR Code */}
         {qrCodeDataUrl && (
           <div className="flex flex-col items-center justify-center pt-1">
-            <img src={qrCodeDataUrl} alt="QR Code" className="w-24 h-24" />
-            <p className="text-[8px] font-bold text-gray-600 mt-0.5">Sorgulamak İçin QR Okutun</p>
+            <img src={qrCodeDataUrl} alt="QR Code" className="w-28 h-28" />
+            <p className="text-[9px] font-extrabold text-gray-800 mt-1">ARIZA SORGULAMA QR KODU</p>
           </div>
         )}
+
+        {/* Thermal Cutter Clearance Gap (Auto-Cutter Margins) */}
+        <div className="mt-8 pt-6 border-t border-dashed border-gray-400 text-center font-mono text-[8pt] text-gray-500">
+          --- KESİM NOKTASI ---
+        </div>
       </div>
 
       <style>{`
         @media print {
-          body { background: white; margin: 0; padding: 0; }
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+          body, html {
+            width: 80mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            color: black !important;
+          }
+          .thermal-tag-card {
+            width: 76mm !important;
+            margin: 0 auto !important;
+            padding: 4mm 3mm !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
           .print\\:hidden { display: none !important; }
         }
       `}</style>

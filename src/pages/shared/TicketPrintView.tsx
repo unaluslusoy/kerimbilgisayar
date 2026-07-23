@@ -419,15 +419,15 @@ export default function TicketPrintView() {
     </div>
   );
 
-  // --- BİLEŞEN: A5 Form Nüshası (A4 için optimize edilmiş yükseklik) ---
+  // --- BİLEŞEN: A5 Form Nüshası (A4 Kağıdı 2'ye Bölen A5 Formatı) ---
   const A5Form = ({ copyType }: { copyType: "MÜŞTERİ NÜSHASI" | "FİRMA NÜSHASI" }) => (
-    <div className="bg-white text-black font-sans w-full p-4 box-border flex flex-col justify-between h-[132mm] border-2 border-gray-900 rounded-2xl print:rounded-none" style={{
+    <div className="bg-white text-black font-sans w-full p-3.5 box-border flex flex-col justify-between h-[135mm] border-2 border-gray-900 rounded-xl print:rounded-none" style={{
       fontFamily: a4Config.fontFamily || "Inter, sans-serif",
-      fontSize: `${a4Config.fontSize || 11}pt`,
-      paddingTop: `${a4Config.marginTop || 16}px`,
-      paddingBottom: `${a4Config.marginBottom || 16}px`,
-      paddingLeft: `${a4Config.marginLeft || 16}px`,
-      paddingRight: `${a4Config.marginRight || 16}px`
+      fontSize: `${a4Config.fontSize || 10.5}pt`,
+      paddingTop: `${a4Config.marginTop || 12}px`,
+      paddingBottom: `${a4Config.marginBottom || 12}px`,
+      paddingLeft: `${a4Config.marginLeft || 14}px`,
+      paddingRight: `${a4Config.marginRight || 14}px`
     }}>
       <div>
         {/* Header Block */}
@@ -689,17 +689,17 @@ export default function TicketPrintView() {
         </div>
       )}
 
-      {/* PRINT LAYOUT: A4 Double Copy */}
+      {/* PRINT LAYOUT: A4 Double Copy (2 Bölünmüş A5 Nüsha) */}
       <div className={`print-container-a4 ${printMode === "a4" ? "block" : "hidden"} print:block mx-auto max-w-4xl bg-white w-full shadow-lg print:shadow-none p-6 print:p-0`}>
         {printMode === "a4" && (
-          <div className="w-full flex flex-col justify-between" style={{ height: '277mm', boxSizing: 'border-box' }}>
+          <div className="w-full flex flex-col justify-between" style={{ height: '282mm', boxSizing: 'border-box' }}>
             {/* Top Copy */}
             <A5Form copyType="FİRMA NÜSHASI" />
             
             {/* Cut Line */}
-            <div className="w-full border-t-2 border-dashed border-black my-2 flex items-center justify-center relative" style={{ height: '10mm' }}>
-              <span className="absolute bg-white px-4 text-[9px] text-gray-600 tracking-widest uppercase font-bold print:text-black">
-                Kesim Çizgisi ✂
+            <div className="w-full border-t-2 border-dashed border-black my-1 flex items-center justify-center relative" style={{ height: '8mm' }}>
+              <span className="absolute bg-white px-4 text-[9px] text-gray-700 tracking-widest uppercase font-bold print:text-black">
+                ✂ KESİM ÇİZGİSİ (A4 SAYFAYI 2'YE BÖLÜNÜZ) ✂
               </span>
             </div>
 
@@ -737,7 +737,14 @@ export default function TicketPrintView() {
           ${printMode === "a4" ? `
             @page { size: A4 portrait; margin: 0; }
             .print-container-pos { display: none !important; }
-            .print-container-a4 { display: block !important; width: 100%; height: 100%; margin: 0 !important; padding: 0 !important; }
+            .print-container-a4 { 
+              display: block !important; 
+              width: 210mm !important; 
+              height: 297mm !important; 
+              margin: 0 auto !important; 
+              padding: 6mm 10mm !important; 
+              box-sizing: border-box !important;
+            }
           ` : `
             @page { size: 80mm auto; margin: 0; }
             .print-container-a4 { display: none !important; }
