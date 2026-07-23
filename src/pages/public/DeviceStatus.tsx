@@ -7,13 +7,12 @@ import { usePageTitle } from '../../lib/usePageTitle';
 import { Link, useParams } from 'react-router-dom';
 import TurnstileWidget from '../../components/TurnstileWidget';
 import { useSettings } from '../../context/SettingsContext';
-import { useToast } from '../../context/ToastContext';
+import SafeHtml from '../../components/SafeHtml';
 
 export default function DeviceStatus() {
   usePageTitle('Cihaz Durumu Sorgula');
   const { orderNo } = useParams<{ orderNo: string }>();
   const { settings } = useSettings();
-  const toast = useToast();
   const [ticketId, setTicketId] = useState('');
   const [result, setResult] = useState<any>(null);
   const [searched, setSearched] = useState(false);
@@ -23,6 +22,7 @@ export default function DeviceStatus() {
   // Approval/Rejection & Payment State
   const [turnstileToken, setTurnstileToken] = useState('');
   const [processingAction, setProcessingAction] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'bank' | 'cash' | null>(null);
   const [cardHolder, setCardHolder] = useState('');
   const [cardNumber, setCardNumber] = useState('');
@@ -98,9 +98,10 @@ export default function DeviceStatus() {
 
   const handleApprove = async () => {
     if (!result) return;
+    setActionFeedback(null);
     const isCaptchaRequired = settings?.captchaEnabled === 'true';
     if (isCaptchaRequired && !turnstileToken) {
-      toast.warning('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
+      setActionFeedback({ type: 'warning', message: 'Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.' });
       return;
     }
     setProcessingAction(true);
@@ -116,9 +117,9 @@ export default function DeviceStatus() {
       // Refresh ticket info
       const refreshed = await fetchTicket(code);
       setResult(refreshed);
-      toast.success('Onarım onayınız başarıyla iletildi. Cihazınız sıraya alınmıştır.');
+      setActionFeedback({ type: 'success', message: 'Onarım onayınız başarıyla iletildi. Cihazınız sıraya alınmıştır.' });
     } catch (err: any) {
-      toast.error(err.message || 'Onaylama işlemi başarısız.');
+      setActionFeedback({ type: 'error', message: err.message || 'Onaylama işlemi başarısız.' });
     } finally {
       setProcessingAction(false);
     }
@@ -126,9 +127,10 @@ export default function DeviceStatus() {
 
   const handleDecline = async () => {
     if (!result) return;
+    setActionFeedback(null);
     const isCaptchaRequired = settings?.captchaEnabled === 'true';
     if (isCaptchaRequired && !turnstileToken) {
-      toast.warning('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
+      setActionFeedback({ type: 'warning', message: 'Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.' });
       return;
     }
     if (!window.confirm('Teklifi reddetmek istediğinize emin misiniz? Cihaz işlem yapılmadan iade edilecektir.')) return;
@@ -144,9 +146,9 @@ export default function DeviceStatus() {
       if (!res.ok) throw new Error(data.error || 'İşlem başarısız.');
       const refreshed = await fetchTicket(code);
       setResult(refreshed);
-      toast.success('Talebiniz alınmıştır. Cihaz iade edilmek üzere hazırlanacaktır.');
+      setActionFeedback({ type: 'success', message: 'Talebiniz alınmıştır. Cihaz iade edilmek üzere hazırlanacaktır.' });
     } catch (err: any) {
-      toast.error(err.message || 'İşlem başarısız.');
+      setActionFeedback({ type: 'error', message: err.message || 'İşlem başarısız.' });
     } finally {
       setProcessingAction(false);
     }
@@ -154,6 +156,7 @@ export default function DeviceStatus() {
 
   const handleMockPayment = async (method: 'kredi_karti' | 'havale_eft' | 'nakit') => {
     if (!result) return;
+    setActionFeedback(null);
     setProcessingAction(true);
     const code = result.ticketNumber || result.id || ticketId;
     try {
@@ -164,7 +167,7 @@ export default function DeviceStatus() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Ödeme kaydı oluşturulamadı.');
-      
+
       setPaymentSuccess(true);
       if (method === 'kredi_karti') {
         setPaymentMsg('Ödemeniz başarıyla tahsil edildi. Cihazınızı teslim alabilirsiniz.');
@@ -173,11 +176,11 @@ export default function DeviceStatus() {
       } else {
         setPaymentMsg('Elden nakit ödeme tercihiniz kaydedildi.');
       }
-      
+
       const refreshed = await fetchTicket(code);
       setResult(refreshed);
     } catch (err: any) {
-      toast.error('Ödeme hatası: ' + (err.message || 'Bilinmeyen hata'));
+      setActionFeedback({ type: 'error', message: 'Ödeme hatası: ' + (err.message || 'Bilinmeyen hata') });
     } finally {
       setProcessingAction(false);
     }
@@ -354,9 +357,10 @@ export default function DeviceStatus() {
                         {result.technicianNotes && (
                           <div className="md:col-span-2 border-t border-blue-100 pt-3">
                             <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-0.5">Servis Personeli Görüş / Notu</p>
-                            <div className="text-blue-900 bg-blue-50 p-3.5 rounded-xl border border-blue-200 leading-relaxed font-semibold whitespace-pre-wrap">
-                              {result.technicianNotes}
-                            </div>
+                            <SafeHtml
+                              html={result.technicianNotes}
+                              className="text-blue-900 bg-blue-50 p-3.5 rounded-xl border border-blue-200 leading-relaxed font-semibold prose prose-sm prose-blue max-w-none"
+                            />
                           </div>
                         )}
                       </div>
@@ -421,6 +425,34 @@ export default function DeviceStatus() {
                         </div>
                       </div>
                     </div>
+
+                    {/* İşlem Sonucu Uyarısı (onay/red/ödeme sonrası burada kalıcı gösterilir) */}
+                    {actionFeedback && (
+                      <div
+                        role="alert"
+                        className={cn(
+                          'flex items-start gap-3 rounded-2xl border p-4 text-sm font-semibold leading-relaxed',
+                          actionFeedback.type === 'success' && 'bg-emerald-50 border-emerald-200 text-emerald-800',
+                          actionFeedback.type === 'error' && 'bg-red-50 border-red-200 text-red-800',
+                          actionFeedback.type === 'warning' && 'bg-amber-50 border-amber-200 text-amber-800'
+                        )}
+                      >
+                        {actionFeedback.type === 'success' ? (
+                          <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        )}
+                        <span className="flex-1">{actionFeedback.message}</span>
+                        <button
+                          type="button"
+                          onClick={() => setActionFeedback(null)}
+                          className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                          aria-label="Kapat"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
 
                     {/* Müşteri Onayı Ekranı (musteri_onayi_bekliyor durumunda çıkar) */}
                     {result.rawStatus === 'musteri_onayi_bekliyor' && (
