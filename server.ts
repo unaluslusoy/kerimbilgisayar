@@ -34,7 +34,7 @@ function addLog(type: 'log' | 'error', args: any[]) {
     type,
     message
   });
-  if (logBuffer.length > 200) logBuffer.shift();
+  if (logBuffer.length > 50) logBuffer.shift();
 }
 
 console.log = (...args: any[]) => {
@@ -248,6 +248,7 @@ async function keepDbAlive() {
 async function startServer() {
   console.log('[boot] startServer başladı');
   const app = express();
+  app.set('trust proxy', true);
   const PORT = Number(process.env.PORT) || 3000;
   const requestCounters = new Map<string, { count: number; startedAt: number }>();
   const autoBlockedIps = new Map<string, number>();
@@ -751,6 +752,7 @@ async function startServer() {
     message: { error: 'Çok fazla arıza sorgulama denemesi yapıldı. Lütfen 1 dakika sonra tekrar deneyin.' },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   });
 
   const ticketActionLimiter = rateLimit({
@@ -759,6 +761,7 @@ async function startServer() {
     message: { error: 'Çok fazla onay/red denemesi yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   });
 
   // Helper: PII Masking (Kişisel Veri Maskeleme - KVKK Güvenliği)
