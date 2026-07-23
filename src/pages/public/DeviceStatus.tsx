@@ -6,10 +6,12 @@ import { fetchTicket } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 import { Link, useParams } from 'react-router-dom';
 import TurnstileWidget from '../../components/TurnstileWidget';
+import { useSettings } from '../../context/SettingsContext';
 
 export default function DeviceStatus() {
   usePageTitle('Cihaz Durumu Sorgula');
   const { orderNo } = useParams<{ orderNo: string }>();
+  const { settings } = useSettings();
   const [ticketId, setTicketId] = useState('');
   const [result, setResult] = useState<any>(null);
   const [searched, setSearched] = useState(false);
@@ -40,9 +42,7 @@ export default function DeviceStatus() {
           setResult(data);
           setLoading(false);
         })
-        .catch((err) => {
-          console.error(err);
-          setResult(null);
+        .catch(() => {
           setError(true);
           setLoading(false);
         });
@@ -62,36 +62,42 @@ export default function DeviceStatus() {
           setResult(data);
           setLoading(false);
         })
-        .catch((err) => {
-          console.error(err);
-          setResult(null);
+        .catch(() => {
           setError(true);
           setLoading(false);
         });
     }
   }, [orderNo]);
 
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!ticketId.trim()) return;
+  const handleSearch = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanId = ticketId.trim();
+    if (!cleanId) return;
+
     setSearched(true);
     setLoading(true);
     setError(false);
-    setSelectedPaymentMethod(null);
-    setPaymentSuccess(false);
+    setResult(null);
+
     try {
-      const data = await fetchTicket(ticketId.trim().toUpperCase());
-      setResult(data);
+      const data = await fetchTicket(cleanId);
+      if (data && (data.id || data.ticketNumber)) {
+        setResult(data);
+      } else {
+        setError(true);
+      }
     } catch (err) {
-      setResult(null);
+      console.error(err);
       setError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleApprove = async () => {
     if (!result) return;
-    if (!turnstileToken) {
+    const isCaptchaRequired = settings?.captchaEnabled === 'true';
+    if (isCaptchaRequired && !turnstileToken) {
       alert('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
       return;
     }
@@ -118,7 +124,8 @@ export default function DeviceStatus() {
 
   const handleDecline = async () => {
     if (!result) return;
-    if (!turnstileToken) {
+    const isCaptchaRequired = settings?.captchaEnabled === 'true';
+    if (isCaptchaRequired && !turnstileToken) {
       alert('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
       return;
     }
@@ -281,6 +288,9 @@ export default function DeviceStatus() {
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-gray-50/80 p-5 rounded-2xl border border-gray-200/80 shadow-inner">
                         {/* Müşteri Bilgileri (Veritabanından Gelen Gerçek Veriler) */}
+                        {(result.customerName || result.customerPhone || result.customerEmail || result.customerAddress) && (
+                          <p className="md:col-span-2 text-[11px] font-black text-gray-400 uppercase tracking-widest">Müşteri Bilgileri</p>
+                        )}
                         {result.customerName && (
                           <div>
                             <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Müşteri Adı</p>
@@ -309,6 +319,7 @@ export default function DeviceStatus() {
                         {/* Ürün & Cihaz Bilgileri */}
                         {(result.deviceType || result.serialNumber) && (
                           <div className="md:col-span-2 border-t border-gray-200 pt-3 mt-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <p className="md:col-span-2 text-[11px] font-black text-gray-400 uppercase tracking-widest -mb-1">Cihaz Bilgileri</p>
                             {result.deviceType && (
                               <div>
                                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Cihaz Türü / Kategorisi</p>
@@ -358,11 +369,22 @@ export default function DeviceStatus() {
                           <p className="font-bold text-xs text-gray-900">Cihaz Servise Alındı</p>
                           <p className="text-[11px] text-gray-400">{new Date(result.createdAt).toLocaleString('tr-TR')}</p>
                         </div>
-                        {result.rawStatus !== 'yeni' && (
+                        {(result.statusLogs || []).slice().reverse().map((log: any) => {
+                          const info = getStatusInfo(log.toStatus);
+                          return (
+                            <div key={log.id} className="relative">
+                              <div className="absolute -left-[26px] top-0.5 w-3 h-3 rounded-full bg-primary border-2 border-white"></div>
+                              <p className="font-bold text-xs text-gray-900">{info.label}</p>
+                              {log.notes && <p className="text-[11px] text-gray-500 mt-0.5">{log.notes}</p>}
+                              <p className="text-[11px] text-gray-400">{new Date(log.createdAt).toLocaleString('tr-TR')}</p>
+                            </div>
+                          );
+                        })}
+                        {(!result.statusLogs || result.statusLogs.length === 0) && result.rawStatus !== 'yeni' && (
                           <div className="relative">
                             <div className="absolute -left-[26px] top-0.5 w-3 h-3 rounded-full bg-primary border-2 border-white"></div>
                             <p className="font-bold text-xs text-gray-900">Durum Güncellemesi</p>
-                            <p className="text-[11px] text-gray-450">Cihazınız "{getStatusInfo(result.rawStatus).label}" aşamasına getirildi.</p>
+                            <p className="text-[11px] text-gray-500 mt-0.5">Cihazınız "{getStatusInfo(result.rawStatus).label}" aşamasına getirildi.</p>
                             <p className="text-[11px] text-gray-400">{new Date(result.updatedAt).toLocaleString('tr-TR')}</p>
                           </div>
                         )}
@@ -398,14 +420,6 @@ export default function DeviceStatus() {
                       </div>
                     </div>
 
-                    {/* Teknisyen Görüşü / Servis Personeli Notu */}
-                    {result.technicianNotes && (
-                      <div className="border-t border-gray-100 pt-6">
-                        <h4 className="text-sm font-bold text-gray-900 mb-2">Servis Personeli Görüş / Notu</h4>
-                        <div className="text-xs text-blue-900 bg-blue-50/80 border border-blue-200 rounded-xl p-4 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: result.technicianNotes }}></div>
-                      </div>
-                    )}
-
                     {/* Müşteri Onayı Ekranı (musteri_onayi_bekliyor durumunda çıkar) */}
                     {result.rawStatus === 'musteri_onayi_bekliyor' && (
                       <div className="border-2 border-amber-200 bg-amber-50/30 rounded-2xl p-5 space-y-4">
@@ -421,7 +435,11 @@ export default function DeviceStatus() {
 
                         {/* Turnstile / Captcha Kontrolü */}
                         <div className="my-2 flex justify-center">
-                          <TurnstileWidget onVerify={(token) => setTurnstileToken(token)} />
+                          <TurnstileWidget 
+                             enabled={settings?.captchaEnabled === 'true'} 
+                             siteKey={settings?.turnstileSiteKey} 
+                             onVerify={(token) => setTurnstileToken(token)} 
+                          />
                         </div>
 
                         <div className="flex gap-3 pt-2">

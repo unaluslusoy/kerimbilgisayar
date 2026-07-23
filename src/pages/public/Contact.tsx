@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
-import { Mail, MapPin, Phone, Send, CheckCircle, AlertCircle, Loader2, Headset, ShoppingCart, HelpCircle, PlaySquare, Printer, Building, FileText, Landmark, Building2, Facebook, Twitter, Instagram, Linkedin, Youtube, ArrowRight, X, ChevronRight } from 'lucide-react';
+import { Mail, MapPin, Phone, Send, CheckCircle, AlertCircle, Loader2, Headset, ShoppingCart, HelpCircle, PlaySquare, Printer, Building, FileText, Landmark, Building2, Facebook, Twitter, Instagram, Linkedin, ArrowRight, X, ChevronRight } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
 import { submitContactForm } from '../../lib/api';
 import { Link } from 'react-router-dom';
@@ -217,13 +217,12 @@ export default function Contact() {
 
             <div className="flex flex-wrap gap-3">
               {[
-                { icon: Twitter, label: 'Twitter', bg: 'bg-gray-100', text: 'text-gray-600' },
-                { icon: Instagram, label: 'Instagram', bg: 'bg-gray-100', text: 'text-gray-600' },
-                { icon: Linkedin, label: 'LinkedIn', bg: 'bg-gray-100', text: 'text-gray-600' },
-                { icon: Youtube, label: 'YouTube', bg: 'bg-gray-100', text: 'text-gray-600' },
-                { icon: Facebook, label: 'Facebook', bg: 'bg-gray-100', text: 'text-gray-600' }
-              ].map((s, i) => (
-                <a key={i} href="#" className={`${s.bg} ${s.text} hover:bg-gray-200 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-colors`}>
+                { icon: Twitter, label: 'Twitter', url: settings?.socialTwitter },
+                { icon: Instagram, label: 'Instagram', url: settings?.socialInstagram },
+                { icon: Linkedin, label: 'LinkedIn', url: settings?.socialLinkedin },
+                { icon: Facebook, label: 'Facebook', url: settings?.socialFacebook }
+              ].filter(s => s.url).map((s, i) => (
+                <a key={i} href={s.url} target="_blank" rel="noreferrer" className="bg-gray-100 text-gray-600 hover:bg-gray-200 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-colors">
                   <s.icon className="w-3.5 h-3.5" /> {s.label}
                 </a>
               ))}

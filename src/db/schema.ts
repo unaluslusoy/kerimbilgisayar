@@ -115,6 +115,7 @@ export const users = mysqlTable('users', {
   kvkkConsentAt: timestamp('kvkk_consent_at'),
   currency: varchar('currency', { length: 10 }).default('TRY'),
   userNotes: text('user_notes'),
+  address: text('address'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 }, (t) => ({
@@ -966,6 +967,8 @@ export const serviceStatusLogs = mysqlTable('service_status_logs', {
   notes: text('notes'),
   changedById: int('changed_by_id').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (t) => ({
+  ticketIdx: index('idx_service_status_logs_ticket').on(t.ticketId),
+}));
 
 

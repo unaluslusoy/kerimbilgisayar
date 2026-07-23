@@ -382,6 +382,31 @@ async function startServer() {
     return (raw || req.ip || '').replace(/^::ffff:/, '').trim();
   };
 
+  // Aktif admin/personel kullanıcılarına bildirim gönderir (ör. müşteri online onay/red/ödeme yaptığında)
+  const notifyStaff = async (params: { title: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' | 'system'; linkUrl?: string }) => {
+    try {
+      const staff = await db.select({ id: users.id }).from(users).where(
+        and(
+          eq(users.isActive, true),
+          or(eq(users.roleType, 'superadmin'), eq(users.roleType, 'tenant_admin'), eq(users.roleType, 'staff'))
+        )
+      );
+      if (staff.length === 0) return;
+      await db.insert(notifications).values(
+        staff.map(s => ({
+          userId: s.id,
+          title: params.title,
+          message: params.message,
+          type: params.type || 'info',
+          linkUrl: params.linkUrl,
+          isRead: false,
+        }))
+      );
+    } catch (e) {
+      console.error('notifyStaff error:', e);
+    }
+  };
+
   let settingsCache: { data: Record<string, string>; fetchedAt: number } | null = null;
   const SETTINGS_CACHE_TTL = 15_000; // 15 seconds
 
@@ -836,11 +861,7 @@ async function startServer() {
       const ticket = rows[0];
 
       let customerInfo: any = null;
-      if (ticket.customerId) {
-        const custRows = await db.select().from(customers).where(eq(customers.id, ticket.customerId)).limit(1);
-        if (custRows.length > 0) customerInfo = custRows[0];
-      }
-      if (!customerInfo && ticket.userId) {
+      if (ticket.userId) {
         const userRows = await db.select().from(users).where(eq(users.id, ticket.userId)).limit(1);
         if (userRows.length > 0) {
           const u = userRows[0];
@@ -849,8 +870,7 @@ async function startServer() {
             lastName: u.lastName,
             phone: u.phone,
             email: u.email,
-            address: '',
-            companyName: ''
+            address: u.address || ''
           };
         }
       }
@@ -886,18 +906,17 @@ async function startServer() {
       try { logs = await db.select().from(serviceStatusLogs).where(eq(serviceStatusLogs.ticketId, ticket.id)).orderBy(desc(serviceStatusLogs.createdAt)); } catch {}
 
       // Veritabanındaki Gerçek Müşteri & Cihaz Verisi (Sıfır Statik Veri)
-      const rawName = customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || customerInfo.companyName : (ticket as any).customerName;
-      const rawPhone = customerInfo?.phone || (ticket as any).customerPhone;
-      const rawEmail = customerInfo?.email || (ticket as any).customerEmail;
-      const rawAddress = customerInfo?.address || (ticket as any).customerAddress;
-      const rawCompany = customerInfo?.companyName || (ticket as any).companyName;
+      const rawName = customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() : '';
+      const rawPhone = customerInfo?.phone || '';
+      const rawEmail = customerInfo?.email || '';
+      const rawAddress = customerInfo?.address || '';
 
-      const deviceBrand = deviceInfo?.brand || (ticket as any).deviceBrand || (ticket as any).brand || '';
-      const deviceModel = deviceInfo?.model || (ticket as any).deviceModel || (ticket as any).model || '';
-      const deviceType = deviceInfo?.deviceType || (ticket as any).deviceType || deviceInfo?.name || ticket.subject || '';
-      const serialNumber = deviceInfo?.serialNumber || (ticket as any).serialNumber || deviceInfo?.imei || '';
+      const deviceBrand = deviceInfo?.brand || '';
+      const deviceModel = deviceInfo?.model || '';
+      const deviceType = deviceInfo?.deviceType || deviceInfo?.name || ticket.subject || '';
+      const serialNumber = deviceInfo?.serialNumber || deviceInfo?.imei || '';
       const issueDescription = ticket.description || ticket.subject || '';
-      const accessories = ticket.accessories || (deviceInfo as any)?.accessories || '';
+      const accessories = ticket.accessories || '';
 
       res.json({
         ...ticket,
@@ -912,7 +931,6 @@ async function startServer() {
         customerPhone: maskPhone(rawPhone),
         customerEmail: maskEmail(rawEmail),
         customerAddress: maskAddress(rawAddress),
-        companyName: maskString(rawCompany, 2, 2),
         parts,
         attachments: atts,
         statusLogs: logs
@@ -947,22 +965,23 @@ async function startServer() {
       }
 
       await db.update(tickets).set({
-        status: 'islemde',
+        status: 'isleme_alindi',
         updatedAt: new Date(),
       }).where(eq(tickets.id, ticket.id));
 
       await db.insert(serviceStatusLogs).values({
+        tenantId: ticket.tenantId,
         ticketId: ticket.id,
-        toStatus: 'islemde',
+        fromStatus: ticket.status,
+        toStatus: 'isleme_alindi',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini onayladı.`,
-      }).catch(() => {});
+      }).catch((e) => console.error('serviceStatusLogs insert error:', e));
 
-      await db.insert(notifications).values({
-        type: 'ticket_approval',
+      await notifyStaff({
+        type: 'success',
         title: `Onarım Onayı: #${ticket.ticketNumber}`,
         message: `Müşteri #${ticket.ticketNumber} numaralı servis kaydı için onarım teklifini onayladı.`,
-        isRead: false,
-      }).catch(() => {});
+      });
 
       res.json({ success: true, message: 'Onarım onayınız başarıyla iletildi.' });
     } catch (e: any) {
@@ -999,50 +1018,18 @@ async function startServer() {
       }).where(eq(tickets.id, ticket.id));
 
       await db.insert(serviceStatusLogs).values({
+        tenantId: ticket.tenantId,
         ticketId: ticket.id,
+        fromStatus: ticket.status,
         toStatus: 'iptal',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini reddetti. Cihaz iade edilecek.`,
-      }).catch(() => {});
+      }).catch((e) => console.error('serviceStatusLogs insert error:', e));
 
-      res.json({ success: true, message: 'Teklif reddedildi. Cihaz iade edilmek üzere hazırlanacaktır.' });
-    } catch (e: any) {
-      console.error('Ticket decline error:', e);
-      res.status(500).json({ error: e.message || 'İşlem başarısız.' });
-    }
-  });
-
-  // Müşteri Web Üzerinden Ödeme Kaydı (Pay)
-  app.post('/api/tickets/:ticketNumber/pay', ticketActionLimiter, async (req, res) => {
-    try {
-      const rawCode = (req.params.ticketNumber || '').trim();
-      const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
-      const { paymentMethod } = req.body;
-
-      const rows = await db.select().from(tickets).where(
-        or(
-          eq(tickets.ticketNumber, cleanCode),
-          eq(tickets.ticketNumber, cleanCode.toUpperCase()),
-          sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
-        )
-      ).limit(1);
-
-      if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
-      const ticket = rows[0];
-
-      if (['cozuldu', 'teslim_edildi', 'iptal'].includes(ticket.status)) {
-        return res.status(400).json({ error: 'Bu servis kaydı halihazırda sonuçlandırılmıştır.' });
-      }
-
-      await db.update(tickets).set({
-        status: 'iptal',
-        updatedAt: new Date(),
-      }).where(eq(tickets.id, ticket.id));
-
-      await db.insert(serviceStatusLogs).values({
-        ticketId: ticket.id,
-        toStatus: 'iptal',
-        notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini reddetti. Cihaz iade edilecek.`,
-      }).catch(() => {});
+      await notifyStaff({
+        type: 'warning',
+        title: `Teklif Reddedildi: #${ticket.ticketNumber}`,
+        message: `Müşteri #${ticket.ticketNumber} numaralı servis kaydı için onarım teklifini reddetti. Cihaz iade edilmeyi bekliyor.`,
+      });
 
       res.json({ success: true, message: 'Teklif reddedildi. Cihaz iade edilmek üzere hazırlanacaktır.' });
     } catch (e: any) {
@@ -1070,10 +1057,18 @@ async function startServer() {
       }).where(eq(tickets.id, ticket.id));
 
       await db.insert(serviceStatusLogs).values({
+        tenantId: ticket.tenantId,
         ticketId: ticket.id,
+        fromStatus: ticket.status,
         toStatus: 'cozuldu',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) ${paymentMethod || 'kredi kartı'} ile ödeme bildiriminde bulundu.`,
-      }).catch(() => {});
+      }).catch((e) => console.error('serviceStatusLogs insert error:', e));
+
+      await notifyStaff({
+        type: 'success',
+        title: `Ödeme Bildirimi: #${ticket.ticketNumber}`,
+        message: `Müşteri #${ticket.ticketNumber} numaralı servis kaydı için ${paymentMethod || 'kredi kartı'} ile ödeme bildiriminde bulundu.`,
+      });
 
       res.json({ success: true, message: 'Ödeme kaydınız işleme alındı.' });
     } catch (e: any) {
