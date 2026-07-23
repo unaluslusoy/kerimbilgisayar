@@ -114,6 +114,10 @@ export default function ServiceManager() {
   const [selectedStockId, setSelectedStockId] = useState('');
   const [partQuantity, setPartQuantity] = useState('1');
   const [partUnitPrice, setPartUnitPrice] = useState('');
+  const [partVatRate, setPartVatRate] = useState('20');
+  const [partMode, setPartMode] = useState<'stok' | 'manuel'>('stok');
+  const [manualPartName, setManualPartName] = useState('');
+  const [manualPartBrand, setManualPartBrand] = useState('');
   const [laborCostValue, setLaborCostValue] = useState('');
   const [isSavingLabor, setIsSavingLabor] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -915,19 +919,27 @@ export default function ServiceManager() {
   };
 
   const handleAddPart = async () => {
-    if (!detailTicket || !selectedStockId) return;
+    if (!detailTicket) return;
+    if (partMode === 'stok' && !selectedStockId) return;
+    if (partMode === 'manuel' && !manualPartName.trim()) return;
     setIsAddingPart(true);
     try {
       await addTicketPart(detailTicket.id, {
-        stockItemId: parseInt(selectedStockId),
+        stockItemId: partMode === 'stok' ? parseInt(selectedStockId) : undefined,
+        name: partMode === 'manuel' ? manualPartName.trim() : undefined,
+        brand: partMode === 'manuel' ? manualPartBrand.trim() : undefined,
         quantity: parseInt(partQuantity) || 1,
-        unitPrice: parseFloat(partUnitPrice) || 0
+        unitPrice: parseFloat(partUnitPrice) || 0,
+        vatRate: parseInt(partVatRate) || 20,
       });
       const parts = await fetchTicketParts(detailTicket.id);
       setTicketParts(parts || []);
       setSelectedStockId('');
       setPartQuantity('1');
       setPartUnitPrice('');
+      setPartVatRate('20');
+      setManualPartName('');
+      setManualPartBrand('');
       alert('Parça/İşlem başarıyla eklendi.');
     } catch (e: any) {
       alert('Parça eklenirken hata: ' + e.message);
@@ -1825,48 +1837,78 @@ export default function ServiceManager() {
                     </p>
                     
                     {/* Parça Ekleme Alanı */}
-                    <div className="bg-white p-3 rounded-xl border border-gray-200 mb-4 shadow-sm flex flex-col md:flex-row gap-2">
-                      <select
-                        value={selectedStockId}
-                        onChange={e => {
-                          setSelectedStockId(e.target.value);
-                          const item = stockItems.find(s => s.id === parseInt(e.target.value));
-                          if (item) setPartUnitPrice(item.sellingPrice || item.costPrice || '0');
-                        }}
-                        className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
-                      >
-                        <option value="">Stoktan Parça / Hizmet Seçin...</option>
-                        {stockItems.map(s => (
-                          <option key={s.id} value={s.id} disabled={s.currentStock <= 0}>
-                            {s.sku} - {s.name} (Stok: {s.currentStock} {s.unit})
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        value={partQuantity}
-                        onChange={e => setPartQuantity(e.target.value)}
-                        min="1"
-                        className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
-                        placeholder="Miktar"
-                      />
-                      <div className="relative w-24">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₺</span>
+                    <div className="bg-white p-3 rounded-xl border border-gray-200 mb-4 shadow-sm space-y-2">
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={() => setPartMode('stok')}
+                          className={cn('px-3 py-1 rounded-lg text-[11px] font-bold border', partMode === 'stok' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-300')}>
+                          Stoktan Seç
+                        </button>
+                        <button type="button" onClick={() => setPartMode('manuel')}
+                          className={cn('px-3 py-1 rounded-lg text-[11px] font-bold border', partMode === 'manuel' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-300')}>
+                          Manuel Kalem
+                        </button>
+                      </div>
+                      <div className="flex flex-col md:flex-row gap-2">
+                        {partMode === 'stok' ? (
+                          <select
+                            value={selectedStockId}
+                            onChange={e => {
+                              setSelectedStockId(e.target.value);
+                              const item = stockItems.find(s => s.id === parseInt(e.target.value));
+                              if (item) {
+                                setPartUnitPrice(item.sellingPrice || item.costPrice || '0');
+                                if (item.vatRate !== undefined) setPartVatRate(String(item.vatRate));
+                              }
+                            }}
+                            className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                          >
+                            <option value="">Stoktan Parça / Hizmet Seçin...</option>
+                            {stockItems.map(s => (
+                              <option key={s.id} value={s.id} disabled={s.currentStock <= 0}>
+                                {s.sku} - {s.name} (Stok: {s.currentStock} {s.unit})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <>
+                            <input type="text" value={manualPartName} onChange={e => setManualPartName(e.target.value)}
+                              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                              placeholder="Kalem adı (Örn: Genel Bakım Hizmeti)" />
+                            <input type="text" value={manualPartBrand} onChange={e => setManualPartBrand(e.target.value)}
+                              className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                              placeholder="Marka" />
+                          </>
+                        )}
                         <input
                           type="number"
-                          value={partUnitPrice}
-                          onChange={e => setPartUnitPrice(e.target.value)}
-                          className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-primary outline-none"
-                          placeholder="B.Fiyat"
+                          value={partQuantity}
+                          onChange={e => setPartQuantity(e.target.value)}
+                          min="1"
+                          className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="Miktar"
                         />
+                        <div className="relative w-24">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₺</span>
+                          <input
+                            type="number"
+                            value={partUnitPrice}
+                            onChange={e => setPartUnitPrice(e.target.value)}
+                            className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="B.Fiyat"
+                          />
+                        </div>
+                        <select value={partVatRate} onChange={e => setPartVatRate(e.target.value)}
+                          className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none">
+                          {[0, 1, 10, 20].map(r => <option key={r} value={r}>%{r} KDV</option>)}
+                        </select>
+                        <button
+                          onClick={handleAddPart}
+                          disabled={isAddingPart || (partMode === 'stok' ? !selectedStockId : !manualPartName.trim())}
+                          className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {isAddingPart ? '...' : 'Ekle'}
+                        </button>
                       </div>
-                      <button
-                        onClick={handleAddPart}
-                        disabled={isAddingPart || !selectedStockId}
-                        className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50"
-                      >
-                        {isAddingPart ? '...' : 'Ekle'}
-                      </button>
                     </div>
 
                     {/* Eklenen Parçalar Listesi */}
@@ -1878,6 +1920,7 @@ export default function ServiceManager() {
                               <th className="px-3 py-2 font-semibold">Parça/İşlem</th>
                               <th className="px-3 py-2 font-semibold text-right">B.Fiyat</th>
                               <th className="px-3 py-2 font-semibold text-center">Adet</th>
+                              <th className="px-3 py-2 font-semibold text-center">KDV</th>
                               <th className="px-3 py-2 font-semibold text-right">Toplam</th>
                               <th className="px-3 py-2 text-center"></th>
                             </tr>
@@ -1886,11 +1929,12 @@ export default function ServiceManager() {
                             {ticketParts.map((p, i) => (
                               <tr key={i} className="hover:bg-gray-50">
                                 <td className="px-3 py-2">
-                                  <p className="font-bold text-gray-800">{p.stockItemName}</p>
-                                  <p className="text-[10px] text-gray-400 font-mono">{p.stockItemSku}</p>
+                                  <p className="font-bold text-gray-800">{p.name || p.stockItemName}</p>
+                                  <p className="text-[10px] text-gray-400 font-mono">{p.stockItemSku || (p.source === 'manuel' ? 'Manuel' : p.brand)}</p>
                                 </td>
                                 <td className="px-3 py-2 text-right">₺{parseFloat(p.unitPrice).toLocaleString('tr-TR')}</td>
                                 <td className="px-3 py-2 text-center font-bold">{p.quantity}</td>
+                                <td className="px-3 py-2 text-center text-gray-500">%{p.vatRate ?? 20}</td>
                                 <td className="px-3 py-2 text-right font-black text-gray-900">₺{parseFloat(p.totalPrice).toLocaleString('tr-TR')}</td>
                                 <td className="px-3 py-2 text-center">
                                   <button onClick={() => handleRemovePart(p.id)} className="text-red-500 hover:text-red-700 p-1">

@@ -386,11 +386,18 @@ export const ticketParts = mysqlTable('ticket_parts', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
   ticketId: int('ticket_id').references(() => tickets.id).notNull(),
-  stockItemId: int('stock_item_id').references(() => stockItems.id).notNull(),
+  stockItemId: int('stock_item_id').references(() => stockItems.id),
+  name: varchar('name', { length: 150 }),
+  brand: varchar('brand', { length: 80 }),
   quantity: int('quantity').notNull().default(1),
   unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
   totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
+  vatRate: int('vat_rate').notNull().default(20),
+  source: mysqlEnum('source', ['stok', 'manuel']).default('stok'),
+  createdBy: int('created_by').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow(),
+  removedAt: timestamp('removed_at'),
+  removedBy: int('removed_by').references(() => users.id),
 });
 
 // --- BILLING & ACCOUNTING ---

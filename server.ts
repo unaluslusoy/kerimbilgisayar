@@ -903,17 +903,20 @@ async function startServer() {
       let logs: any[] = [];
 
       try {
-        parts = await db.select({
+        const rawParts = await db.select({
           id: ticketParts.id,
           stockItemId: ticketParts.stockItemId,
-          name: stockItems.name,
+          name: ticketParts.name,
+          stockItemName: stockItems.name,
           quantity: ticketParts.quantity,
           unitPrice: ticketParts.unitPrice,
           totalPrice: ticketParts.totalPrice,
+          vatRate: ticketParts.vatRate,
         })
         .from(ticketParts)
         .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
-        .where(eq(ticketParts.ticketId, ticket.id));
+        .where(and(eq(ticketParts.ticketId, ticket.id), sql`${ticketParts.removedAt} IS NULL`));
+        parts = rawParts.map(p => ({ ...p, name: p.name || p.stockItemName }));
       } catch (e: any) {
         console.error('Error fetching ticketParts:', e);
       }
@@ -2405,7 +2408,7 @@ async function startServer() {
         const ticket = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
         if (ticket.length > 0 && ticket[0].dealerId) {
           const dealerId = ticket[0].dealerId;
-          const parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, ticketId));
+          const parts = await db.select().from(ticketParts).where(and(eq(ticketParts.ticketId, ticketId), sql`${ticketParts.removedAt} IS NULL`));
           const partsTotal = parts.reduce((sum, p) => sum + parseFloat(p.totalPrice || '0'), 0);
           const laborCostVal = parseFloat(ticket[0].laborCost || '0');
           const grandTotal = partsTotal + laborCostVal;
@@ -2598,18 +2601,22 @@ async function startServer() {
         id: ticketParts.id,
         ticketId: ticketParts.ticketId,
         stockItemId: ticketParts.stockItemId,
+        name: ticketParts.name,
+        brand: ticketParts.brand,
         quantity: ticketParts.quantity,
         unitPrice: ticketParts.unitPrice,
         totalPrice: ticketParts.totalPrice,
+        vatRate: ticketParts.vatRate,
+        source: ticketParts.source,
         createdAt: ticketParts.createdAt,
         stockItemName: stockItems.name,
         stockItemSku: stockItems.sku
       }).from(ticketParts)
         .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
-        .where(eq(ticketParts.ticketId, parseInt(req.params.id)))
+        .where(and(eq(ticketParts.ticketId, parseInt(req.params.id)), sql`${ticketParts.removedAt} IS NULL`))
         .orderBy(desc(ticketParts.createdAt));
-        
-      res.json(parts);
+
+      res.json(parts.map(p => ({ ...p, name: p.name || p.stockItemName })));
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -2617,30 +2624,58 @@ async function startServer() {
 
   app.post('/api/admin/tickets/:id/parts', requireAdmin, async (req, res) => {
     try {
-      const { stockItemId, quantity, unitPrice } = req.body;
+      const { stockItemId, quantity, unitPrice, name, brand, vatRate } = req.body;
       const q = parseInt(quantity) || 1;
       const price = parseFloat(unitPrice) || 0;
       const total = q * price;
-      
+      const vat = vatRate !== undefined ? parseInt(vatRate) : 20;
+      const createdBy = (req as any).adminUser?.userId || null;
+      const isManual = !stockItemId;
+
+      if (isManual && !name?.trim()) {
+        return res.status(400).json({ error: 'Manuel kalem için isim zorunludur.' });
+      }
+
       await db.transaction(async (tx) => {
-        // Add to ticketParts
+        if (isManual) {
+          await tx.insert(ticketParts).values({
+            tenantId: 1,
+            ticketId: parseInt(req.params.id),
+            stockItemId: null,
+            name: name.trim(),
+            brand: brand?.trim() || 'Manuel',
+            quantity: q,
+            unitPrice: price.toString(),
+            totalPrice: total.toString(),
+            vatRate: vat,
+            source: 'manuel',
+            createdBy,
+          });
+          return;
+        }
+
+        const item = await tx.select().from(stockItems).where(eq(stockItems.id, parseInt(stockItemId))).limit(1);
         await tx.insert(ticketParts).values({
           tenantId: 1,
           ticketId: parseInt(req.params.id),
           stockItemId: parseInt(stockItemId),
+          name: item[0]?.name || null,
+          brand: item[0]?.brand || null,
           quantity: q,
           unitPrice: price.toString(),
-          totalPrice: total.toString()
+          totalPrice: total.toString(),
+          vatRate: vat,
+          source: 'stok',
+          createdBy,
         });
 
         // Deduct from stock
-        const item = await tx.select().from(stockItems).where(eq(stockItems.id, parseInt(stockItemId))).limit(1);
         if (item.length > 0) {
           const newStock = (item[0].currentStock || 0) - q;
           await tx.update(stockItems).set({ currentStock: newStock }).where(eq(stockItems.id, parseInt(stockItemId)));
         }
       });
-      
+
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -2649,17 +2684,20 @@ async function startServer() {
 
   app.delete('/api/admin/tickets/parts/:partId', requireAdmin, async (req, res) => {
     try {
+      const removedBy = (req as any).adminUser?.userId || null;
       await db.transaction(async (tx) => {
         const part = await tx.select().from(ticketParts).where(eq(ticketParts.id, parseInt(req.params.partId))).limit(1);
         if (part.length > 0) {
-          // Restore stock
-          const item = await tx.select().from(stockItems).where(eq(stockItems.id, part[0].stockItemId)).limit(1);
-          if (item.length > 0) {
-            const newStock = (item[0].currentStock || 0) + part[0].quantity;
-            await tx.update(stockItems).set({ currentStock: newStock }).where(eq(stockItems.id, part[0].stockItemId));
+          // Restore stock (yalnızca stoktan düşülmüş kalemler için)
+          if (part[0].stockItemId) {
+            const item = await tx.select().from(stockItems).where(eq(stockItems.id, part[0].stockItemId)).limit(1);
+            if (item.length > 0) {
+              const newStock = (item[0].currentStock || 0) + part[0].quantity;
+              await tx.update(stockItems).set({ currentStock: newStock }).where(eq(stockItems.id, part[0].stockItemId));
+            }
           }
-          // Delete part
-          await tx.delete(ticketParts).where(eq(ticketParts.id, parseInt(req.params.partId)));
+          // Soft delete — denetim izi için kayıt silinmez, işaretlenir
+          await tx.update(ticketParts).set({ removedAt: new Date(), removedBy }).where(eq(ticketParts.id, parseInt(req.params.partId)));
         }
       });
       res.json({ success: true });
@@ -6515,15 +6553,17 @@ async function startServer() {
       const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
       if (!ticket) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
 
-      // Get ticket parts
-      const parts = await db.select({
-        name: stockItems.name,
+      // Get ticket parts (manuel kalemlerin stockItemId'si olmayabilir — LEFT JOIN + kendi name'i kullanılır)
+      const rawParts = await db.select({
+        name: ticketParts.name,
+        stockItemName: stockItems.name,
         quantity: ticketParts.quantity,
         unitPrice: ticketParts.unitPrice,
         totalPrice: ticketParts.totalPrice,
       }).from(ticketParts)
-        .innerJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
-        .where(eq(ticketParts.ticketId, ticketId));
+        .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
+        .where(and(eq(ticketParts.ticketId, ticketId), sql`${ticketParts.removedAt} IS NULL`));
+      const parts = rawParts.map(p => ({ ...p, name: p.name || p.stockItemName || 'Parça' }));
 
       const invoiceNum = `FTR-${Date.now().toString(36).toUpperCase()}`;
       const laborCost = parseFloat(String(ticket.laborCost)) || 0;

@@ -175,7 +175,7 @@ export async function fetchTicketParts(ticketId: number) {
   return adminRequest(`/api/admin/tickets/${ticketId}/parts`);
 }
 
-export async function addTicketPart(ticketId: number, data: { stockItemId: number; quantity: number; unitPrice: number }) {
+export async function addTicketPart(ticketId: number, data: { stockItemId?: number; name?: string; brand?: string; quantity: number; unitPrice: number; vatRate?: number }) {
   return adminRequest(`/api/admin/tickets/${ticketId}/parts`, { method: 'POST', body: JSON.stringify(data) });
 }
 
