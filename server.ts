@@ -741,26 +741,79 @@ async function startServer() {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PUBLIC ARIZA SORGULAMA, ONAYLAMA & ÖDEME API ENDPOINTLERİ
+  // GÜVENLİK ÖNLEMLERİ — PUBLIC ARIZA SORGULAMA & ONAYLAMA API ENDPOINTLERİ
   // ═══════════════════════════════════════════════════════════════════════════
-  app.get(['/api/tickets/:ticketNumber', '/api/public/ticket/query'], async (req, res) => {
+
+  // Dedicated Rate Limiting for Public Ticket Query (Brute-force / Scraping Defense)
+  const ticketQueryLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 15, // max 15 searches per minute per IP
+    message: { error: 'Çok fazla arıza sorgulama denemesi yapıldı. Lütfen 1 dakika sonra tekrar deneyin.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const ticketActionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 8, // max 8 status change attempts per 15 minutes
+    message: { error: 'Çok fazla onay/red denemesi yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Helper: PII Masking (Kişisel Veri Maskeleme - KVKK Güvenliği)
+  function maskString(str: string, keepStart = 1, keepEnd = 1): string {
+    if (!str || str.trim().length <= 2) return '***';
+    const trimmed = str.trim();
+    if (trimmed.length <= keepStart + keepEnd) return trimmed[0] + '***';
+    return trimmed.substring(0, keepStart) + '***' + trimmed.substring(trimmed.length - keepEnd);
+  }
+
+  function maskName(fullName: string): string {
+    if (!fullName) return '***';
+    return fullName.split(' ').map(part => {
+      if (part.length <= 2) return part[0] + '*';
+      return part.substring(0, 1) + '***' + (part.length > 4 ? part.substring(part.length - 1) : '');
+    }).join(' ');
+  }
+
+  function maskPhone(phone: string): string {
+    if (!phone) return '***';
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 7) return '***';
+    return digits.substring(0, 4) + ' *** ** ' + digits.substring(digits.length - 2);
+  }
+
+  function maskEmail(email: string): string {
+    if (!email || !email.includes('@')) return '***';
+    const [name, domain] = email.split('@');
+    return maskString(name, 1, 1) + '@' + domain;
+  }
+
+  app.get(['/api/tickets/:ticketNumber', '/api/public/ticket/query'], ticketQueryLimiter, async (req, res) => {
     try {
-      const code = (req.params.ticketNumber || req.query.no as string || '').trim();
-      if (!code) return res.status(400).json({ error: 'Takip numarası giriniz' });
+      const rawCode = (req.params.ticketNumber || req.query.no as string || '').trim();
+      if (!rawCode) return res.status(400).json({ error: 'Takip numarası giriniz' });
+
+      // Güvenlik 1: Girdi Temizleme (Sanitization — SQL/XSS/Regex Injection Defense)
+      const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
+      if (cleanCode.length < 3 || cleanCode.length > 35) {
+        return res.status(400).json({ error: 'Geçersiz takip kodu biçimi' });
+      }
 
       const rows = await db.select()
         .from(tickets)
         .where(
           or(
-            eq(tickets.ticketNumber, code),
-            eq(tickets.ticketNumber, code.toUpperCase()),
-            sql`CAST(${tickets.id} AS CHAR) = ${code}`
+            eq(tickets.ticketNumber, cleanCode),
+            eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+            sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
           )
         )
         .limit(1);
 
       if (rows.length === 0) {
-        return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+        return res.status(404).json({ error: 'Servis kaydı bulunamadı. Lütfen takip kodunu kontrol ediniz.' });
       }
 
       const ticket = rows[0];
@@ -775,14 +828,20 @@ async function startServer() {
       const atts = await db.select().from(ticketAttachments).where(eq(ticketAttachments.ticketId, ticket.id));
       const logs = await db.select().from(serviceStatusLogs).where(eq(serviceStatusLogs.ticketId, ticket.id)).orderBy(desc(serviceStatusLogs.createdAt));
 
+      // Güvenlik 2: KVKK & Kişisel Veri Maskeleme (PII Security)
+      const rawName = customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || customerInfo.companyName : ticket.customerName;
+      const rawPhone = customerInfo?.phone || ticket.customerPhone;
+      const rawEmail = customerInfo?.email || ticket.customerEmail;
+      const rawAddress = customerInfo?.address || ticket.customerAddress;
+
       res.json({
         ...ticket,
         rawStatus: ticket.status,
-        customerName: customerInfo ? `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || customerInfo.companyName : ticket.customerName,
-        customerPhone: customerInfo?.phone || ticket.customerPhone,
-        customerEmail: customerInfo?.email || ticket.customerEmail,
-        customerAddress: customerInfo?.address || ticket.customerAddress,
-        companyName: customerInfo?.companyName || ticket.companyName,
+        customerName: maskName(rawName || ''),
+        customerPhone: maskPhone(rawPhone || ''),
+        customerEmail: maskEmail(rawEmail || ''),
+        customerAddress: maskString(rawAddress || '', 3, 2),
+        companyName: maskString(customerInfo?.companyName || ticket.companyName || '', 2, 2),
         parts,
         attachments: atts,
         statusLogs: logs
@@ -794,15 +853,29 @@ async function startServer() {
   });
 
   // Müşteri Onarım Onayı (Approve Repair Quote)
-  app.post('/api/tickets/:ticketNumber/approve', async (req, res) => {
+  app.post('/api/tickets/:ticketNumber/approve', ticketActionLimiter, async (req, res) => {
     try {
-      const code = (req.params.ticketNumber || '').trim();
+      const rawCode = (req.params.ticketNumber || '').trim();
+      const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
+      if (!cleanCode) return res.status(400).json({ error: 'Geçersiz takip kodu' });
+
+      // Güvenlik 3: Turnstile / Captcha Kontrolü (varsa)
+      const captchaValid = await verifyTurnstile(req);
+      if (!captchaValid) {
+        return res.status(400).json({ error: 'Güvenlik doğrulaması (Captcha) başarısız. Lütfen tekrar deneyin.' });
+      }
+
       const rows = await db.select().from(tickets).where(
-        or(eq(tickets.ticketNumber, code), sql`CAST(${tickets.id} AS CHAR) = ${code}`)
+        or(eq(tickets.ticketNumber, cleanCode), sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`)
       ).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
+
+      // Güvenlik 4: Durum Geçiş Kontrolü (State Transition Security)
+      if (['cozuldu', 'teslim_edildi', 'iptal'].includes(ticket.status)) {
+        return res.status(400).json({ error: 'Bu servis kaydı tamamlanmış veya kapatılmış durumdadır.' });
+      }
 
       await db.update(tickets).set({
         status: 'islemde',
@@ -812,7 +885,7 @@ async function startServer() {
       await db.insert(serviceStatusLogs).values({
         ticketId: ticket.id,
         status: 'islemde',
-        notes: 'Müşteri web üzerinden onarım teklifini onayladı.',
+        notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini onayladı.`,
       }).catch(() => {});
 
       await db.insert(notifications).values({
@@ -830,15 +903,27 @@ async function startServer() {
   });
 
   // Müşteri Teklif Reddi (Decline Repair Quote)
-  app.post('/api/tickets/:ticketNumber/decline', async (req, res) => {
+  app.post('/api/tickets/:ticketNumber/decline', ticketActionLimiter, async (req, res) => {
     try {
-      const code = (req.params.ticketNumber || '').trim();
+      const rawCode = (req.params.ticketNumber || '').trim();
+      const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
+      if (!cleanCode) return res.status(400).json({ error: 'Geçersiz takip kodu' });
+
+      const captchaValid = await verifyTurnstile(req);
+      if (!captchaValid) {
+        return res.status(400).json({ error: 'Güvenlik doğrulaması (Captcha) başarısız.' });
+      }
+
       const rows = await db.select().from(tickets).where(
-        or(eq(tickets.ticketNumber, code), sql`CAST(${tickets.id} AS CHAR) = ${code}`)
+        or(eq(tickets.ticketNumber, cleanCode), sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`)
       ).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
+
+      if (['cozuldu', 'teslim_edildi', 'iptal'].includes(ticket.status)) {
+        return res.status(400).json({ error: 'Bu servis kaydı halihazırda sonuçlandırılmıştır.' });
+      }
 
       await db.update(tickets).set({
         status: 'iptal',
@@ -848,7 +933,7 @@ async function startServer() {
       await db.insert(serviceStatusLogs).values({
         ticketId: ticket.id,
         status: 'iptal',
-        notes: 'Müşteri web üzerinden onarım teklifini reddetti. Cihaz iade edilecek.',
+        notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini reddetti. Cihaz iade edilecek.`,
       }).catch(() => {});
 
       res.json({ success: true, message: 'Teklif reddedildi. Cihaz iade edilmek üzere hazırlanacaktır.' });
@@ -859,12 +944,13 @@ async function startServer() {
   });
 
   // Müşteri Web Üzerinden Ödeme Kaydı (Pay)
-  app.post('/api/tickets/:ticketNumber/pay', async (req, res) => {
+  app.post('/api/tickets/:ticketNumber/pay', ticketActionLimiter, async (req, res) => {
     try {
-      const code = (req.params.ticketNumber || '').trim();
+      const rawCode = (req.params.ticketNumber || '').trim();
+      const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
       const { paymentMethod } = req.body;
       const rows = await db.select().from(tickets).where(
-        or(eq(tickets.ticketNumber, code), sql`CAST(${tickets.id} AS CHAR) = ${code}`)
+        or(eq(tickets.ticketNumber, cleanCode), sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`)
       ).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
@@ -878,7 +964,7 @@ async function startServer() {
       await db.insert(serviceStatusLogs).values({
         ticketId: ticket.id,
         status: 'cozuldu',
-        notes: `Müşteri web üzerinden ${paymentMethod || 'kredi kartı'} ile ödeme bildiriminde bulundu.`,
+        notes: `Müşteri web üzerinden (${getClientIp(req)}) ${paymentMethod || 'kredi kartı'} ile ödeme bildiriminde bulundu.`,
       }).catch(() => {});
 
       res.json({ success: true, message: 'Ödeme kaydınız işleme alındı.' });
