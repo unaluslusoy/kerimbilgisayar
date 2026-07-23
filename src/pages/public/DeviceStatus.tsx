@@ -7,11 +7,13 @@ import { usePageTitle } from '../../lib/usePageTitle';
 import { Link, useParams } from 'react-router-dom';
 import TurnstileWidget from '../../components/TurnstileWidget';
 import { useSettings } from '../../context/SettingsContext';
+import { useToast } from '../../context/ToastContext';
 
 export default function DeviceStatus() {
   usePageTitle('Cihaz Durumu Sorgula');
   const { orderNo } = useParams<{ orderNo: string }>();
   const { settings } = useSettings();
+  const toast = useToast();
   const [ticketId, setTicketId] = useState('');
   const [result, setResult] = useState<any>(null);
   const [searched, setSearched] = useState(false);
@@ -98,7 +100,7 @@ export default function DeviceStatus() {
     if (!result) return;
     const isCaptchaRequired = settings?.captchaEnabled === 'true';
     if (isCaptchaRequired && !turnstileToken) {
-      alert('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
+      toast.warning('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
       return;
     }
     setProcessingAction(true);
@@ -114,9 +116,9 @@ export default function DeviceStatus() {
       // Refresh ticket info
       const refreshed = await fetchTicket(code);
       setResult(refreshed);
-      alert('Onarım onayınız başarıyla iletildi. Cihazınız sıraya alınmıştır.');
+      toast.success('Onarım onayınız başarıyla iletildi. Cihazınız sıraya alınmıştır.');
     } catch (err: any) {
-      alert('Hata: ' + err.message);
+      toast.error(err.message || 'Onaylama işlemi başarısız.');
     } finally {
       setProcessingAction(false);
     }
@@ -126,7 +128,7 @@ export default function DeviceStatus() {
     if (!result) return;
     const isCaptchaRequired = settings?.captchaEnabled === 'true';
     if (isCaptchaRequired && !turnstileToken) {
-      alert('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
+      toast.warning('Lütfen önce aşağıdaki güvenlik doğrulamasını (Captcha) kutucuğunu işaretleyerek tamamlayınız.');
       return;
     }
     if (!window.confirm('Teklifi reddetmek istediğinize emin misiniz? Cihaz işlem yapılmadan iade edilecektir.')) return;
@@ -142,9 +144,9 @@ export default function DeviceStatus() {
       if (!res.ok) throw new Error(data.error || 'İşlem başarısız.');
       const refreshed = await fetchTicket(code);
       setResult(refreshed);
-      alert('Talebiniz alınmıştır. Cihaz iade edilmek üzere hazırlanacaktır.');
+      toast.success('Talebiniz alınmıştır. Cihaz iade edilmek üzere hazırlanacaktır.');
     } catch (err: any) {
-      alert('Hata: ' + err.message);
+      toast.error(err.message || 'İşlem başarısız.');
     } finally {
       setProcessingAction(false);
     }
@@ -175,7 +177,7 @@ export default function DeviceStatus() {
       const refreshed = await fetchTicket(code);
       setResult(refreshed);
     } catch (err: any) {
-      alert('Ödeme hatası: ' + err.message);
+      toast.error('Ödeme hatası: ' + (err.message || 'Bilinmeyen hata'));
     } finally {
       setProcessingAction(false);
     }
