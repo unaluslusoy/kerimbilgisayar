@@ -139,6 +139,7 @@ import { eq, desc, and, or, sql, asc, like } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import crypto from 'crypto';
 import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
+import { TICKET_STATUS_LABELS, TICKET_TERMINAL_STATUSES } from './src/lib/ticketStatus';
 
 const uploadsDir = path.join(rootDir, 'uploads');
 
@@ -960,7 +961,7 @@ async function startServer() {
       const ticket = rows[0];
 
       // Durum Geçiş Kontrolü (State Transition Security)
-      if (['cozuldu', 'teslim_edildi', 'iptal'].includes(ticket.status)) {
+      if (TICKET_TERMINAL_STATUSES.includes(ticket.status)) {
         return res.status(400).json({ error: 'Bu servis kaydı tamamlanmış veya kapatılmış durumdadır.' });
       }
 
@@ -1008,12 +1009,12 @@ async function startServer() {
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
 
-      if (['cozuldu', 'teslim_edildi', 'iptal'].includes(ticket.status)) {
+      if (TICKET_TERMINAL_STATUSES.includes(ticket.status)) {
         return res.status(400).json({ error: 'Bu servis kaydı halihazırda sonuçlandırılmıştır.' });
       }
 
       await db.update(tickets).set({
-        status: 'iptal',
+        status: 'onay_red',
         updatedAt: new Date(),
       }).where(eq(tickets.id, ticket.id));
 
@@ -1021,7 +1022,7 @@ async function startServer() {
         tenantId: ticket.tenantId,
         ticketId: ticket.id,
         fromStatus: ticket.status,
-        toStatus: 'iptal',
+        toStatus: 'onay_red',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini reddetti. Cihaz iade edilecek.`,
       }).catch((e) => console.error('serviceStatusLogs insert error:', e));
 
@@ -1907,17 +1908,6 @@ async function startServer() {
   // ============================================================
   // WHATSAPP API DISPATCHER (Arka Planda WhatsApp Gönderimi)
   // ============================================================
-  const STATUS_LABELS: Record<string, string> = {
-    'yeni': 'Servise Alındı',
-    'isleme_alindi': 'Arıza Tespiti',
-    'parca_bekliyor': 'Parça Bekleniyor',
-    'musteri_onayi_bekliyor': 'Onay Bekleniyor',
-    'cozuldu': 'Çözüldü',
-    'kapatildi': 'Kapatıldı',
-    'teslim_edildi': 'Teslim Edildi',
-    'iptal': 'İptal',
-  };
-
   async function sendWhatsAppMessage(phone: string, text: string) {
     try {
       const allSettings = await db.select().from(settings);
@@ -1992,16 +1982,7 @@ async function startServer() {
         const t = ticketInfo[0];
         const deviceName = `${t.deviceBrand || ''} ${t.deviceModel || ''}`.trim() || t.deviceType || 'Cihazınız';
 
-        const statusMapDb: any = {
-          'yeni': 'Yeni Kayıt',
-          'isleme_alindi': 'İşleme Alındı / Onarımda',
-          'parca_bekliyor': 'Parça Bekleniyor',
-          'musteri_onayi_bekliyor': 'Müşteri Onayı Bekleniyor',
-          'cozuldu': 'Onarıldı / Hazır',
-          'kapatildi': 'Teslim Edildi',
-          'iptal': 'İptal Edildi'
-        };
-        const statusText = statusMapDb[status] || status;
+        const statusText = TICKET_STATUS_LABELS[status] || status;
 
         // 1. Email notification
         if (t.customerEmail && !t.customerEmail.includes('@noemail.local')) {
@@ -2046,7 +2027,15 @@ async function startServer() {
     try {
       const { status } = req.query;
       const dealerAlias = alias(companies, 'dealer');
-      let query = db.select({
+      // NOT: tenantId=1 diğer tüm yazma işlemleriyle aynı sabit değeri kullanır —
+      // admin oturum token'ı (JWT) henüz tenantId taşımıyor, gerçek çok-kiracılı
+      // izolasyon için login/JWT akışının ayrıca güncellenmesi gerekir.
+      const whereClause = and(
+        eq(tickets.tenantId, 1),
+        status && status !== 'all' ? eq(tickets.status, status as any) : undefined
+      );
+
+      const results = await db.select({
         id: tickets.id,
         ticketNumber: tickets.ticketNumber,
         subject: tickets.subject,
@@ -2074,16 +2063,10 @@ async function startServer() {
         .leftJoin(users, eq(tickets.userId, users.id))
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
         .leftJoin(dealerAlias, eq(tickets.dealerId, dealerAlias.id))
+        .where(whereClause)
         .orderBy(desc(tickets.createdAt));
 
-      
-      const results = await query;
-      
-      const filtered = status && status !== 'all' 
-        ? results.filter(r => r.status === status)
-        : results;
-      
-      res.json(filtered.map(t => ({
+      res.json(results.map(t => ({
         ...t,
         customerName: `${t.customerName || ''} ${t.customerLastName || ''}`.trim() || 'Müşteri'
       })));
@@ -2094,14 +2077,39 @@ async function startServer() {
 
   app.post('/api/admin/tickets', requireAdmin, async (req, res) => {
     try {
-      const { subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost, dealerId, source, assignedTo, accessories, technicianNotes } = req.body;
-      
+      const {
+        subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost, dealerId, source, assignedTo, accessories, technicianNotes,
+        deviceSerial, imei, patternLock, pinPassword, deviceEmail, deviceEmailPassword,
+        customerType, companyName, taxId, taxOffice, address,
+      } = req.body;
+
       let userId: number | null = null;
       let deviceId: number | null = null;
       let userEmailForMail = customerEmail || '';
       const ticketNumber = `SRV-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
 
       await db.transaction(async (tx) => {
+        // Kurumsal müşteri ise firma kaydını bul/oluştur
+        let companyId: number | null = null;
+        if (customerType === 'kurumsal' && companyName?.trim()) {
+          const existingCompany = await tx.select().from(companies).where(eq(companies.name, companyName.trim())).limit(1);
+          if (existingCompany.length > 0) {
+            companyId = existingCompany[0].id;
+          } else {
+            const newCompany = await tx.insert(companies).values({
+              tenantId: 1,
+              name: companyName.trim(),
+              taxId: taxId || null,
+              taxOffice: taxOffice || null,
+              address: address || null,
+              phone: customerPhone || null,
+              email: customerEmail || null,
+              type: 'customer',
+            });
+            companyId = (newCompany[0] as any).insertId;
+          }
+        }
+
         // Create or find user by phone or email (deduplication)
         if (customerName && (customerPhone || customerEmail)) {
           const nameParts = customerName.split(' ');
@@ -2122,14 +2130,23 @@ async function startServer() {
                 await tx.update(users).set({ email: customerEmail }).where(eq(users.id, userId));
               }
             }
-            
+
+            const userUpdate: any = {};
+            if (address !== undefined) userUpdate.address = address;
+            if (taxId !== undefined) userUpdate.taxNumber = taxId;
+            if (taxOffice !== undefined) userUpdate.taxOffice = taxOffice;
+            if (companyId) userUpdate.companyId = companyId;
+            if (Object.keys(userUpdate).length > 0) {
+              await tx.update(users).set(userUpdate).where(eq(users.id, userId));
+            }
+
             // Ensure customer record exists
             const existingCustomer = await tx.select().from(customers).where(eq(customers.userId, userId)).limit(1);
             if (existingCustomer.length === 0) {
               await tx.insert(customers).values({
                 tenantId: existingUser[0].tenantId || 1,
                 userId: userId,
-                companyId: existingUser[0].companyId || null,
+                companyId: companyId || existingUser[0].companyId || null,
                 accountCode: `MUS-${String(userId).padStart(5, '0')}`,
                 balance: '0.00',
                 creditLimit: '0.00',
@@ -2140,10 +2157,14 @@ async function startServer() {
           } else {
             const newUser = await tx.insert(users).values({
               tenantId: 1,
+              companyId: companyId || null,
               firstName: nameParts[0] || customerName,
               lastName: nameParts.slice(1).join(' ') || '',
               email: customerEmail || `${customerPhone || Date.now()}@noemail.local`,
               phone: customerPhone || '',
+              address: address || null,
+              taxNumber: taxId || null,
+              taxOffice: taxOffice || null,
               roleType: 'customer'
             });
             userId = (newUser[0] as any).insertId;
@@ -2152,6 +2173,7 @@ async function startServer() {
             await tx.insert(customers).values({
               tenantId: 1,
               userId: userId,
+              companyId: companyId || null,
               accountCode: `MUS-${String(userId).padStart(5, '0')}`,
               balance: '0.00',
               creditLimit: '0.00',
@@ -2170,6 +2192,12 @@ async function startServer() {
             brand: deviceBrand || '',
             model: deviceModel || '',
             name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType || 'Cihaz',
+            serialNumber: deviceSerial || null,
+            imei: imei || null,
+            patternLock: patternLock || null,
+            pinPassword: pinPassword || null,
+            deviceEmail: deviceEmail || null,
+            deviceEmailPassword: deviceEmailPassword || null,
           });
           deviceId = (newDevice[0] as any).insertId;
         }
@@ -2214,7 +2242,12 @@ async function startServer() {
 
   app.patch('/api/admin/tickets/:id', requireAdmin, async (req, res) => {
     try {
-      const { status, priority, cost, assignedTo, laborCost, technicianNotes, accessories, customerName, customerPhone, customerEmail } = req.body;
+      const {
+        status, priority, cost, assignedTo, laborCost, technicianNotes, accessories, description,
+        customerName, customerPhone, customerEmail, address,
+        deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword,
+        deliverySignature, customerSignature,
+      } = req.body;
       const updateData: any = { updatedAt: new Date() };
       if (status) updateData.status = status;
       if (priority) updateData.priority = priority;
@@ -2223,14 +2256,17 @@ async function startServer() {
       if (laborCost !== undefined) updateData.laborCost = laborCost;
       if (technicianNotes !== undefined) updateData.technicianNotes = technicianNotes;
       if (accessories !== undefined) updateData.accessories = accessories;
+      if (description !== undefined) updateData.description = description;
+      if (deliverySignature !== undefined) updateData.deliverySignature = deliverySignature;
+      if (customerSignature !== undefined) updateData.customerSignature = customerSignature;
       if (status === 'cozuldu' || status === 'kapatildi') updateData.resolvedAt = new Date();
-      
+      if (status === 'teslim_edildi') updateData.deliveredAt = new Date();
+
       const ticketId = parseInt(req.params.id);
-      
+
       await db.transaction(async (tx) => {
-        // Select old ticket status to record status transition
-        const [oldTicket] = await tx.select({ status: tickets.status }).from(tickets).where(eq(tickets.id, ticketId)).limit(1);
-        const fromStatus = oldTicket?.status || null;
+        const [ticketRec] = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+        const fromStatus = ticketRec?.status || null;
 
         // Update ticket fields
         await tx.update(tickets).set(updateData).where(eq(tickets.id, ticketId));
@@ -2249,10 +2285,9 @@ async function startServer() {
         }
 
         // Update customer details if provided
-        if (customerName || customerPhone || customerEmail) {
-          const ticketRec = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
-          if (ticketRec.length > 0 && ticketRec[0].userId) {
-            const uId = ticketRec[0].userId;
+        if (customerName || customerPhone || customerEmail || address !== undefined) {
+          if (ticketRec?.userId) {
+            const uId = ticketRec.userId;
             const userUpdate: any = {};
             if (customerName) {
               const parts = customerName.split(' ');
@@ -2266,10 +2301,42 @@ async function startServer() {
                 userUpdate.email = customerEmail;
               }
             }
-            
+            if (address !== undefined) userUpdate.address = address;
+
             if (Object.keys(userUpdate).length > 0) {
               await tx.update(users).set(userUpdate).where(eq(users.id, uId));
             }
+          }
+        }
+
+        // Update device details if provided (mevcut cihaz kaydı yoksa oluştur)
+        const deviceFieldsProvided = [deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword].some((v) => v !== undefined);
+        if (deviceFieldsProvided) {
+          const deviceUpdate: any = {};
+          if (deviceType !== undefined) deviceUpdate.deviceType = deviceType;
+          if (deviceBrand !== undefined) deviceUpdate.brand = deviceBrand;
+          if (deviceModel !== undefined) deviceUpdate.model = deviceModel;
+          if (imei !== undefined) deviceUpdate.imei = imei;
+          if (deviceSerial !== undefined) deviceUpdate.serialNumber = deviceSerial;
+          if (patternLock !== undefined) deviceUpdate.patternLock = patternLock;
+          if (pinPassword !== undefined) deviceUpdate.pinPassword = pinPassword;
+          if (deviceEmail !== undefined) deviceUpdate.deviceEmail = deviceEmail;
+          if (deviceEmailPassword !== undefined) deviceUpdate.deviceEmailPassword = deviceEmailPassword;
+
+          if (ticketRec?.deviceId) {
+            await tx.update(devices).set(deviceUpdate).where(eq(devices.id, ticketRec.deviceId));
+          } else if (deviceType || deviceBrand || deviceModel) {
+            const newDevice = await tx.insert(devices).values({
+              tenantId: 1,
+              userId: ticketRec?.userId || null,
+              deviceType: deviceType || 'Bilinmeyen',
+              brand: deviceBrand || '',
+              model: deviceModel || '',
+              name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType || 'Cihaz',
+              ...deviceUpdate,
+            });
+            const newDeviceId = (newDevice[0] as any).insertId;
+            await tx.update(tickets).set({ deviceId: newDeviceId }).where(eq(tickets.id, ticketId));
           }
         }
       });
@@ -2337,16 +2404,7 @@ async function startServer() {
 
           // 1. Email notification
           if (t.customerEmail && !t.customerEmail.includes('@noemail.local')) {
-            const statusMapDb: any = {
-              'yeni': 'Yeni',
-              'isleme_alindi': 'İşleme Alındı',
-              'parca_bekliyor': 'Parça Bekleniyor',
-              'musteri_onayi_bekliyor': 'Onay Bekleniyor',
-              'cozuldu': 'Çözüldü / Onarıldı',
-              'kapatildi': 'Kapatıldı / Teslim Edildi',
-              'iptal': 'İptal Edildi'
-            };
-            const statusText = statusMapDb[status] || status;
+            const statusText = TICKET_STATUS_LABELS[status] || status;
             const html = getStatusEmailTemplate(t.customerName || 'Müşterimiz', t.ticketNumber, deviceName, statusText);
             sendTicketEmail(t.customerEmail, `Servis Durumu Güncellendi: ${t.ticketNumber}`, html).catch(console.error);
           }
@@ -2358,7 +2416,7 @@ async function startServer() {
             allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
 
             if (settingsMap.whatsappApiEnabled === 'true') {
-              const statusLabel = STATUS_LABELS[status] || status;
+              const statusLabel = TICKET_STATUS_LABELS[status] || status;
               const siteUrl = settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com';
               const trackingLink = `${siteUrl}/ariza-sorgulama?no=${t.ticketNumber}`;
 
@@ -2451,7 +2509,7 @@ async function startServer() {
       allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
 
       const deviceName = `${t.deviceBrand || ''} ${t.deviceModel || ''}`.trim() || t.deviceType || 'Cihaz';
-      const statusLabel = STATUS_LABELS[t.status || 'yeni'] || t.status || 'Yeni';
+      const statusLabel = TICKET_STATUS_LABELS[t.status || 'yeni'] || t.status || 'Yeni';
       const siteUrl = settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com';
       const trackingLink = `${siteUrl}/ariza-sorgulama?no=${t.ticketNumber}`;
 
@@ -3381,19 +3439,8 @@ async function startServer() {
         return acc;
       }, {});
 
-      const statusMapDb: any = {
-        'yeni': 'Yeni',
-        'isleme_alindi': 'İşlemde',
-        'parca_bekliyor': 'Parça Bekleniyor',
-        'musteri_onayi_bekliyor': 'Onay Bekleniyor',
-        'cozuldu': 'Çözüldü',
-        'kapatildi': 'Kapatıldı',
-        'iptal': 'İptal',
-        'teslim_edildi': 'Teslim Edildi'
-      };
-
       const statusDistribution = Object.keys(statusCounts).map(k => ({
-        name: statusMapDb[k] || k,
+        name: TICKET_STATUS_LABELS[k] || k,
         value: statusCounts[k]
       }));
 
@@ -6581,11 +6628,6 @@ async function startServer() {
       const ticketTypeLabeled = ticketTypeDistribution.map(t => ({ ...t, name: TYPE_LABELS[t.name] || t.name }));
 
       // Ticket status summary
-      const STATUS_LABELS: Record<string, string> = {
-        yeni: 'Yeni', isleme_alindi: 'İşlemde', parca_bekliyor: 'Parça Bekleniyor',
-        musteri_onayi_bekliyor: 'Onay Bekliyor', cozuldu: 'Çözüldü', kapatildi: 'Kapatıldı',
-        iptal: 'İptal', teslim_edildi: 'Teslim Edildi',
-      };
       const ticketStatusRaw = await db.select({
         status: tickets.status,
         count: sql<number>`COUNT(*)`.as('count'),
@@ -6594,7 +6636,7 @@ async function startServer() {
         .groupBy(tickets.status);
 
       const ticketStatusSummary = ticketStatusRaw.map(s => ({
-        label: STATUS_LABELS[s.status] || s.status,
+        label: TICKET_STATUS_LABELS[s.status] || s.status,
         count: Number(s.count),
       }));
 

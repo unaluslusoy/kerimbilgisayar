@@ -7,28 +7,23 @@ import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
 import { mediaUrl } from '../../lib/media';
+import { TICKET_STATUS_LABELS } from '../../lib/ticketStatus';
 
 const STATUS_COLORS: Record<string, string> = {
   'yeni': 'bg-blue-100 text-blue-700',
   'isleme_alindi': 'bg-purple-100 text-purple-700',
   'parca_bekliyor': 'bg-orange-100 text-orange-700',
+  'dis_servis': 'bg-cyan-100 text-cyan-700',
   'musteri_onayi_bekliyor': 'bg-amber-100 text-amber-700',
+  'onay_red': 'bg-rose-100 text-rose-700',
   'cozuldu': 'bg-green-100 text-green-700',
+  'iade': 'bg-orange-100 text-orange-700',
   'kapatildi': 'bg-gray-100 text-gray-500',
   'teslim_edildi': 'bg-teal-100 text-teal-700',
   'iptal': 'bg-red-100 text-red-600',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  'yeni': 'Servise Alındı',
-  'isleme_alindi': 'Arıza Tespiti',
-  'parca_bekliyor': 'Parça Bekleniyor',
-  'musteri_onayi_bekliyor': 'Onay Bekleniyor',
-  'cozuldu': 'Çözüldü',
-  'kapatildi': 'Kapatıldı',
-  'teslim_edildi': 'Teslim Edildi',
-  'iptal': 'İptal',
-};
+const STATUS_LABELS = TICKET_STATUS_LABELS;
 
 const PRIORITY_LABELS: Record<string, string> = {
   'dusuk': 'Düşük',
@@ -44,9 +39,33 @@ const PRIORITY_COLORS: Record<string, string> = {
   'acil': 'text-red-600 font-bold',
 };
 
+const TYPE_LABELS: Record<string, string> = {
+  'ariza': 'Arıza',
+  'destek': 'Destek',
+  'kurulum': 'Kurulum',
+  'bakim': 'Bakım',
+  'diger': 'Diğer',
+};
+
 function formatDate(d: string) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Yüzlerce sayfa olduğunda tek tek buton basmak yerine pencereli sayfalama:
+// her zaman ilk/son sayfa + aktif sayfanın etrafı görünür, arası "..." ile kısaltılır.
+function getPaginationWindow(current: number, total: number): (number | '...')[] {
+  const delta = 2;
+  const range: number[] = [];
+  for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+    range.push(i);
+  }
+  const result: (number | '...')[] = [1];
+  if (range[0] > 2) result.push('...');
+  result.push(...range);
+  if (range[range.length - 1] < total - 1) result.push('...');
+  if (total > 1) result.push(total);
+  return result;
 }
 
 export default function ServiceManager() {
@@ -133,6 +152,7 @@ export default function ServiceManager() {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [deviceTypeFilter, setDeviceTypeFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
 
@@ -168,35 +188,48 @@ export default function ServiceManager() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [duplicateCustomers, setDuplicateCustomers] = useState<any[]>([]);
   const [searchingCustomer, setSearchingCustomer] = useState(false);
+  const customerSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const customerSearchRequestIdRef = useRef(0);
 
-  // Müşteri bilgileri girildikçe veritabanından eşleşen müşterileri bul
-  const checkDuplicateCustomers = async (field: 'name' | 'phone' | 'email', value: string) => {
+  // Müşteri bilgileri girildikçe veritabanından eşleşen müşterileri bul.
+  // Debounce'lu: her tuş vuruşunda değil, yazma durduktan 350ms sonra arar.
+  // Ayrıca yalnızca en son isteğin sonucu uygulanır — yavaş biten eski bir
+  // istek, daha sonra tamamlanan yeni bir aramanın sonucunu ezmesin diye.
+  const checkDuplicateCustomers = (field: 'name' | 'phone' | 'email', value: string) => {
+    if (customerSearchDebounceRef.current) clearTimeout(customerSearchDebounceRef.current);
+
     if (!value || value.length < 2) {
       setDuplicateCustomers([]);
+      customerSearchRequestIdRef.current += 1; // bekleyen eski istekleri geçersiz kıl
       return;
     }
-    setSearchingCustomer(true);
-    try {
-      const results = await searchAdminCustomers(value);
-      setDuplicateCustomers(results || []);
-      
-      // Auto-fill exactly matched customer (e.g. exactly same phone or email)
-      if (results && results.length === 1) {
-        const c = results[0];
-        const isPhoneMatch = field === 'phone' && c.phone && value.replace(/\D/g, '') === c.phone.replace(/\D/g, '');
-        const isEmailMatch = field === 'email' && c.email && value.toLowerCase() === c.email.toLowerCase();
-        
-        if (isPhoneMatch || isEmailMatch) {
-          // Auto select if exact match
-          selectExistingCustomer(c);
-          setDuplicateCustomers([]); // Hide warning since we auto-selected
+
+    customerSearchDebounceRef.current = setTimeout(async () => {
+      const requestId = ++customerSearchRequestIdRef.current;
+      setSearchingCustomer(true);
+      try {
+        const results = await searchAdminCustomers(value);
+        if (requestId !== customerSearchRequestIdRef.current) return; // daha yeni bir arama başladı, bu sonucu atla
+        setDuplicateCustomers(results || []);
+
+        // Auto-fill exactly matched customer (e.g. exactly same phone or email)
+        if (results && results.length === 1) {
+          const c = results[0];
+          const isPhoneMatch = field === 'phone' && c.phone && value.replace(/\D/g, '') === c.phone.replace(/\D/g, '');
+          const isEmailMatch = field === 'email' && c.email && value.toLowerCase() === c.email.toLowerCase();
+
+          if (isPhoneMatch || isEmailMatch) {
+            // Auto select if exact match
+            selectExistingCustomer(c);
+            setDuplicateCustomers([]); // Hide warning since we auto-selected
+          }
         }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (requestId === customerSearchRequestIdRef.current) setSearchingCustomer(false);
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSearchingCustomer(false);
-    }
+    }, 350);
   };
 
   const selectExistingCustomer = (c: any) => {
@@ -254,21 +287,25 @@ export default function ServiceManager() {
     statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
   });
 
-  const filtered = tickets.filter(t => {
-    const matchStatus = filter === 'all' || t.status === filter;
-    
+  // Durum (status tab) hariç tüm filtreleri uygular — hem List (üstüne status tab'ı ekler)
+  // hem de Kanban (her sütun kendi status'ünü uygular) bu TEK kaynaktan beslenir, böylece
+  // iki görünüm arasında geçince farklı sonuç kümesi görünmez.
+  const baseFiltered = tickets.filter(t => {
     const matchSearch = search === '' ||
       t.ticketNumber?.toLowerCase().includes(search.toLowerCase()) ||
       t.customerName?.toLowerCase().includes(search.toLowerCase()) ||
       t.subject?.toLowerCase().includes(search.toLowerCase()) ||
       t.customerPhone?.toLowerCase().includes(search.toLowerCase());
-      
+
     const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
     const matchTechnician = technicianFilter === 'all' || String(t.assignedTo) === String(technicianFilter);
     const matchDeviceType = deviceTypeFilter === 'all' || t.deviceType === deviceTypeFilter;
+    const matchType = typeFilter === 'all' || t.type === typeFilter;
 
-    return matchStatus && matchSearch && matchPriority && matchTechnician && matchDeviceType;
+    return matchSearch && matchPriority && matchTechnician && matchDeviceType && matchType;
   });
+
+  const filtered = baseFiltered.filter(t => filter === 'all' || t.status === filter);
 
   // Calculate paginated subset of filtered tickets
   const totalPages = Math.ceil(filtered.length / rowsPerPage);
@@ -278,7 +315,7 @@ export default function ServiceManager() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter, search, priorityFilter, technicianFilter, deviceTypeFilter]);
+  }, [filter, search, priorityFilter, technicianFilter, deviceTypeFilter, typeFilter]);
 
   const handleNewTicketPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -513,17 +550,19 @@ export default function ServiceManager() {
         fileSize: file.size,
       });
       
-      // Update ticket status to "teslim_edildi"
-      await updateAdminTicket(detailTicket.id, { 
+      // Update ticket status to "teslim_edildi" ve imzayı kendi kolonuna kaydet
+      await updateAdminTicket(detailTicket.id, {
         status: 'teslim_edildi',
+        deliverySignature: mediaData.fileUrl,
         technicianNotes: (detailTicket.technicianNotes || '') + '\n[Cihaz dijital imza karşılığında teslim edildi.]'
       });
-      
+
       // Update state
-      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, status: 'teslim_edildi' } : t));
-      setDetailTicket((prev: any) => ({ 
-        ...prev, 
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, status: 'teslim_edildi', deliverySignature: mediaData.fileUrl } : t));
+      setDetailTicket((prev: any) => ({
+        ...prev,
         status: 'teslim_edildi',
+        deliverySignature: mediaData.fileUrl,
         technicianNotes: (prev.technicianNotes || '') + '\n[Cihaz dijital imza karşılığında teslim edildi.]'
       }));
       
@@ -897,10 +936,14 @@ export default function ServiceManager() {
     { key: 'yeni', label: 'Servise Alındı' },
     { key: 'isleme_alindi', label: 'Arıza Tespiti' },
     { key: 'parca_bekliyor', label: 'Parça Bekl.' },
+    { key: 'dis_servis', label: 'Dış Serviste' },
     { key: 'musteri_onayi_bekliyor', label: 'Onay Bekl.' },
+    { key: 'onay_red', label: 'Teklif Red.' },
     { key: 'cozuldu', label: 'Çözüldü' },
+    { key: 'iade', label: 'İade Bekl.' },
     { key: 'teslim_edildi', label: 'Teslim Edildi' },
     { key: 'kapatildi', label: 'Kapatıldı' },
+    { key: 'iptal', label: 'İptal' },
   ];
 
   return (
@@ -966,7 +1009,21 @@ export default function ServiceManager() {
         </div>
 
         {/* Detailed Dropdown Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-gray-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-2 border-t border-gray-100">
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Talep Türü</label>
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">Tüm Türler</option>
+              {Object.entries(TYPE_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Öncelik Seviyesi</label>
             <select
@@ -1042,13 +1099,7 @@ export default function ServiceManager() {
             /* KANBAN GÖRÜNÜMÜ — HTML5 native drag & drop */
             <div className="flex gap-3 overflow-x-auto pb-4 min-h-[500px]">
               {FILTER_TABS.filter(t => t.key !== 'all').map(col => {
-                const colTickets = tickets.filter(t => {
-                  const matchSearch = search === '' ||
-                    t.ticketNumber?.toLowerCase().includes(search.toLowerCase()) ||
-                    t.customerName?.toLowerCase().includes(search.toLowerCase()) ||
-                    t.subject?.toLowerCase().includes(search.toLowerCase());
-                  return t.status === col.key && matchSearch;
-                });
+                const colTickets = baseFiltered.filter(t => t.status === col.key);
                 return (
                   <div
                     key={col.key}
@@ -1110,6 +1161,7 @@ export default function ServiceManager() {
                         <th className="py-3.5 px-4">Müşteri & İletişim</th>
                         <th className="py-3.5 px-4">Cihaz / Marka Model</th>
                         <th className="py-3.5 px-4">Şikayet / Konu</th>
+                        <th className="py-3.5 px-4">Tür</th>
                         <th className="py-3.5 px-4 text-center">Öncelik</th>
                         <th className="py-3.5 px-4">Atanan Personel</th>
                         <th className="py-3.5 px-4">Durum</th>
@@ -1133,7 +1185,7 @@ export default function ServiceManager() {
                           </td>
                           {/* Kayıt Tarihi */}
                           <td className="py-3.5 px-4 text-gray-500 whitespace-nowrap">
-                            {new Date(ticket.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            {formatDate(ticket.createdAt)}
                           </td>
                           {/* Müşteri & İletişim */}
                           <td className="py-3.5 px-4">
@@ -1148,6 +1200,12 @@ export default function ServiceManager() {
                           {/* Şikayet / Konu */}
                           <td className="py-3.5 px-4 max-w-xs">
                             <div className="truncate font-semibold text-gray-800" title={ticket.subject}>{ticket.subject}</div>
+                          </td>
+                          {/* Tür */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                              {TYPE_LABELS[ticket.type] || ticket.type || '—'}
+                            </span>
                           </td>
                           {/* Öncelik */}
                           <td className="py-3.5 px-4 text-center whitespace-nowrap">
@@ -1200,41 +1258,56 @@ export default function ServiceManager() {
               </div>
 
               {/* PAGINATION CONTROL BAR */}
-              {totalPages > 1 && (
+              {filtered.length > 0 && (
                 <div className="bg-white px-4 py-3.5 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
-                  <div className="text-xs text-gray-500 font-medium">
-                    Toplam <span className="font-bold text-gray-800">{filtered.length}</span> kayıttan <span className="font-bold text-gray-800">{startIndex + 1} - {Math.min(startIndex + rowsPerPage, filtered.length)}</span> arası gösteriliyor
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-500 font-medium">
+                      Toplam <span className="font-bold text-gray-800">{filtered.length}</span> kayıttan <span className="font-bold text-gray-800">{startIndex + 1} - {Math.min(startIndex + rowsPerPage, filtered.length)}</span> arası gösteriliyor
+                    </span>
+                    <select
+                      value={rowsPerPage}
+                      onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                      className="text-xs font-bold border border-gray-300 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none"
                     >
-                      Önceki
-                    </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      {[15, 25, 50, 100].map(n => <option key={n} value={n}>{n} / sayfa</option>)}
+                    </select>
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1">
                       <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={cn(
-                          "w-8 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center",
-                          currentPage === page
-                            ? "bg-primary text-white shadow-sm"
-                            : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                        )}
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        {page}
+                        Önceki
                       </button>
-                    ))}
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      Sonraki
-                    </button>
-                  </div>
+                      {getPaginationWindow(currentPage, totalPages).map((page, i) => (
+                        page === '...' ? (
+                          <span key={`gap-${i}`} className="w-8 h-8 flex items-center justify-center text-xs text-gray-400">…</span>
+                        ) : (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page as number)}
+                            className={cn(
+                              "w-8 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center",
+                              currentPage === page
+                                ? "bg-primary text-white shadow-sm"
+                                : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                            )}
+                          >
+                            {page}
+                          </button>
+                        )
+                      ))}
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Sonraki
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1485,7 +1558,7 @@ export default function ServiceManager() {
                         <p className="text-gray-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
                           <Clock className="w-3 h-3" /> Oluşturulma
                         </p>
-                        <p className="text-gray-855 font-bold text-sm">{formatDate(detailTicket.createdAt)}</p>
+                        <p className="text-gray-900 font-bold text-sm">{formatDate(detailTicket.createdAt)}</p>
                       </div>
                     </div>
                   )}
