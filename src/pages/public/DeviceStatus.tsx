@@ -214,7 +214,7 @@ export default function DeviceStatus() {
             <Search className="w-6 h-6 text-gray-400 ml-4 mr-2 shrink-0" />
             <input 
               type="text" 
-              placeholder="Örn: KB-2026-60160 veya 2"
+              placeholder="Takip Numaranızı Giriniz..."
               aria-label="Takip Numarası"
               className="flex-1 w-full bg-transparent border-none focus:outline-none text-gray-900 font-medium py-3 text-lg placeholder:text-gray-400 min-w-0 disabled:opacity-50"
               value={ticketId}
