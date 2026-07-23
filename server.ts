@@ -821,7 +821,7 @@ async function startServer() {
       const isNumeric = /^\d+$/.test(cleanCode);
       const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
 
-      // Kesin Birebir Eşleşme (Strict Exact Match - No Fuzzy LIKE %code%)
+      // Kesin Birebir Eşleşme (Exact Match with Padded Format Support)
       const whereConditions: any[] = [
         eq(tickets.ticketNumber, cleanCode),
         eq(tickets.ticketNumber, cleanCode.toUpperCase()),
@@ -830,6 +830,14 @@ async function startServer() {
 
       if (isNumeric && numVal > 0) {
         whereConditions.push(eq(tickets.id, numVal));
+        const padded4 = String(numVal).padStart(4, '0');
+        const padded6 = String(numVal).padStart(6, '0');
+        whereConditions.push(
+          eq(tickets.ticketNumber, `KB-2026-${padded4}`),
+          eq(tickets.ticketNumber, `KB-${padded6}`),
+          eq(tickets.ticketNumber, `KB-${numVal}`),
+          eq(tickets.ticketNumber, `SRV-${numVal}`)
+        );
       }
 
       const rows = await db.select()
@@ -847,6 +855,20 @@ async function startServer() {
       if (ticket.customerId) {
         const custRows = await db.select().from(customers).where(eq(customers.id, ticket.customerId)).limit(1);
         if (custRows.length > 0) customerInfo = custRows[0];
+      }
+      if (!customerInfo && ticket.userId) {
+        const userRows = await db.select().from(users).where(eq(users.id, ticket.userId)).limit(1);
+        if (userRows.length > 0) {
+          const u = userRows[0];
+          customerInfo = {
+            firstName: u.firstName,
+            lastName: u.lastName,
+            phone: u.phone,
+            email: u.email,
+            address: '',
+            companyName: ''
+          };
+        }
       }
 
       let deviceInfo: any = null;
@@ -1596,323 +1618,9 @@ async function startServer() {
     }
   });
 
-  // Tickets (Device Status)
-  app.get('/api/tickets/:ticketNumber', async (req, res) => {
-    try {
-      const result = await db.select({
-        dbId: tickets.id,
-        id: tickets.ticketNumber,
-        status: tickets.status,
-        brandModel: devices.name,
-        deviceType: devices.deviceType,
-        deviceBrand: devices.brand,
-        deviceModel: devices.model,
-        customerName: users.firstName,
-        customerLastName: users.lastName,
-        customerPhone: users.phone,
-        customerEmail: users.email,
-        issueDescription: tickets.description,
-        createdAt: tickets.createdAt,
-        updatedAt: tickets.updatedAt,
-        estimatedCost: tickets.cost,
-        laborCost: tickets.laborCost,
-        accessories: tickets.accessories,
-        customerAddress: companies.address,
-        companyName: companies.name,
-        taxId: companies.taxId,
-        taxOffice: companies.taxOffice
-      }).from(tickets)
-        .leftJoin(devices, eq(tickets.deviceId, devices.id))
-        .leftJoin(users, eq(tickets.userId, users.id))
-        .leftJoin(companies, eq(users.companyId, companies.id))
-        .where(eq(tickets.ticketNumber, req.params.ticketNumber))
-        .limit(1);
-      
-      if (result.length === 0) return res.status(404).json({ error: 'Ticket not found' });
-      
-      const t = result[0];
-      
-      // Fetch parts
-      const partsList = await db.select({
-        id: ticketParts.id,
-        name: stockItems.name,
-        quantity: ticketParts.quantity,
-        unitPrice: ticketParts.unitPrice,
-        totalPrice: ticketParts.totalPrice
-      }).from(ticketParts)
-        .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
-        .where(eq(ticketParts.ticketId, t.dbId));
 
-      const statusMapDb: any = {
-        'yeni': 'pending',
-        'isleme_alindi': 'diagnosing',
-        'parca_bekliyor': 'waiting_parts',
-        'musteri_onayi_bekliyor': 'waiting_parts',
-        'cozuldu': 'ready',
-        'kapatildi': 'delivered',
-        'iptal': 'delivered',
-        'teslim_edildi': 'delivered'
-      };
 
-      res.json({
-        dbId: t.dbId,
-        id: t.id,
-        status: statusMapDb[t.status || 'yeni'] || 'pending',
-        rawStatus: t.status || 'yeni',
-        brandModel: t.brandModel || 'Bilinmeyen Cihaz',
-        deviceType: t.deviceType || 'Bilinmeyen',
-        deviceBrand: t.deviceBrand,
-        deviceModel: t.deviceModel,
-        customerName: `${t.customerName || ''} ${t.customerLastName || ''}`.trim() || 'Müşteri',
-        customerPhone: t.customerPhone,
-        customerEmail: t.customerEmail,
-        customerAddress: t.customerAddress || '',
-        companyName: t.companyName || '',
-        taxId: t.taxId || '',
-        taxOffice: t.taxOffice || '',
-        issueDescription: t.issueDescription,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-        estimatedCost: t.estimatedCost ? parseFloat(t.estimatedCost) : null,
-        laborCost: t.laborCost ? parseFloat(t.laborCost) : 0,
-        accessories: t.accessories || '',
-        parts: partsList
-      });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
 
-  // Public Ticket Onaylama / Teklif Onayı
-  app.post('/api/tickets/:ticketNumber/approve', async (req, res) => {
-    try {
-      const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
-      if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
-      
-      const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.roleType, 'tenant_admin')).limit(1);
-      const adminUserId = adminUsers[0]?.id || 1;
-
-      let targetUserId = ticket[0].assignedTo || ticket[0].userId || adminUserId;
-      const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId)).limit(1);
-      if (!userExists.length) {
-        targetUserId = adminUserId;
-      }
-      
-      // Müşteri ismini users tablosundan çek
-      const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
-      const clientName = userRecord[0] ? `${userRecord[0].firstName} ${userRecord[0].lastName}` : 'Müşteri';
-
-      await db.transaction(async (tx) => {
-        await tx.update(tickets).set({ status: 'isleme_alindi', updatedAt: new Date() }).where(eq(tickets.id, ticket[0].id));
-        await tx.insert(ticketMessages).values({
-          tenantId: 1,
-          ticketId: ticket[0].id,
-          message: 'Müşteri arıza/onarım teklifini onayladı. Cihaz onarım aşamasına alındı.',
-          isInternal: true,
-          senderId: targetUserId
-        });
-        
-        // Adminlere bildirim gönder
-        await tx.insert(notifications).values({
-          tenantId: 1,
-          userId: adminUserId,
-          title: `Teklif Onaylandı: #${ticket[0].ticketNumber}`,
-          message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu cihazının onarım teklifini onayladı.`,
-          type: 'success',
-          isRead: false,
-          linkUrl: `/admin/servis`
-        });
-      });
-
-      // Müşteriye bildirim gönder (email + whatsapp)
-      await triggerStatusNotifications(ticket[0].id, 'isleme_alindi');
-
-      res.json({ success: true });
-    } catch (e: any) {
-      console.error('Approve error:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Public Ticket Reddetme / Teklif Reddi
-  app.post('/api/tickets/:ticketNumber/decline', async (req, res) => {
-    try {
-      const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
-      if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
-      
-      const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.roleType, 'tenant_admin')).limit(1);
-      const adminUserId = adminUsers[0]?.id || 1;
-
-      let targetUserId = ticket[0].assignedTo || ticket[0].userId || adminUserId;
-      const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId)).limit(1);
-      if (!userExists.length) {
-        targetUserId = adminUserId;
-      }
-
-      // Müşteri ismini users tablosundan çek
-      const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
-      const clientName = userRecord[0] ? `${userRecord[0].firstName} ${userRecord[0].lastName}` : 'Müşteri';
-
-      await db.transaction(async (tx) => {
-        await tx.update(tickets).set({ status: 'iptal', updatedAt: new Date() }).where(eq(tickets.id, ticket[0].id));
-        await tx.insert(ticketMessages).values({
-          tenantId: 1,
-          ticketId: ticket[0].id,
-          message: 'Müşteri onarım teklifini reddetti. Cihaz iptal durumuna alındı.',
-          isInternal: true,
-          senderId: targetUserId
-        });
-
-        // Adminlere bildirim gönder
-        await tx.insert(notifications).values({
-          tenantId: 1,
-          userId: adminUserId,
-          title: `Teklif Reddedildi: #${ticket[0].ticketNumber}`,
-          message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu cihazının teklifini reddetti.`,
-          type: 'warning',
-          isRead: false,
-          linkUrl: `/admin/servis`
-        });
-      });
-
-      // Müşteriye bildirim gönder (email + whatsapp)
-      await triggerStatusNotifications(ticket[0].id, 'iptal');
-
-      res.json({ success: true });
-    } catch (e: any) {
-      console.error('Decline error:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Public Ticket Ödeme Yapma / Havale Bildirimi
-  app.post('/api/tickets/:ticketNumber/pay', async (req, res) => {
-    try {
-      const { paymentMethod } = req.body;
-      if (!paymentMethod) return res.status(400).json({ error: 'Ödeme yöntemi belirtilmelidir' });
-      
-      const ticket = await db.select().from(tickets).where(eq(tickets.ticketNumber, req.params.ticketNumber)).limit(1);
-      if (!ticket.length) return res.status(404).json({ error: 'Ticket not found' });
-      
-      const tId = ticket[0].id;
-      const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.roleType, 'tenant_admin')).limit(1);
-      const adminUserId = adminUsers[0]?.id || 1;
-
-      let targetUserId = ticket[0].assignedTo || ticket[0].userId || adminUserId;
-      const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, targetUserId)).limit(1);
-      if (!userExists.length) {
-        targetUserId = adminUserId;
-      }
-
-      // Müşteri ismini users tablosundan çek
-      const userRecord = ticket[0].userId ? await db.select().from(users).where(eq(users.id, ticket[0].userId)).limit(1) : [];
-      const clientName = userRecord[0] ? `${userRecord[0].firstName} ${userRecord[0].lastName}` : 'Müşteri';
-
-      // Compute total cost
-      const parts = await db.select().from(ticketParts).where(eq(ticketParts.ticketId, tId));
-      const partsTotal = parts.reduce((sum, p) => sum + parseFloat(p.totalPrice || '0'), 0);
-      const laborCostVal = parseFloat(ticket[0].laborCost || '0');
-      const grandTotal = partsTotal + laborCostVal;
-
-      await db.transaction(async (tx) => {
-        // Insert payment record
-        await tx.insert(payments).values({
-          tenantId: 1,
-          ticketId: tId,
-          companyId: ticket[0].companyId,
-          amount: grandTotal.toFixed(2),
-          paymentMethod: paymentMethod === 'kredi_karti' ? 'kredi_karti' : paymentMethod === 'havale_eft' ? 'havale_eft' : 'nakit',
-          status: paymentMethod === 'havale_eft' ? 'bekliyor' : 'basarili',
-          notes: paymentMethod === 'kredi_karti' ? 'Müşteri online kredi kartı ile ödeme yaptı.' :
-                 paymentMethod === 'havale_eft' ? 'Müşteri havale ödeme bildirimi yaptı.' : 'Müşteri elden nakit ödeme seçti.',
-        } as any);
-
-        // Add internal message
-        await tx.insert(ticketMessages).values({
-          tenantId: 1,
-          ticketId: tId,
-          message: `Müşteri ödeme yöntemi olarak ${paymentMethod.toUpperCase()} seçti. Tutar: ${grandTotal.toFixed(2)} TL. Not: ${paymentMethod === 'havale_eft' ? 'Havale onayı bekleniyor.' : 'Ödeme başarılı.'}`,
-          isInternal: false,
-          senderId: targetUserId
-        });
-
-        // Adminlere bildirim gönder
-        await tx.insert(notifications).values({
-          tenantId: 1,
-          userId: adminUserId,
-          title: `Ödeme Yapıldı: #${ticket[0].ticketNumber}`,
-          message: `Müşteri ${clientName}, #${ticket[0].ticketNumber} nolu servis için ${paymentMethod.toUpperCase()} ile ${grandTotal.toFixed(2)} TL ödeme yaptı.`,
-          type: 'success',
-          isRead: false,
-          linkUrl: `/admin/servis`
-        });
-      });
-
-      // Müşteriye bildirim gönder (email + whatsapp)
-      if (userRecord.length) {
-        const u = userRecord[0];
-        let deviceName = 'Cihazınız';
-        if (ticket[0].deviceId) {
-          const deviceRecord = await db.select().from(devices).where(eq(devices.id, ticket[0].deviceId)).limit(1);
-          if (deviceRecord.length) {
-            deviceName = `${deviceRecord[0].brand || ''} ${deviceRecord[0].model || ''}`.trim() || deviceRecord[0].deviceType || 'Cihazınız';
-          }
-        }
-        
-        // 1. Email notification
-        if (u.email && !u.email.includes('@noemail.local')) {
-          const html = `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-              <div style="background-color: #16a34a; padding: 20px; text-align: center; color: white;">
-                <h2 style="margin: 0;">Kerim Bilgisayar Ödeme Onayı</h2>
-              </div>
-              <div style="padding: 30px; background-color: #ffffff; color: #374151;">
-                <p style="font-size: 16px;">Sayın <strong>${u.firstName} ${u.lastName}</strong>,</p>
-                <p style="font-size: 16px;"><strong>${deviceName}</strong> cihazınızın onarım ödemesi alınmıştır.</p>
-                
-                <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #16a34a;">
-                  <p style="margin: 0; font-size: 14px; color: #6b7280;">Kayıt Numarası:</p>
-                  <p style="margin: 5px 0 15px 0; font-size: 16px; font-weight: bold; color: #111827;">${ticket[0].ticketNumber}</p>
-                  
-                  <p style="margin: 0; font-size: 14px; color: #6b7280;">Ödeme Yöntemi:</p>
-                  <p style="margin: 5px 0 15px 0; font-size: 16px; font-weight: bold; color: #374151;">${paymentMethod.toUpperCase()}</p>
-
-                  <p style="margin: 0; font-size: 14px; color: #6b7280;">Toplam Ödenen Tutar:</p>
-                  <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: #16a34a;">${grandTotal.toFixed(2)} TL</p>
-                </div>
-                
-                <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">${paymentMethod === 'havale_eft' ? 'Havale/EFT bildiriminiz kontrol edildikten sonra onaylanacaktır.' : 'Ödemeniz başarıyla doğrulanmıştır.'} Teşekkür ederiz.</p>
-              </div>
-              <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb;">
-                © ${new Date().getFullYear()} Kerim Bilgisayar - Tüm Hakları Saklıdır.
-              </div>
-            </div>
-          `;
-          sendTicketEmail(u.email, `Ödeme Alındı: ${ticket[0].ticketNumber}`, html).catch(console.error);
-        }
-
-        // 2. WhatsApp notification
-        if (u.phone) {
-          const allSettings = await db.select().from(settings);
-          const settingsMap: Record<string, string> = {};
-          allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
-
-          if (settingsMap.whatsappApiEnabled === 'true') {
-            const statusMsg = paymentMethod === 'havale_eft' 
-              ? `Havale/EFT ödeme bildiriminiz alınmıştır (Onay bekleniyor). Tutar: ${grandTotal.toFixed(2)} TL.`
-              : `Ödemeniz başarıyla alınmıştır. Tutar: ${grandTotal.toFixed(2)} TL.`;
-            const text = `Sayın ${u.firstName} ${u.lastName}, ${ticket[0].ticketNumber} numaralı cihazınız için: ${statusMsg}`;
-            sendWhatsAppMessage(u.phone, text).catch(console.error);
-          }
-        }
-      }
-
-      res.json({ success: true, grandTotal });
-    } catch (e: any) {
-      console.error('Pay error:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
 
   // Appointments
   app.post('/api/appointments', async (req, res) => {
