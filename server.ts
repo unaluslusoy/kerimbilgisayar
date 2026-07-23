@@ -812,21 +812,30 @@ async function startServer() {
       const rawCode = (req.params.ticketNumber || req.query.no as string || '').trim();
       if (!rawCode) return res.status(400).json({ error: 'Takip numarası giriniz' });
 
-      // Güvenlik 1: Girdi Temizleme (Sanitization — SQL/XSS/Regex Injection Defense)
+      // Güvenlik 1: Girdi Temizleme (Sanitization)
       const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
-      if (cleanCode.length < 3 || cleanCode.length > 35) {
+      if (cleanCode.length < 1 || cleanCode.length > 50) {
         return res.status(400).json({ error: 'Geçersiz takip kodu biçimi' });
+      }
+
+      const isNumeric = /^\d+$/.test(cleanCode);
+      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
+
+      const whereConditions: any[] = [
+        eq(tickets.ticketNumber, cleanCode),
+        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+        like(tickets.ticketNumber, `%${cleanCode}%`),
+        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
+      ];
+
+      if (isNumeric && numVal > 0) {
+        whereConditions.push(eq(tickets.id, numVal));
       }
 
       const rows = await db.select()
         .from(tickets)
-        .where(
-          or(
-            eq(tickets.ticketNumber, cleanCode),
-            eq(tickets.ticketNumber, cleanCode.toUpperCase()),
-            sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
-          )
-        )
+        .where(or(...whereConditions))
+        .orderBy(desc(tickets.id))
         .limit(1);
 
       if (rows.length === 0) {
@@ -907,9 +916,16 @@ async function startServer() {
         return res.status(400).json({ error: 'Güvenlik doğrulaması (Captcha) başarısız. Lütfen tekrar deneyin.' });
       }
 
-      const rows = await db.select().from(tickets).where(
-        or(eq(tickets.ticketNumber, cleanCode), sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`)
-      ).limit(1);
+      const isNumeric = /^\d+$/.test(cleanCode);
+      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
+      const whereConditions: any[] = [
+        eq(tickets.ticketNumber, cleanCode),
+        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
+      ];
+      if (isNumeric && numVal > 0) whereConditions.push(eq(tickets.id, numVal));
+
+      const rows = await db.select().from(tickets).where(or(...whereConditions)).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
@@ -956,9 +972,59 @@ async function startServer() {
         return res.status(400).json({ error: 'Güvenlik doğrulaması (Captcha) başarısız.' });
       }
 
-      const rows = await db.select().from(tickets).where(
-        or(eq(tickets.ticketNumber, cleanCode), sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`)
-      ).limit(1);
+      const isNumeric = /^\d+$/.test(cleanCode);
+      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
+      const whereConditions: any[] = [
+        eq(tickets.ticketNumber, cleanCode),
+        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
+      ];
+      if (isNumeric && numVal > 0) whereConditions.push(eq(tickets.id, numVal));
+
+      const rows = await db.select().from(tickets).where(or(...whereConditions)).limit(1);
+
+      if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+      const ticket = rows[0];
+
+      if (['cozuldu', 'teslim_edildi', 'iptal'].includes(ticket.status)) {
+        return res.status(400).json({ error: 'Bu servis kaydı halihazırda sonuçlandırılmıştır.' });
+      }
+
+      await db.update(tickets).set({
+        status: 'iptal',
+        updatedAt: new Date(),
+      }).where(eq(tickets.id, ticket.id));
+
+      await db.insert(serviceStatusLogs).values({
+        ticketId: ticket.id,
+        toStatus: 'iptal',
+        notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini reddetti. Cihaz iade edilecek.`,
+      }).catch(() => {});
+
+      res.json({ success: true, message: 'Teklif reddedildi. Cihaz iade edilmek üzere hazırlanacaktır.' });
+    } catch (e: any) {
+      console.error('Ticket decline error:', e);
+      res.status(500).json({ error: e.message || 'İşlem başarısız.' });
+    }
+  });
+
+  // Müşteri Web Üzerinden Ödeme Kaydı (Pay)
+  app.post('/api/tickets/:ticketNumber/pay', ticketActionLimiter, async (req, res) => {
+    try {
+      const rawCode = (req.params.ticketNumber || '').trim();
+      const cleanCode = rawCode.replace(/[^A-Za-z0-9\-]/g, '');
+      const { paymentMethod } = req.body;
+
+      const isNumeric = /^\d+$/.test(cleanCode);
+      const numVal = isNumeric ? parseInt(cleanCode, 10) : -1;
+      const whereConditions: any[] = [
+        eq(tickets.ticketNumber, cleanCode),
+        eq(tickets.ticketNumber, cleanCode.toUpperCase()),
+        sql`CAST(${tickets.id} AS CHAR) = ${cleanCode}`
+      ];
+      if (isNumeric && numVal > 0) whereConditions.push(eq(tickets.id, numVal));
+
+      const rows = await db.select().from(tickets).where(or(...whereConditions)).limit(1);
 
       if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
       const ticket = rows[0];
