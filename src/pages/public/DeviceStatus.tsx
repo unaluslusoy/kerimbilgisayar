@@ -268,35 +268,49 @@ export default function DeviceStatus() {
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-gray-50/80 p-5 rounded-2xl border border-gray-200/80 shadow-inner">
-                        {/* Müşteri Bilgileri (** Maskeli KVKK Uyumlu) */}
-                        <div>
-                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Müşteri Adı</p>
-                          <p className="font-bold text-gray-800">{result.customerName || 'Müşteri Kaydı'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Telefon Numarası</p>
-                          <p className="font-mono font-bold text-gray-800">{result.customerPhone || '05** *** ** **'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">E-Posta Adresi</p>
-                          <p className="font-bold text-gray-800">{result.customerEmail || 'mus****@***.com'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Teslimat / Kayıt Adresi</p>
-                          <p className="font-bold text-gray-800">{result.customerAddress || 'Adres Kayıtlı'}</p>
-                        </div>
+                        {/* Müşteri Bilgileri (Veritabanından Gelen Gerçek Veriler) */}
+                        {result.customerName && (
+                          <div>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Müşteri Adı</p>
+                            <p className="font-bold text-gray-800">{result.customerName}</p>
+                          </div>
+                        )}
+                        {result.customerPhone && (
+                          <div>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Telefon Numarası</p>
+                            <p className="font-mono font-bold text-gray-800">{result.customerPhone}</p>
+                          </div>
+                        )}
+                        {result.customerEmail && (
+                          <div>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">E-Posta Adresi</p>
+                            <p className="font-bold text-gray-800">{result.customerEmail}</p>
+                          </div>
+                        )}
+                        {result.customerAddress && (
+                          <div>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Teslimat / Kayıt Adresi</p>
+                            <p className="font-bold text-gray-800">{result.customerAddress}</p>
+                          </div>
+                        )}
 
                         {/* Ürün & Cihaz Bilgileri */}
-                        <div className="md:col-span-2 border-t border-gray-200 pt-3 mt-1 grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Cihaz Türü / Kategorisi</p>
-                            <p className="font-bold text-gray-900 capitalize">{result.deviceType || 'Bilgisayar / Elektronik'}</p>
+                        {(result.deviceType || result.serialNumber) && (
+                          <div className="md:col-span-2 border-t border-gray-200 pt-3 mt-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {result.deviceType && (
+                              <div>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Cihaz Türü / Kategorisi</p>
+                                <p className="font-bold text-gray-900 capitalize">{result.deviceType}</p>
+                              </div>
+                            )}
+                            {result.serialNumber && (
+                              <div>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Seri Numarası / Kodu</p>
+                                <p className="font-mono font-bold text-gray-900">{result.serialNumber}</p>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-0.5">Seri Numarası / Kodu</p>
-                            <p className="font-mono font-bold text-gray-900">{result.serialNumber || 'Seri No Kayıtlı Değil'}</p>
-                          </div>
-                        </div>
+                        )}
 
                         {result.accessories && (
                           <div className="md:col-span-2 border-t border-gray-200 pt-3">
