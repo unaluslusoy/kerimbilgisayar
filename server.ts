@@ -138,6 +138,7 @@ import {
   ticketPhysicalConditions,
   ticketFunctionTests,
   ticketApprovalRequests,
+  ticketSupplyRequests,
 } from './src/db/schema';
 
 import { eq, desc, and, or, sql, asc, like } from 'drizzle-orm';
@@ -450,7 +451,7 @@ async function startServer() {
   };
 
   let settingsCache: { data: Record<string, string>; fetchedAt: number } | null = null;
-  const SETTINGS_CACHE_TTL = 15_000; // 15 seconds
+  const SETTINGS_CACHE_TTL = 60_000; // 60 seconds — reduce DB load per request
 
   const readSettingsMap = async (forceRefresh = false) => {
     const now = Date.now();
@@ -472,7 +473,7 @@ async function startServer() {
   };
 
   let activeDbBlockedIpsCache: { map: Map<string, number>; fetchedAt: number } | null = null;
-  const DB_BLOCKED_IPS_CACHE_TTL = 30_000; // 30 seconds
+  const DB_BLOCKED_IPS_CACHE_TTL = 60_000; // 60 seconds — reduce DB load per request
 
   const getActiveDbBlockedIps = async () => {
     const now = Date.now();
@@ -2206,6 +2207,71 @@ async function startServer() {
     }
   });
 
+  // Tedarik talebi (stokta olmayan parça tedarikçiden istendiğinde takip edilir)
+  app.get('/api/admin/tickets/:id/supply-requests', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const rows = await db.select().from(ticketSupplyRequests)
+        .where(eq(ticketSupplyRequests.ticketId, ticketId))
+        .orderBy(desc(ticketSupplyRequests.createdAt));
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/tickets/:id/supply-requests', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const { itemName, supplier, etaDate } = req.body;
+      if (!itemName?.trim()) return res.status(400).json({ error: 'Kalem adı zorunludur.' });
+      const adminUser = (req as any).adminUser;
+
+      const [ticket] = await db.select({ tenantId: tickets.tenantId, ticketNumber: tickets.ticketNumber }).from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+      if (!ticket) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+
+      await db.insert(ticketSupplyRequests).values({
+        ticketId,
+        itemName: itemName.trim(),
+        supplier: supplier?.trim() || null,
+        etaDate: etaDate || null,
+        createdBy: adminUser?.userId || null,
+      });
+
+      await db.insert(serviceStatusLogs).values({
+        tenantId: ticket.tenantId,
+        ticketId,
+        toStatus: 'parca_bekliyor',
+        notes: `Tedarik talebi açıldı: ${itemName.trim()}${supplier ? ` (${supplier.trim()})` : ''}${etaDate ? ` — tahmini: ${etaDate}` : ''}`,
+      }).catch(() => {});
+
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/supply-requests/:id/arrived', requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const [reqRow] = await db.select().from(ticketSupplyRequests).where(eq(ticketSupplyRequests.id, id)).limit(1);
+      if (!reqRow) return res.status(404).json({ error: 'Tedarik talebi bulunamadı' });
+      await db.update(ticketSupplyRequests).set({ arrivedAt: new Date() }).where(eq(ticketSupplyRequests.id, id));
+
+      const [ticket] = await db.select({ tenantId: tickets.tenantId }).from(tickets).where(eq(tickets.id, reqRow.ticketId)).limit(1);
+      await db.insert(serviceStatusLogs).values({
+        tenantId: ticket?.tenantId,
+        ticketId: reqRow.ticketId,
+        toStatus: 'isleme_alindi',
+        notes: `Tedarik parçası geldi: ${reqRow.itemName} — süreç devam edebilir.`,
+      }).catch(() => {});
+
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ============================================================
   // ADMIN API — TICKETS (Servis Kayıtları)
   // ============================================================
@@ -2261,6 +2327,10 @@ async function startServer() {
         dataLossConsentAt: tickets.dataLossConsentAt,
         accessInfoConsentAt: tickets.accessInfoConsentAt,
         expertiseFeeConsentAt: tickets.expertiseFeeConsentAt,
+        externalServiceName: tickets.externalServiceName,
+        externalSentAt: tickets.externalSentAt,
+        externalCost: tickets.externalCost,
+        externalReturnedAt: tickets.externalReturnedAt,
       }).from(tickets)
         .leftJoin(users, eq(tickets.userId, users.id))
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
@@ -2464,6 +2534,7 @@ async function startServer() {
         customerName, customerPhone, customerEmail, address,
         deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword, deviceTypeId, color, variant,
         deliverySignature, customerSignature,
+        externalServiceName, externalCost, externalSentAction, externalReturnedAction,
       } = req.body;
 
       if (imei && !isValidImei(imei)) {
@@ -2501,6 +2572,12 @@ async function startServer() {
       if (customerSignature !== undefined) updateData.customerSignature = customerSignature;
       if (status === 'cozuldu' || status === 'kapatildi') updateData.resolvedAt = new Date();
       if (status === 'teslim_edildi') updateData.deliveredAt = new Date();
+      // Teslim yaşlandırma sayacı: çözüldü/iade durumuna geçişte başlar (2D)
+      if (status === 'cozuldu' || status === 'iade') updateData.readySince = new Date();
+      if (externalServiceName !== undefined) updateData.externalServiceName = externalServiceName;
+      if (externalCost !== undefined) updateData.externalCost = externalCost;
+      if (externalSentAction) updateData.externalSentAt = new Date();
+      if (externalReturnedAction) updateData.externalReturnedAt = new Date();
 
       const ticketId = parseInt(req.params.id);
 
@@ -7252,6 +7329,14 @@ async function startServer() {
       }
       res.send('FAILED');
     } catch (e: any) { res.status(500).send('ERROR: ' + e.message); }
+  });
+
+  // ─── GLOBAL ERROR HANDLER — yakalanmamış async hataları 503 yerine 500 ile döndür
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('[Express Error]', req.method, req.path, err?.message || err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Sunucu hatası, lütfen tekrar deneyin' });
+    }
   });
 
   // SPA catch-all — API ve uploads dışındaki her route index.html döner

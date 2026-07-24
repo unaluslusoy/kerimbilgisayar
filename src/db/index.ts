@@ -40,11 +40,12 @@ const poolConnection = mysql.createPool({
   uri: connectionString,
   waitForConnections: true,
   connectionLimit: 25,
-  maxIdle: 25,
-  idleTimeout: 30000,
-  queueLimit: 0,
+  maxIdle: 10,
+  idleTimeout: 60000,
+  queueLimit: 50,
   enableKeepAlive: true,
-  keepAliveInitialDelay: 0
+  keepAliveInitialDelay: 10000,
+  connectTimeout: 5000,
 });
 
 export const db = drizzle(poolConnection, { schema, mode: 'default' });
