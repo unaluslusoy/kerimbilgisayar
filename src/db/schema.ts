@@ -308,6 +308,11 @@ export const tickets = mysqlTable('tickets', {
   deliveredAt: timestamp('delivered_at'),
   customerSignature: text('customer_signature'),
   deliverySignature: text('delivery_signature'),
+  // --- 1E: Yasal Onay Metinleri (KVKK / erişim bilgisi / ekspertiz ücreti) ---
+  kvkkConsentAt: timestamp('kvkk_consent_at'),
+  dataLossConsentAt: timestamp('data_loss_consent_at'),
+  accessInfoConsentAt: timestamp('access_info_consent_at'),
+  expertiseFeeConsentAt: timestamp('expertise_fee_consent_at'),
   // --- FAZ 1B: Bayi Entegrasyonu ---
   dealerId: int('dealer_id').references(() => companies.id),
   source: mysqlEnum('source', ['walk_in', 'dealer', 'online', 'phone']).default('walk_in'),

@@ -387,6 +387,14 @@ export default function TicketPrintView() {
         </div>
       )}
 
+      {/* Yasal Onay Metinleri */}
+      <div className="mb-2 text-[7.5pt] text-left text-black leading-tight space-y-0.5">
+        <p>{ticket.kvkkConsentAt ? "☑" : "☐"} KVKK aydınlatma metni onayı</p>
+        <p>{ticket.dataLossConsentAt ? "☑" : "☐"} Veri kaybı riski bilgilendirmesi</p>
+        <p>{ticket.accessInfoConsentAt ? "☑" : "☐"} Cihaz erişim bilgisi kullanım onayı</p>
+        <p>{ticket.expertiseFeeConsentAt ? "☑" : "☐"} Ekspertiz ücreti bilgilendirmesi</p>
+      </div>
+
       {/* İmzalar */}
       {posConfig.showSignature && (
         <div className="mt-4 text-center border-b border-dashed border-black pb-4 font-mono text-[9.5pt]">
@@ -606,6 +614,14 @@ export default function TicketPrintView() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Yasal Onay Metinleri (KVKK / Erişim Bilgisi / Ekspertiz Ücreti) */}
+      <div className="mt-2 pt-1 border-t border-gray-100 text-[7.5px] text-gray-500 leading-tight space-y-0.5">
+        <p>{ticket.kvkkConsentAt ? "☑" : "☐"} Müşteri, kişisel verilerinin KVKK kapsamında işlenmesine dair aydınlatma metnini okuduğunu ve onayladığını beyan eder.</p>
+        <p>{ticket.dataLossConsentAt ? "☑" : "☐"} Müşteri, onarım sürecinde veri kaybı yaşanabileceği konusunda bilgilendirilmiştir.</p>
+        <p>{ticket.accessInfoConsentAt ? "☑" : "☐"} Müşteri, cihaz erişim bilgilerinin (PIN/desen/hesap şifresi) yalnızca onarım amacıyla kullanılacağı konusunda bilgilendirilmiştir.</p>
+        <p>{ticket.expertiseFeeConsentAt ? "☑" : "☐"} Müşteri, teklifi reddetmesi halinde ekspertiz ücreti tahakkuk edebileceği konusunda bilgilendirilmiştir.</p>
       </div>
 
       {/* Signature block */}

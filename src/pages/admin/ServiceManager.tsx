@@ -211,6 +211,10 @@ export default function ServiceManager() {
     taxId: '',
     taxOffice: '',
     address: '',
+    consentKvkk: false,
+    consentDataLoss: false,
+    consentAccessInfo: false,
+    consentExpertiseFee: false,
   });
 
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -424,6 +428,10 @@ export default function ServiceManager() {
         taxId: '',
         taxOffice: '',
         address: '',
+        consentKvkk: false,
+        consentDataLoss: false,
+        consentAccessInfo: false,
+        consentExpertiseFee: false,
       });
       await loadTickets();
       if (res && res.ticketNumber) {
@@ -2863,6 +2871,28 @@ export default function ServiceManager() {
                       placeholder="Teknik ön tespit, olası sorunlar..."
                       className="bg-white rounded-xl shadow-sm"
                     />
+                  </div>
+
+                  <div className="border border-amber-200 bg-amber-50/40 rounded-2xl p-4 space-y-2.5">
+                    <p className="text-xs font-bold text-amber-800 uppercase tracking-widest flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5" /> Müşteri Onay Beyanları
+                    </p>
+                    <label className="flex items-start gap-2 text-xs text-gray-700">
+                      <input type="checkbox" checked={newTicket.consentKvkk} onChange={e => setNewTicket({ ...newTicket, consentKvkk: e.target.checked })} className="w-4 h-4 rounded border-gray-300 mt-0.5" />
+                      <span>Müşteri, kişisel verilerinin KVKK kapsamında işlenmesine dair aydınlatma metnini okuduğunu ve onayladığını beyan etmiştir.</span>
+                    </label>
+                    <label className="flex items-start gap-2 text-xs text-gray-700">
+                      <input type="checkbox" checked={newTicket.consentDataLoss} onChange={e => setNewTicket({ ...newTicket, consentDataLoss: e.target.checked })} className="w-4 h-4 rounded border-gray-300 mt-0.5" />
+                      <span>Müşteri, onarım sürecinde veri kaybı yaşanabileceği konusunda bilgilendirilmiştir.</span>
+                    </label>
+                    <label className="flex items-start gap-2 text-xs text-gray-700">
+                      <input type="checkbox" checked={newTicket.consentAccessInfo} onChange={e => setNewTicket({ ...newTicket, consentAccessInfo: e.target.checked })} className="w-4 h-4 rounded border-gray-300 mt-0.5" />
+                      <span>Müşteri, cihaz erişim bilgilerinin (PIN/desen/hesap şifresi) yalnızca onarım amacıyla kullanılacağı konusunda bilgilendirilmiştir.</span>
+                    </label>
+                    <label className="flex items-start gap-2 text-xs text-gray-700">
+                      <input type="checkbox" checked={newTicket.consentExpertiseFee} onChange={e => setNewTicket({ ...newTicket, consentExpertiseFee: e.target.checked })} className="w-4 h-4 rounded border-gray-300 mt-0.5" />
+                      <span>Müşteri, teklifi reddetmesi halinde ekspertiz ücreti tahakkuk edebileceği konusunda bilgilendirilmiştir.</span>
+                    </label>
                   </div>
                 </div>
               )}

@@ -142,6 +142,7 @@ import { alias } from 'drizzle-orm/mysql-core';
 import crypto from 'crypto';
 import { sendTicketEmail, getStatusEmailTemplate } from './src/lib/mail';
 import { TICKET_STATUS_LABELS, TICKET_TERMINAL_STATUSES } from './src/lib/ticketStatus';
+import { encryptField, decryptField } from './src/lib/fieldCrypto';
 
 const uploadsDir = path.join(rootDir, 'uploads');
 
@@ -943,6 +944,9 @@ async function startServer() {
         deviceModel,
         deviceType,
         serialNumber,
+        imei: deviceInfo?.imei || '',
+        patternLock: decryptField(deviceInfo?.patternLock) || '',
+        pinPassword: decryptField(deviceInfo?.pinPassword) || '',
         issueDescription,
         accessories,
         customerName: maskName(rawName),
@@ -2105,6 +2109,10 @@ async function startServer() {
         dealerName: dealerAlias.name,
         technicianNotes: tickets.technicianNotes,
         accessories: tickets.accessories,
+        kvkkConsentAt: tickets.kvkkConsentAt,
+        dataLossConsentAt: tickets.dataLossConsentAt,
+        accessInfoConsentAt: tickets.accessInfoConsentAt,
+        expertiseFeeConsentAt: tickets.expertiseFeeConsentAt,
       }).from(tickets)
         .leftJoin(users, eq(tickets.userId, users.id))
         .leftJoin(devices, eq(tickets.deviceId, devices.id))
@@ -2114,7 +2122,10 @@ async function startServer() {
 
       res.json(results.map(t => ({
         ...t,
-        customerName: `${t.customerName || ''} ${t.customerLastName || ''}`.trim() || 'Müşteri'
+        customerName: `${t.customerName || ''} ${t.customerLastName || ''}`.trim() || 'Müşteri',
+        patternLock: decryptField(t.patternLock),
+        pinPassword: decryptField(t.pinPassword),
+        deviceEmailPassword: decryptField(t.deviceEmailPassword),
       })));
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -2127,6 +2138,7 @@ async function startServer() {
         subject, description, type, priority, customerName, customerPhone, customerEmail, deviceType, deviceBrand, deviceModel, cost, dealerId, source, assignedTo, accessories, technicianNotes,
         deviceSerial, imei, patternLock, pinPassword, deviceEmail, deviceEmailPassword, deviceTypeId, color, variant,
         customerType, companyName, taxId, taxOffice, address,
+        consentKvkk, consentDataLoss, consentAccessInfo, consentExpertiseFee,
       } = req.body;
 
       if (imei && !isValidImei(imei)) {
@@ -2247,10 +2259,10 @@ async function startServer() {
             name: `${deviceBrand || ''} ${deviceModel || ''}`.trim() || deviceType || 'Cihaz',
             serialNumber: deviceSerial || null,
             imei: imei || null,
-            patternLock: patternLock || null,
-            pinPassword: pinPassword || null,
+            patternLock: encryptField(patternLock || null),
+            pinPassword: encryptField(pinPassword || null),
             deviceEmail: deviceEmail || null,
-            deviceEmailPassword: deviceEmailPassword || null,
+            deviceEmailPassword: encryptField(deviceEmailPassword || null),
           });
           deviceId = (newDevice[0] as any).insertId;
         }
@@ -2275,6 +2287,10 @@ async function startServer() {
           assignedTo: assignedTo ? parseInt(assignedTo as string) : null,
           accessories: accessories || '',
           technicianNotes: technicianNotes || '',
+          kvkkConsentAt: consentKvkk ? new Date() : null,
+          dataLossConsentAt: consentDataLoss ? new Date() : null,
+          accessInfoConsentAt: consentAccessInfo ? new Date() : null,
+          expertiseFeeConsentAt: consentExpertiseFee ? new Date() : null,
         });
         req.body.insertedTicketId = (newTicketRecord[0] as any).insertId;
       });
@@ -2376,10 +2392,10 @@ async function startServer() {
           if (deviceModel !== undefined) deviceUpdate.model = deviceModel;
           if (imei !== undefined) deviceUpdate.imei = imei;
           if (deviceSerial !== undefined) deviceUpdate.serialNumber = deviceSerial;
-          if (patternLock !== undefined) deviceUpdate.patternLock = patternLock;
-          if (pinPassword !== undefined) deviceUpdate.pinPassword = pinPassword;
+          if (patternLock !== undefined) deviceUpdate.patternLock = encryptField(patternLock);
+          if (pinPassword !== undefined) deviceUpdate.pinPassword = encryptField(pinPassword);
           if (deviceEmail !== undefined) deviceUpdate.deviceEmail = deviceEmail;
-          if (deviceEmailPassword !== undefined) deviceUpdate.deviceEmailPassword = deviceEmailPassword;
+          if (deviceEmailPassword !== undefined) deviceUpdate.deviceEmailPassword = encryptField(deviceEmailPassword);
           if (deviceTypeId !== undefined) deviceUpdate.deviceTypeId = deviceTypeId ? parseInt(deviceTypeId as string) : null;
           if (color !== undefined) deviceUpdate.color = color;
           if (variant !== undefined) deviceUpdate.variant = variant;
