@@ -1,8 +1,8 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw, History, Settings2 } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw, History, Settings2, ClipboardCheck, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment, fetchTicketActivity } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment, fetchTicketActivity, fetchTicketExpertise, saveTicketExpertise, fetchTicketApprovalRequests, recordManualApproval } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
@@ -46,6 +46,11 @@ const TYPE_LABELS: Record<string, string> = {
   'bakim': 'Bakım',
   'diger': 'Diğer',
 };
+
+const PHYSICAL_CONDITIONS = [
+  'Ekran/panel çizik', 'Ekran/panel kırık', 'Kasa çizik / ezik', 'Parça eksik',
+  'Sıvı teması şüphesi', 'Cihaz açılmıyor', 'Daha önce müdahale görmüş',
+];
 
 // IMEI Luhn algoritması doğrulaması (GSMA standardı — 15 hane). Server tarafında da tekrar kontrol edilir.
 function isValidImei(imei: string): boolean {
@@ -128,6 +133,11 @@ export default function ServiceManager() {
   const [isAssigning, setIsAssigning] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [activityFilter, setActivityFilter] = useState<'all' | 'note' | 'status' | 'audit'>('all');
+  const [physicalConditions, setPhysicalConditions] = useState<Set<string>>(new Set());
+  const [functionTestResults, setFunctionTestResults] = useState<Record<string, string>>({});
+  const [isSavingExpertise, setIsSavingExpertise] = useState(false);
+  const [approvalRequests, setApprovalRequests] = useState<any[]>([]);
+  const [isRecordingManualApproval, setIsRecordingManualApproval] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -489,6 +499,7 @@ export default function ServiceManager() {
       if (detailTicket?.id === id) {
         setDetailTicket((prev: any) => ({ ...prev, status }));
         loadActivityFeed(id);
+        fetchTicketApprovalRequests(id).then(r => setApprovalRequests(r || [])).catch(() => {});
       }
     } catch (e: any) {
       alert('Hata: ' + e.message);
@@ -822,6 +833,22 @@ export default function ServiceManager() {
     loadActivityFeed(ticket.id);
 
     try {
+      const exp = await fetchTicketExpertise(ticket.id);
+      setPhysicalConditions(new Set(exp?.physicalConditions || []));
+      setFunctionTestResults(exp?.functionTests || {});
+    } catch (e) {
+      setPhysicalConditions(new Set());
+      setFunctionTestResults({});
+    }
+
+    try {
+      const reqs = await fetchTicketApprovalRequests(ticket.id);
+      setApprovalRequests(reqs || []);
+    } catch (e) {
+      setApprovalRequests([]);
+    }
+
+    try {
       const parts = await fetchTicketParts(ticket.id);
       setTicketParts(parts || []);
     } catch (e) {
@@ -978,6 +1005,55 @@ export default function ServiceManager() {
       loadActivityFeed(detailTicket?.id);
     } catch (e: any) {
       alert('Silme hatası: ' + e.message);
+    }
+  };
+
+  const togglePhysicalCondition = (key: string) => {
+    setPhysicalConditions(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const setFunctionTestResult = (testName: string, result: 'ok' | 'fail' | 'na') => {
+    setFunctionTestResults(prev => ({ ...prev, [testName]: prev[testName] === result ? '' : result }));
+  };
+
+  const handleSaveExpertise = async () => {
+    if (!detailTicket) return;
+    setIsSavingExpertise(true);
+    try {
+      await saveTicketExpertise(detailTicket.id, {
+        physicalConditions: Array.from(physicalConditions),
+        functionTests: functionTestResults,
+      });
+      loadActivityFeed(detailTicket.id);
+      alert('Ekspertiz kaydedildi.');
+    } catch (e: any) {
+      alert('Ekspertiz kaydedilirken hata: ' + e.message);
+    } finally {
+      setIsSavingExpertise(false);
+    }
+  };
+
+  const handleManualApproval = async (decision: 'approved' | 'rejected') => {
+    if (!detailTicket) return;
+    const label = decision === 'approved' ? 'onayladığını' : 'reddettiğini';
+    if (!window.confirm(`Müşterinin teklifi telefon/yüz yüze görüşmede ${label} kaydetmek istediğinize emin misiniz?`)) return;
+    setIsRecordingManualApproval(true);
+    try {
+      await recordManualApproval(detailTicket.id, decision);
+      const newStatus = decision === 'approved' ? 'isleme_alindi' : 'onay_red';
+      setDetailTicket((prev: any) => ({ ...prev, status: newStatus }));
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, status: newStatus } : t));
+      loadActivityFeed(detailTicket.id);
+      const reqs = await fetchTicketApprovalRequests(detailTicket.id);
+      setApprovalRequests(reqs || []);
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setIsRecordingManualApproval(false);
     }
   };
 
@@ -1864,6 +1940,66 @@ export default function ServiceManager() {
                     )}
                   </div>
 
+                  {/* Ekspertiz: Fiziksel Durum & Fonksiyon Testi */}
+                  <div className="border border-gray-200 rounded-2xl p-4 bg-white shadow-sm space-y-4">
+                    <p className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                      <ClipboardCheck className="w-4 h-4 text-indigo-500" /> Ekspertiz
+                    </p>
+
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Fiziksel Durum Bulguları</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {PHYSICAL_CONDITIONS.map(c => (
+                          <button key={c} type="button" onClick={() => togglePhysicalCondition(c)}
+                            className={cn(
+                              'px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors',
+                              physicalConditions.has(c) ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'
+                            )}>
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const profile = deviceTypes.find(dt => dt.name === detailTicket.deviceType);
+                      const testList: string[] = profile?.tests || [];
+                      if (testList.length === 0) return null;
+                      return (
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Fonksiyon Testi ({profile?.name})</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {testList.map(testName => {
+                              const result = functionTestResults[testName];
+                              return (
+                                <div key={testName} className="flex items-center justify-between gap-2 border border-gray-100 rounded-xl px-2.5 py-1.5 bg-gray-50/50">
+                                  <span className="text-[11px] font-semibold text-gray-700 truncate">{testName}</span>
+                                  <div className="flex gap-0.5 shrink-0">
+                                    {([
+                                      { v: 'ok', icon: CheckCircle2, cls: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+                                      { v: 'fail', icon: XCircle, cls: 'bg-red-100 text-red-600 border-red-300' },
+                                      { v: 'na', icon: MinusCircle, cls: 'bg-gray-100 text-gray-500 border-gray-300' },
+                                    ] as const).map(({ v, icon: Icon, cls }) => (
+                                      <button key={v} type="button" onClick={() => setFunctionTestResult(testName, v)}
+                                        className={cn('p-1 rounded-lg border transition-colors', result === v ? cls : 'border-transparent text-gray-300 hover:text-gray-400')}>
+                                        <Icon className="w-3.5 h-3.5" />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    <button type="button" onClick={handleSaveExpertise} disabled={isSavingExpertise}
+                      className="w-full bg-gray-900 hover:bg-black text-white text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50">
+                      {isSavingExpertise ? 'Kaydediliyor...' : 'Ekspertizi Kaydet'}
+                    </button>
+                  </div>
+
                   {/* Personel Atama */}
                   <div className="border border-gray-200 rounded-2xl p-4 bg-blue-50/30">
                     <div className="flex items-center justify-between mb-2">
@@ -2160,6 +2296,43 @@ export default function ServiceManager() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Onay & Fiyat Kilidi */}
+                  {(detailTicket.status === 'musteri_onayi_bekliyor' || approvalRequests.length > 0) && (
+                    <div className="border border-gray-200 rounded-2xl p-4 bg-indigo-50/20">
+                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Onay & Fiyat Kilidi</p>
+
+                      {detailTicket.status === 'musteri_onayi_bekliyor' && (
+                        <div className="flex gap-2 mb-3">
+                          <button onClick={() => handleManualApproval('approved')} disabled={isRecordingManualApproval}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50">
+                            Manuel Onay Kaydet (Telefon/Yüz Yüze)
+                          </button>
+                          <button onClick={() => handleManualApproval('rejected')} disabled={isRecordingManualApproval}
+                            className="flex-1 border border-red-300 hover:bg-red-50 text-red-700 text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50">
+                            Manuel Red Kaydet
+                          </button>
+                        </div>
+                      )}
+
+                      {approvalRequests.length > 0 && (
+                        <div className="space-y-1.5">
+                          {approvalRequests.map((r) => (
+                            <div key={r.id} className="flex items-center justify-between text-[11px] bg-white border border-gray-100 rounded-lg px-2.5 py-1.5">
+                              <span className="font-semibold text-gray-700">
+                                {r.channel === 'portal' ? 'Web Portal' : 'Manuel'} · ₺{parseFloat(r.quotedAmount).toLocaleString('tr-TR')}
+                              </span>
+                              <span className={cn('font-bold px-2 py-0.5 rounded-full',
+                                r.approvedAt ? 'bg-emerald-100 text-emerald-700' : r.rejectedAt ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'
+                              )}>
+                                {r.approvedAt ? 'Onaylandı' : r.rejectedAt ? 'Reddedildi' : 'Bekliyor'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Aksesuarlar / Emanetler */}
                   {(isEditingDetails || detailTicket.accessories) && (

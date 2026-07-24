@@ -135,6 +135,9 @@ import {
   maintenanceContracts,
   deviceTypes,
   deviceTypeTests,
+  ticketPhysicalConditions,
+  ticketFunctionTests,
+  ticketApprovalRequests,
 } from './src/db/schema';
 
 import { eq, desc, and, or, sql, asc, like } from 'drizzle-orm';
@@ -421,6 +424,29 @@ async function startServer() {
       sum += d;
     }
     return sum % 10 === 0;
+  };
+
+  // Müşteri portaldan onay/red verdiğinde, o ticket için hâlâ bekleyen (approvedAt/rejectedAt boş)
+  // en son onay isteği kaydını günceller. Kayıt yoksa (örn. PATCH ile durum manuel değiştirilmişse) sessizce atlar.
+  const markLatestApprovalRequest = async (ticketId: number, decision: 'approved' | 'rejected', ip: string) => {
+    try {
+      const pending = await db.select().from(ticketApprovalRequests)
+        .where(and(
+          eq(ticketApprovalRequests.ticketId, ticketId),
+          sql`${ticketApprovalRequests.approvedAt} IS NULL`,
+          sql`${ticketApprovalRequests.rejectedAt} IS NULL`
+        ))
+        .orderBy(desc(ticketApprovalRequests.sentAt))
+        .limit(1);
+      if (pending.length === 0) return;
+      await db.update(ticketApprovalRequests).set(
+        decision === 'approved'
+          ? { approvedAt: new Date(), approvedIp: ip }
+          : { rejectedAt: new Date() }
+      ).where(eq(ticketApprovalRequests.id, pending[0].id));
+    } catch (e) {
+      console.error('markLatestApprovalRequest error:', e);
+    }
   };
 
   let settingsCache: { data: Record<string, string>; fetchedAt: number } | null = null;
@@ -999,6 +1025,8 @@ async function startServer() {
         notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini onayladı.`,
       }).catch((e) => console.error('serviceStatusLogs insert error:', e));
 
+      await markLatestApprovalRequest(ticket.id, 'approved', getClientIp(req));
+
       await notifyStaff({
         type: 'success',
         title: `Onarım Onayı: #${ticket.ticketNumber}`,
@@ -1046,6 +1074,8 @@ async function startServer() {
         toStatus: 'onay_red',
         notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini reddetti. Cihaz iade edilecek.`,
       }).catch((e) => console.error('serviceStatusLogs insert error:', e));
+
+      await markLatestApprovalRequest(ticket.id, 'rejected', getClientIp(req));
 
       await notifyStaff({
         type: 'warning',
@@ -2059,6 +2089,124 @@ async function startServer() {
   });
 
   // ============================================================
+  // ADMIN API — EKSPERTİZ (Fiziksel Durum + Fonksiyon Testi)
+  // ============================================================
+
+  app.get('/api/admin/tickets/:id/expertise', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const [conditions, tests] = await Promise.all([
+        db.select().from(ticketPhysicalConditions).where(eq(ticketPhysicalConditions.ticketId, ticketId)),
+        db.select().from(ticketFunctionTests).where(eq(ticketFunctionTests.ticketId, ticketId)),
+      ]);
+      res.json({
+        physicalConditions: conditions.map(c => c.conditionKey),
+        functionTests: Object.fromEntries(tests.map(t => [t.testName, t.result])),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/tickets/:id/expertise', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const { physicalConditions, functionTests } = req.body;
+      const adminUser = (req as any).adminUser;
+
+      await db.transaction(async (tx) => {
+        await tx.delete(ticketPhysicalConditions).where(eq(ticketPhysicalConditions.ticketId, ticketId));
+        if (Array.isArray(physicalConditions) && physicalConditions.length > 0) {
+          await tx.insert(ticketPhysicalConditions).values(
+            physicalConditions.map((conditionKey: string) => ({ ticketId, conditionKey }))
+          );
+        }
+
+        await tx.delete(ticketFunctionTests).where(eq(ticketFunctionTests.ticketId, ticketId));
+        const testEntries = Object.entries(functionTests || {}).filter(([, v]) => v);
+        if (testEntries.length > 0) {
+          await tx.insert(ticketFunctionTests).values(
+            testEntries.map(([testName, result]) => ({ ticketId, testName, result: result as any }))
+          );
+        }
+      });
+
+      await db.insert(auditLogs).values({
+        tenantId: 1,
+        userId: adminUser?.userId || null,
+        action: 'ticket.expertise_saved',
+        entityType: 'Ticket',
+        entityId: ticketId,
+        details: { physicalConditionsCount: (physicalConditions || []).length, functionTestsCount: Object.keys(functionTests || {}).length },
+      }).catch((e) => console.error('auditLogs insert error:', e));
+
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Manuel onay kanalı: müşteri telefonda/yüz yüze onay/red verdiğinde personel bunu buradan kaydeder.
+  app.post('/api/admin/tickets/:id/manual-approval', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const { decision } = req.body; // 'approved' | 'rejected'
+      if (!['approved', 'rejected'].includes(decision)) {
+        return res.status(400).json({ error: 'Geçersiz karar.' });
+      }
+      const adminUser = (req as any).adminUser;
+      const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+      if (!ticket) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+      if (TICKET_TERMINAL_STATUSES.includes(ticket.status)) {
+        return res.status(400).json({ error: 'Bu servis kaydı halihazırda sonuçlandırılmıştır.' });
+      }
+
+      const partsRows = await db.select({ totalPrice: ticketParts.totalPrice }).from(ticketParts)
+        .where(and(eq(ticketParts.ticketId, ticketId), sql`${ticketParts.removedAt} IS NULL`));
+      const partsTotal = partsRows.reduce((s, p) => s + parseFloat(p.totalPrice || '0'), 0);
+      const grandTotal = partsTotal + parseFloat(ticket.laborCost || '0');
+      const newStatus = decision === 'approved' ? 'isleme_alindi' : 'onay_red';
+
+      await db.transaction(async (tx) => {
+        await tx.update(tickets).set({ status: newStatus, updatedAt: new Date() }).where(eq(tickets.id, ticketId));
+        await tx.insert(serviceStatusLogs).values({
+          tenantId: ticket.tenantId,
+          ticketId,
+          fromStatus: ticket.status,
+          toStatus: newStatus,
+          changedById: adminUser?.userId,
+          notes: `Müşteri telefon/yüz yüze görüşmede teklifi ${decision === 'approved' ? 'onayladı' : 'reddetti'} (personel tarafından kaydedildi).`,
+        });
+        await tx.insert(ticketApprovalRequests).values({
+          ticketId,
+          channel: 'manuel',
+          quotedAmount: grandTotal.toFixed(2),
+          approvedAt: decision === 'approved' ? new Date() : null,
+          rejectedAt: decision === 'rejected' ? new Date() : null,
+          createdBy: adminUser?.userId,
+        });
+      });
+
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Onay isteği geçmişi (portal + manuel) — fiyat kilidi ve onay/red durumu görüntüleme
+  app.get('/api/admin/tickets/:id/approval-requests', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const rows = await db.select().from(ticketApprovalRequests)
+        .where(eq(ticketApprovalRequests.ticketId, ticketId))
+        .orderBy(desc(ticketApprovalRequests.sentAt));
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ============================================================
   // ADMIN API — TICKETS (Servis Kayıtları)
   // ============================================================
 
@@ -2322,6 +2470,24 @@ async function startServer() {
         return res.status(400).json({ error: 'IMEI numarası geçersiz (15 haneli olmalı ve Luhn doğrulamasını geçmeli).' });
       }
 
+      // Teslim edildi durumuna geçiş engeli: bakiye kapanmadan cihaz teslim edilemez.
+      // (brief madde 4.1 — server tarafında zorunlu, frontend validasyonu bypass edilebilir)
+      if (status === 'teslim_edildi') {
+        const ticketIdCheck = parseInt(req.params.id);
+        const [partsSum] = await db.select({ total: sql<string>`COALESCE(SUM(${ticketParts.totalPrice}), 0)` })
+          .from(ticketParts)
+          .where(and(eq(ticketParts.ticketId, ticketIdCheck), sql`${ticketParts.removedAt} IS NULL`));
+        const [ticketRow] = await db.select({ laborCost: tickets.laborCost }).from(tickets).where(eq(tickets.id, ticketIdCheck)).limit(1);
+        const grandTotal = parseFloat(partsSum?.total || '0') + parseFloat(ticketRow?.laborCost || '0');
+        const paymentRows = await db.select({ amount: payments.amount, status: payments.status }).from(payments).where(eq(payments.ticketId, ticketIdCheck));
+        const paid = paymentRows.filter(p => p.status === 'basarili').reduce((s, p) => s + parseFloat(p.amount), 0);
+        const refunded = paymentRows.filter(p => p.status === 'iade').reduce((s, p) => s + parseFloat(p.amount), 0);
+        const balance = grandTotal - paid + refunded;
+        if (balance > 0.009) {
+          return res.status(400).json({ error: `Bakiye kapanmadan cihaz teslim edilemez. Kalan bakiye: ₺${balance.toFixed(2)}` });
+        }
+      }
+
       const updateData: any = { updatedAt: new Date() };
       if (status) updateData.status = status;
       if (priority) updateData.priority = priority;
@@ -2356,6 +2522,20 @@ async function startServer() {
             changedById,
             notes: technicianNotes || 'Durum güncellendi.',
           });
+
+          // Onay tutar kilidi: portal onayına gönderilirken güncel toplam tutara kilitlenen bir istek kaydı açılır.
+          if (status === 'musteri_onayi_bekliyor') {
+            const partsRows = await tx.select({ totalPrice: ticketParts.totalPrice }).from(ticketParts)
+              .where(and(eq(ticketParts.ticketId, ticketId), sql`${ticketParts.removedAt} IS NULL`));
+            const partsTotal = partsRows.reduce((s, p) => s + parseFloat(p.totalPrice || '0'), 0);
+            const laborCostVal = parseFloat((laborCost !== undefined ? laborCost : ticketRec?.laborCost) || '0');
+            await tx.insert(ticketApprovalRequests).values({
+              ticketId,
+              channel: 'portal',
+              quotedAmount: (partsTotal + laborCostVal).toFixed(2),
+              createdBy: changedById,
+            }).catch((e) => console.error('ticketApprovalRequests insert error:', e));
+          }
         }
 
         // Update customer details if provided

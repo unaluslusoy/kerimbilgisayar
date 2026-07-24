@@ -188,6 +188,24 @@ export async function fetchAdminDeviceTypes() {
   return adminRequest('/api/admin/device-types');
 }
 
+// Ekspertiz (fiziksel durum + fonksiyon testi)
+export async function fetchTicketExpertise(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/expertise`);
+}
+
+export async function saveTicketExpertise(ticketId: number, data: { physicalConditions: string[]; functionTests: Record<string, string> }) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/expertise`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+// Onay istekleri (portal + manuel)
+export async function fetchTicketApprovalRequests(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/approval-requests`);
+}
+
+export async function recordManualApproval(ticketId: number, decision: 'approved' | 'rejected') {
+  return adminRequest(`/api/admin/tickets/${ticketId}/manual-approval`, { method: 'POST', body: JSON.stringify({ decision }) });
+}
+
 // Stock
 export async function fetchAdminStock() {
   return adminRequest('/api/admin/stock');

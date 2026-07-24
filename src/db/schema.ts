@@ -239,6 +239,40 @@ export const deviceTypeTests = mysqlTable('device_type_tests', {
   deviceTypeIdx: index('idx_device_type_tests_type').on(t.deviceTypeId),
 }));
 
+// Ekspertiz: fiziksel durum bulguları (checklist) + fonksiyon testi sonuçları
+export const ticketPhysicalConditions = mysqlTable('ticket_physical_conditions', {
+  id: int('id').autoincrement().primaryKey(),
+  ticketId: int('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  conditionKey: varchar('condition_key', { length: 60 }).notNull(),
+}, (t) => ({
+  uqTicketCondition: uniqueIndex('uq_ticket_physical_condition').on(t.ticketId, t.conditionKey),
+}));
+
+export const ticketFunctionTests = mysqlTable('ticket_function_tests', {
+  id: int('id').autoincrement().primaryKey(),
+  ticketId: int('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  testName: varchar('test_name', { length: 80 }).notNull(),
+  result: mysqlEnum('result', ['ok', 'fail', 'na']),
+}, (t) => ({
+  uqTicketTest: uniqueIndex('uq_ticket_function_test').on(t.ticketId, t.testName),
+}));
+
+// Onay istekleri: fiyat teklifinin hangi kanaldan gönderildiği ve hangi
+// tutara "kilitlendiği" — maliyet sonradan değişirse eski onay geçersiz sayılabilir.
+export const ticketApprovalRequests = mysqlTable('ticket_approval_requests', {
+  id: int('id').autoincrement().primaryKey(),
+  ticketId: int('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  channel: mysqlEnum('channel', ['portal', 'manuel']).notNull(),
+  quotedAmount: decimal('quoted_amount', { precision: 10, scale: 2 }).notNull(),
+  sentAt: timestamp('sent_at').defaultNow(),
+  approvedAt: timestamp('approved_at'),
+  approvedIp: varchar('approved_ip', { length: 45 }),
+  rejectedAt: timestamp('rejected_at'),
+  createdBy: int('created_by').references(() => users.id),
+}, (t) => ({
+  ticketIdx: index('idx_ticket_approval_requests_ticket').on(t.ticketId),
+}));
+
 export const serviceCategories = mysqlTable('service_categories', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
