@@ -1,13 +1,6 @@
 RewriteEngine On
 DirectoryIndex disabled
 
-# Proxy timeout ayarları — Node.js yavaş cevapladığında 503 yerine bekle
-<IfModule mod_proxy.c>
-  ProxyTimeout 120
-  ProxyPass / http://127.0.0.1:3000/ retry=0 timeout=120
-  ProxyPassReverse / http://127.0.0.1:3000/
-</IfModule>
-
 # Ana sayfa istegini de Node.js uygulamasina gönder; DirectoryIndex statik index'i atlamasin
 RewriteRule ^$ http://127.0.0.1:3000/ [P,L]
 
