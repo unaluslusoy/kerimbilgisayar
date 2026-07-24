@@ -2,7 +2,7 @@ import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment, fetchTicketActivity, fetchTicketExpertise, saveTicketExpertise, fetchTicketApprovalRequests, recordManualApproval } from '../../lib/api';
+import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment, fetchTicketActivity, fetchTicketExpertise, saveTicketExpertise, fetchTicketApprovalRequests, recordManualApproval, sendApprovalRequest, fetchTicketSupplyRequests, createSupplyRequest, markSupplyRequestArrived } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
@@ -138,6 +138,15 @@ export default function ServiceManager() {
   const [isSavingExpertise, setIsSavingExpertise] = useState(false);
   const [approvalRequests, setApprovalRequests] = useState<any[]>([]);
   const [isRecordingManualApproval, setIsRecordingManualApproval] = useState(false);
+  const [isSendingApprovalRequest, setIsSendingApprovalRequest] = useState(false);
+  const [supplyRequests, setSupplyRequests] = useState<any[]>([]);
+  const [supplyItemName, setSupplyItemName] = useState('');
+  const [supplySupplier, setSupplySupplier] = useState('');
+  const [supplyEta, setSupplyEta] = useState('');
+  const [isAddingSupplyRequest, setIsAddingSupplyRequest] = useState(false);
+  const [editExternalServiceName, setEditExternalServiceName] = useState('');
+  const [editExternalCost, setEditExternalCost] = useState('');
+  const [isSavingExternalService, setIsSavingExternalService] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -849,6 +858,18 @@ export default function ServiceManager() {
     }
 
     try {
+      const supplyReqs = await fetchTicketSupplyRequests(ticket.id);
+      setSupplyRequests(supplyReqs || []);
+    } catch (e) {
+      setSupplyRequests([]);
+    }
+    setSupplyItemName('');
+    setSupplySupplier('');
+    setSupplyEta('');
+    setEditExternalServiceName(ticket.externalServiceName || '');
+    setEditExternalCost(ticket.externalCost || '');
+
+    try {
       const parts = await fetchTicketParts(ticket.id);
       setTicketParts(parts || []);
     } catch (e) {
@@ -1054,6 +1075,80 @@ export default function ServiceManager() {
       alert('Hata: ' + e.message);
     } finally {
       setIsRecordingManualApproval(false);
+    }
+  };
+
+  const handleSendApprovalRequest = async () => {
+    if (!detailTicket) return;
+    setIsSendingApprovalRequest(true);
+    try {
+      await sendApprovalRequest(detailTicket.id);
+      loadActivityFeed(detailTicket.id);
+      const reqs = await fetchTicketApprovalRequests(detailTicket.id);
+      setApprovalRequests(reqs || []);
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setIsSendingApprovalRequest(false);
+    }
+  };
+
+  const handleAddSupplyRequest = async () => {
+    if (!detailTicket || !supplyItemName.trim()) return;
+    setIsAddingSupplyRequest(true);
+    try {
+      await createSupplyRequest(detailTicket.id, { itemName: supplyItemName.trim(), supplier: supplySupplier.trim() || undefined, etaDate: supplyEta || undefined });
+      const reqs = await fetchTicketSupplyRequests(detailTicket.id);
+      setSupplyRequests(reqs || []);
+      loadActivityFeed(detailTicket.id);
+      setSupplyItemName('');
+      setSupplySupplier('');
+      setSupplyEta('');
+    } catch (e: any) {
+      alert('Tedarik talebi eklenirken hata: ' + e.message);
+    } finally {
+      setIsAddingSupplyRequest(false);
+    }
+  };
+
+  const handleMarkSupplyArrived = async (requestId: number) => {
+    if (!detailTicket) return;
+    try {
+      await markSupplyRequestArrived(requestId);
+      const reqs = await fetchTicketSupplyRequests(detailTicket.id);
+      setSupplyRequests(reqs || []);
+      loadActivityFeed(detailTicket.id);
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    }
+  };
+
+  const handleSaveExternalService = async () => {
+    if (!detailTicket) return;
+    setIsSavingExternalService(true);
+    try {
+      await updateAdminTicket(detailTicket.id, { externalServiceName: editExternalServiceName, externalCost: editExternalCost || null });
+      setDetailTicket((prev: any) => ({ ...prev, externalServiceName: editExternalServiceName, externalCost: editExternalCost }));
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, externalServiceName: editExternalServiceName, externalCost: editExternalCost } : t));
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setIsSavingExternalService(false);
+    }
+  };
+
+  const handleExternalServiceAction = async (action: 'sent' | 'returned') => {
+    if (!detailTicket) return;
+    try {
+      const payload = action === 'sent' ? { externalSentAction: true } : { externalReturnedAction: true };
+      await updateAdminTicket(detailTicket.id, payload);
+      const field = action === 'sent' ? 'externalSentAt' : 'externalReturnedAt';
+      const now = new Date().toISOString();
+      setDetailTicket((prev: any) => ({ ...prev, [field]: now }));
+      setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, [field]: now } : t));
+      loadActivityFeed(detailTicket.id);
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
     }
   };
 
@@ -2175,6 +2270,71 @@ export default function ServiceManager() {
                     </div>
                   </div>
 
+                  {/* Tedarik Talepleri */}
+                  <div className="border border-gray-200 rounded-2xl p-4 bg-purple-50/20">
+                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Tedarik Talepleri</p>
+                    <div className="flex flex-col md:flex-row gap-2 mb-3">
+                      <input type="text" value={supplyItemName} onChange={e => setSupplyItemName(e.target.value)}
+                        className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="İstenen parça / kalem" />
+                      <input type="text" value={supplySupplier} onChange={e => setSupplySupplier(e.target.value)}
+                        className="w-32 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                        placeholder="Tedarikçi" />
+                      <input type="date" value={supplyEta} onChange={e => setSupplyEta(e.target.value)}
+                        className="w-36 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none" />
+                      <button onClick={handleAddSupplyRequest} disabled={isAddingSupplyRequest || !supplyItemName.trim()}
+                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg disabled:opacity-50">
+                        {isAddingSupplyRequest ? '...' : 'Talep Aç'}
+                      </button>
+                    </div>
+                    {supplyRequests.length > 0 && (
+                      <div className="space-y-1.5">
+                        {supplyRequests.map((r) => (
+                          <div key={r.id} className="flex items-center justify-between text-[11px] bg-white border border-gray-100 rounded-lg px-2.5 py-1.5">
+                            <span className="text-gray-700">
+                              <b className="font-semibold">{r.itemName}</b>
+                              {r.supplier && <> · {r.supplier}</>}
+                              {r.etaDate && <> · tahmini: {r.etaDate}</>}
+                            </span>
+                            {r.arrivedAt ? (
+                              <span className="font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Geldi</span>
+                            ) : (
+                              <button onClick={() => handleMarkSupplyArrived(r.id)} className="font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 hover:bg-amber-200">Bekliyor · Geldi İşaretle</button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dış Servis Sevk */}
+                  {(detailTicket.status === 'dis_servis' || detailTicket.externalServiceName) && (
+                    <div className="border border-gray-200 rounded-2xl p-4 bg-cyan-50/20">
+                      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Dış Servis Sevk</p>
+                      <div className="flex flex-col md:flex-row gap-2 mb-3">
+                        <input type="text" value={editExternalServiceName} onChange={e => setEditExternalServiceName(e.target.value)} onBlur={handleSaveExternalService}
+                          className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
+                          placeholder="Dış servis / yetkili adı" />
+                        <div className="relative w-28">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₺</span>
+                          <input type="number" value={editExternalCost} onChange={e => setEditExternalCost(e.target.value)} onBlur={handleSaveExternalService}
+                            className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-primary outline-none"
+                            placeholder="Maliyet" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 text-[11px]">
+                        <button onClick={() => handleExternalServiceAction('sent')} disabled={!!detailTicket.externalSentAt}
+                          className="flex-1 px-2 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg disabled:opacity-50">
+                          {detailTicket.externalSentAt ? `Sevk Edildi: ${formatDate(detailTicket.externalSentAt)}` : 'Sevk Edildi İşaretle'}
+                        </button>
+                        <button onClick={() => handleExternalServiceAction('returned')} disabled={!detailTicket.externalSentAt || !!detailTicket.externalReturnedAt}
+                          className="flex-1 px-2 py-1.5 border border-cyan-300 hover:bg-cyan-50 text-cyan-700 font-bold rounded-lg disabled:opacity-50">
+                          {detailTicket.externalReturnedAt ? `Geri Döndü: ${formatDate(detailTicket.externalReturnedAt)}` : 'Geri Döndü İşaretle'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Tahsilat */}
                   {(() => {
                     const grandTotal = (parseFloat(detailTicket.laborCost) || 0) + ticketParts.reduce((sum, p) => sum + parseFloat(p.totalPrice), 0);
@@ -2303,16 +2463,23 @@ export default function ServiceManager() {
                       <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Onay & Fiyat Kilidi</p>
 
                       {detailTicket.status === 'musteri_onayi_bekliyor' && (
-                        <div className="flex gap-2 mb-3">
-                          <button onClick={() => handleManualApproval('approved')} disabled={isRecordingManualApproval}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50">
-                            Manuel Onay Kaydet (Telefon/Yüz Yüze)
+                        <>
+                          <button onClick={handleSendApprovalRequest} disabled={isSendingApprovalRequest}
+                            className="w-full mb-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+                            <Send size={13} />
+                            {isSendingApprovalRequest ? 'Gönderiliyor...' : (approvalRequests.length > 0 ? 'Onay İsteğini Tekrar Gönder (WhatsApp + E-posta)' : 'Onay İsteği Gönder (WhatsApp + E-posta)')}
                           </button>
-                          <button onClick={() => handleManualApproval('rejected')} disabled={isRecordingManualApproval}
-                            className="flex-1 border border-red-300 hover:bg-red-50 text-red-700 text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50">
-                            Manuel Red Kaydet
-                          </button>
-                        </div>
+                          <div className="flex gap-2 mb-3">
+                            <button onClick={() => handleManualApproval('approved')} disabled={isRecordingManualApproval}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50">
+                              Manuel Onay Kaydet (Telefon/Yüz Yüze)
+                            </button>
+                            <button onClick={() => handleManualApproval('rejected')} disabled={isRecordingManualApproval}
+                              className="flex-1 border border-red-300 hover:bg-red-50 text-red-700 text-xs font-bold py-2 rounded-xl transition-all disabled:opacity-50">
+                              Manuel Red Kaydet
+                            </button>
+                          </div>
+                        </>
                       )}
 
                       {approvalRequests.length > 0 && (

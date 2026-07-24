@@ -280,6 +280,11 @@ async function startServer() {
     }
   }, 10 * 60 * 1000).unref();
 
+  // Teslim yaşlandırma taraması (2D): boot'ta bir kez, sonra her 6 saatte bir.
+  // Gün bazlı eşikler olduğundan cron hassasiyeti gerekmez.
+  setTimeout(() => { checkPickupReminders().catch(console.error); }, 60_000).unref();
+  setInterval(() => { checkPickupReminders().catch(console.error); }, 6 * 60 * 60 * 1000).unref();
+
   app.use(express.json({ limit: '2mb' }));
 
   // ─── HEALTH ENDPOINTS — middleware'lerden ÖNCE mount et ki her zaman erişilebilsin
@@ -2072,6 +2077,83 @@ async function startServer() {
   }
 
   // ============================================================
+  // TESLİM YAŞLANDIRMA (2D): cihaz hazır (çözüldü/iade) olduktan sonra
+  // teslim alınmadan bekleyen kayıtlar için 7/15/30 gün hatırlatması.
+  // Yeni bir cron paketine gerek yok — mevcut setInterval deseniyle
+  // periyodik olarak taranır (keepDbAlive/memory-cleanup ile aynı desen).
+  // ============================================================
+  async function checkPickupReminders() {
+    try {
+      const rows = await db.select({
+        id: tickets.id,
+        tenantId: tickets.tenantId,
+        ticketNumber: tickets.ticketNumber,
+        status: tickets.status,
+        readySince: tickets.readySince,
+        pickupReminder7dSentAt: tickets.pickupReminder7dSentAt,
+        pickupReminder15dSentAt: tickets.pickupReminder15dSentAt,
+        pickupLegalNotice30dSentAt: tickets.pickupLegalNotice30dSentAt,
+        customerName: users.firstName,
+        customerPhone: users.phone,
+        customerEmail: users.email,
+        deviceBrand: devices.brand,
+        deviceModel: devices.model,
+        deviceType: devices.deviceType,
+      }).from(tickets)
+        .leftJoin(users, eq(tickets.userId, users.id))
+        .leftJoin(devices, eq(tickets.deviceId, devices.id))
+        .where(and(
+          sql`${tickets.status} IN ('cozuldu', 'iade')`,
+          sql`${tickets.readySince} IS NOT NULL`
+        ));
+
+      if (rows.length === 0) return;
+
+      const allSettings = await db.select().from(settings);
+      const settingsMap: Record<string, string> = {};
+      allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
+      const siteUrl = settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com';
+
+      for (const t of rows) {
+        const daysReady = Math.floor((Date.now() - new Date(t.readySince as any).getTime()) / 86_400_000);
+        let tier: '7' | '15' | '30' | null = null;
+        if (daysReady >= 30 && !t.pickupLegalNotice30dSentAt) tier = '30';
+        else if (daysReady >= 15 && !t.pickupReminder15dSentAt) tier = '15';
+        else if (daysReady >= 7 && !t.pickupReminder7dSentAt) tier = '7';
+        if (!tier) continue;
+
+        const deviceName = `${t.deviceBrand || ''} ${t.deviceModel || ''}`.trim() || t.deviceType || 'Cihazınız';
+        const trackingLink = `${siteUrl}/ariza-sorgulama?no=${t.ticketNumber}`;
+        const text = tier === '30'
+          ? `Sayın ${t.customerName || 'Müşterimiz'}, ${t.ticketNumber} numaralı ${deviceName} cihazınız ${daysReady} gündür teslim alınmayı bekliyor. Yasal bildirim: Lütfen en kısa sürede cihazınızı teslim alınız, aksi halde saklama koşulları ve ek ücretler uygulanabilir. Detay: ${trackingLink}`
+          : `Sayın ${t.customerName || 'Müşterimiz'}, ${t.ticketNumber} numaralı ${deviceName} cihazınız ${daysReady} gündür teslim almanızı bekliyor. Detay: ${trackingLink}`;
+
+        if (t.customerEmail && !t.customerEmail.includes('@noemail.local')) {
+          sendTicketEmail(t.customerEmail, `Cihazınız Teslim Almanızı Bekliyor: ${t.ticketNumber}`, `<p>${text}</p>`).catch(console.error);
+        }
+        if (t.customerPhone) {
+          sendWhatsAppMessage(t.customerPhone, text).catch(console.error);
+        }
+
+        const updateData: any = {};
+        if (tier === '7') updateData.pickupReminder7dSentAt = new Date();
+        if (tier === '15') updateData.pickupReminder15dSentAt = new Date();
+        if (tier === '30') updateData.pickupLegalNotice30dSentAt = new Date();
+        await db.update(tickets).set(updateData).where(eq(tickets.id, t.id));
+
+        await db.insert(serviceStatusLogs).values({
+          tenantId: t.tenantId,
+          ticketId: t.id,
+          toStatus: t.status,
+          notes: `Teslim hatırlatması gönderildi (${tier} gün, ${daysReady} gündür hazır bekliyor).`,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error('checkPickupReminders error:', err);
+    }
+  }
+
+  // ============================================================
   // ADMIN API — CİHAZ PROFİLLERİ (Cihaz türüne göre dinamik form/checklist)
   // ============================================================
 
@@ -2202,6 +2284,80 @@ async function startServer() {
         .where(eq(ticketApprovalRequests.ticketId, ticketId))
         .orderBy(desc(ticketApprovalRequests.sentAt));
       res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Çok kanallı onay isteği gönder/tekrar gönder: mevcut WhatsApp + e-posta altyapısını
+  // kullanarak müşteriye güncel teklif tutarıyla birlikte onay linkini iletir.
+  app.post('/api/admin/tickets/:id/send-approval-request', requireAdmin, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const adminUser = (req as any).adminUser;
+
+      const [ticket] = await db.select({
+        tenantId: tickets.tenantId,
+        status: tickets.status,
+        ticketNumber: tickets.ticketNumber,
+        laborCost: tickets.laborCost,
+        customerName: users.firstName,
+        customerPhone: users.phone,
+        customerEmail: users.email,
+        deviceBrand: devices.brand,
+        deviceModel: devices.model,
+        deviceType: devices.deviceType,
+      }).from(tickets)
+        .leftJoin(users, eq(tickets.userId, users.id))
+        .leftJoin(devices, eq(tickets.deviceId, devices.id))
+        .where(eq(tickets.id, ticketId)).limit(1);
+      if (!ticket) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+      if (ticket.status !== 'musteri_onayi_bekliyor') {
+        return res.status(400).json({ error: 'Onay isteği yalnızca "Müşteri Onayı Bekliyor" durumundaki kayıtlar için gönderilebilir.' });
+      }
+
+      const partsRows = await db.select({ totalPrice: ticketParts.totalPrice }).from(ticketParts)
+        .where(and(eq(ticketParts.ticketId, ticketId), sql`${ticketParts.removedAt} IS NULL`));
+      const partsTotal = partsRows.reduce((s, p) => s + parseFloat(p.totalPrice || '0'), 0);
+      const grandTotal = partsTotal + parseFloat(ticket.laborCost || '0');
+
+      await db.insert(ticketApprovalRequests).values({
+        ticketId,
+        channel: 'portal',
+        quotedAmount: grandTotal.toFixed(2),
+        createdBy: adminUser?.userId,
+      });
+
+      await db.insert(serviceStatusLogs).values({
+        tenantId: ticket.tenantId,
+        ticketId,
+        toStatus: ticket.status,
+        changedById: adminUser?.userId,
+        notes: `Onay isteği tekrar gönderildi (₺${grandTotal.toFixed(2)}).`,
+      }).catch(() => {});
+
+      const deviceName = `${ticket.deviceBrand || ''} ${ticket.deviceModel || ''}`.trim() || ticket.deviceType || 'Cihazınız';
+      const allSettings = await db.select().from(settings);
+      const settingsMap: Record<string, string> = {};
+      allSettings.forEach(s => { settingsMap[s.key] = s.value || ''; });
+      const siteUrl = settingsMap.siteBaseUrl || 'https://kerimbilgisayar.com';
+      const trackingLink = `${siteUrl}/ariza-sorgulama?no=${ticket.ticketNumber}`;
+
+      if (ticket.customerEmail && !ticket.customerEmail.includes('@noemail.local')) {
+        const html = `<p>Sayın ${ticket.customerName || 'Müşterimiz'},</p>
+          <p><b>${ticket.ticketNumber}</b> numaralı <b>${deviceName}</b> servis kaydınız için hazırlanan
+          teklif tutarı <b>₺${grandTotal.toFixed(2)}</b>'dir.</p>
+          <p>Onaylamak veya reddetmek için lütfen takip linkini ziyaret edin:
+          <a href="${trackingLink}">${trackingLink}</a></p>`;
+        sendTicketEmail(ticket.customerEmail, `Onayınız Bekleniyor: ${ticket.ticketNumber}`, html).catch(console.error);
+      }
+
+      if (ticket.customerPhone) {
+        const text = `Sayın ${ticket.customerName || 'Müşterimiz'}, ${ticket.ticketNumber} numaralı ${deviceName} cihazınız için teklif tutarımız ₺${grandTotal.toFixed(2)}'dir. Onaylamak/reddetmek için: ${trackingLink}`;
+        sendWhatsAppMessage(ticket.customerPhone, text).catch(console.error);
+      }
+
+      res.json({ success: true, quotedAmount: grandTotal.toFixed(2) });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

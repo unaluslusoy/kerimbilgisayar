@@ -273,6 +273,20 @@ export const ticketApprovalRequests = mysqlTable('ticket_approval_requests', {
   ticketIdx: index('idx_ticket_approval_requests_ticket').on(t.ticketId),
 }));
 
+// Tedarik talebi: stokta olmayan bir parça tedarikçiden istendiğinde takip edilir.
+export const ticketSupplyRequests = mysqlTable('ticket_supply_requests', {
+  id: int('id').autoincrement().primaryKey(),
+  ticketId: int('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  itemName: varchar('item_name', { length: 150 }).notNull(),
+  supplier: varchar('supplier', { length: 120 }),
+  etaDate: date('eta_date'),
+  arrivedAt: timestamp('arrived_at'),
+  createdBy: int('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  ticketIdx: index('idx_ticket_supply_requests_ticket').on(t.ticketId),
+}));
+
 export const serviceCategories = mysqlTable('service_categories', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
@@ -347,6 +361,16 @@ export const tickets = mysqlTable('tickets', {
   dataLossConsentAt: timestamp('data_loss_consent_at'),
   accessInfoConsentAt: timestamp('access_info_consent_at'),
   expertiseFeeConsentAt: timestamp('expertise_fee_consent_at'),
+  // --- 2B: Dış Servis Sevk Takibi ---
+  externalServiceName: varchar('external_service_name', { length: 120 }),
+  externalSentAt: timestamp('external_sent_at'),
+  externalCost: decimal('external_cost', { precision: 10, scale: 2 }),
+  externalReturnedAt: timestamp('external_returned_at'),
+  // --- 2D: Teslim Yaşlandırma / Hatırlatma ---
+  readySince: timestamp('ready_since'),
+  pickupReminder7dSentAt: timestamp('pickup_reminder_7d_sent_at'),
+  pickupReminder15dSentAt: timestamp('pickup_reminder_15d_sent_at'),
+  pickupLegalNotice30dSentAt: timestamp('pickup_legal_notice_30d_sent_at'),
   // --- FAZ 1B: Bayi Entegrasyonu ---
   dealerId: int('dealer_id').references(() => companies.id),
   source: mysqlEnum('source', ['walk_in', 'dealer', 'online', 'phone']).default('walk_in'),

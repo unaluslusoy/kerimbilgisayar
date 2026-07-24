@@ -206,6 +206,23 @@ export async function recordManualApproval(ticketId: number, decision: 'approved
   return adminRequest(`/api/admin/tickets/${ticketId}/manual-approval`, { method: 'POST', body: JSON.stringify({ decision }) });
 }
 
+export async function sendApprovalRequest(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/send-approval-request`, { method: 'POST' });
+}
+
+// Tedarik talebi
+export async function fetchTicketSupplyRequests(ticketId: number) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/supply-requests`);
+}
+
+export async function createSupplyRequest(ticketId: number, data: { itemName: string; supplier?: string; etaDate?: string }) {
+  return adminRequest(`/api/admin/tickets/${ticketId}/supply-requests`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function markSupplyRequestArrived(requestId: number) {
+  return adminRequest(`/api/admin/supply-requests/${requestId}/arrived`, { method: 'POST' });
+}
+
 // Stock
 export async function fetchAdminStock() {
   return adminRequest('/api/admin/stock');
