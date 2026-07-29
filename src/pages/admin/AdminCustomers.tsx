@@ -1,13 +1,68 @@
 import { useEffect, useState } from 'react';
-import { Building2, CheckCircle, CreditCard, Plus, RefreshCw, Search, UserPlus, X, FileText, Send } from 'lucide-react';
-import { assignCustomerSubscription, createAdminCustomer, fetchAdminCustomers, fetchSubscriptionPlans, migrateCustomerUsers, updateAdminCustomer } from '../../lib/api';
+import {
+  Building2,
+  CheckCircle,
+  CreditCard,
+  Plus,
+  RefreshCw,
+  Search,
+  UserPlus,
+  X,
+  FileText,
+  Send,
+  ArrowUpRight,
+  ArrowDownLeft,
+  PlusCircle,
+  Wrench,
+  ShieldCheck,
+  ShieldAlert,
+  Clock,
+  ExternalLink,
+  Laptop,
+  AlertTriangle,
+} from 'lucide-react';
+import {
+  assignCustomerSubscription,
+  createAdminCustomer,
+  fetchAdminCustomers,
+  fetchSubscriptionPlans,
+  migrateCustomerUsers,
+  updateAdminCustomer,
+  fetchCustomerLedger,
+  addCustomerLedgerEntry,
+} from '../../lib/api';
 
 const inputCls = 'w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary';
 
 const emptyCustomer = {
   customerType: 'bireysel',
-  firstName: '', lastName: '', email: '', phone: '', password: 'musteri123',
-  companyName: '', taxId: '', taxOffice: '', address: '', sector: '', accountCode: '', balance: '0.00', creditLimit: '0.00', notes: '', isActive: true,
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  password: 'musteri123',
+  companyName: '',
+  taxId: '',
+  taxOffice: '',
+  address: '',
+  sector: '',
+  accountCode: '',
+  balance: '0.00',
+  creditLimit: '0.00',
+  notes: '',
+  isActive: true,
+};
+
+const statusLabels: Record<string, { label: string; color: string }> = {
+  yeni: { label: 'Yeni Kayıt', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  isleme_alindi: { label: 'İşleme Alındı', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  parca_bekliyor: { label: 'Parça Bekliyor', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+  dis_servis: { label: 'Dış Serviste', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  musteri_onayi_bekliyor: { label: 'Onay Bekliyor', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  cozuldu: { label: 'Çözüldü / Hazır', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  teslim_edildi: { label: 'Teslim Edildi', color: 'bg-gray-100 text-gray-800 border-gray-300' },
+  iade: { label: 'İade Edildi', color: 'bg-red-50 text-red-700 border-red-200' },
+  iptal: { label: 'İptal', color: 'bg-rose-50 text-rose-700 border-rose-200' },
 };
 
 export default function AdminCustomers() {
@@ -19,7 +74,15 @@ export default function AdminCustomers() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
+
+  // Cari Ekstre & Detay Modalı State
   const [statementCustomer, setStatementCustomer] = useState<any | null>(null);
+  const [activeModalTab, setActiveModalTab] = useState<'ledger' | 'repairs' | 'warranties'>('ledger');
+  const [ledgerData, setLedgerData] = useState<{ customer: any; transactions: any[]; repairs?: any[]; warranties?: any[]; summary: any } | null>(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [newTransaction, setNewTransaction] = useState({ type: 'alacak', amount: '', description: '' });
+  const [addingTransaction, setAddingTransaction] = useState(false);
+
   const [form, setForm] = useState<any>(emptyCustomer);
   const [assignment, setAssignment] = useState({ customerId: 0, planId: '', status: 'active', currentPeriodEnd: '' });
 
@@ -28,11 +91,54 @@ export default function AdminCustomers() {
       const [customerData, planData] = await Promise.all([fetchAdminCustomers(), fetchSubscriptionPlans()]);
       setCustomers(customerData);
       setPlans(planData);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
+
+  const loadLedger = async (customerId: number) => {
+    setLedgerLoading(true);
+    try {
+      const res = await fetchCustomerLedger(customerId);
+      setLedgerData(res);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLedgerLoading(false);
+    }
+  };
+
+  const openStatement = (customer: any, initialTab: 'ledger' | 'repairs' | 'warranties' = 'ledger') => {
+    setStatementCustomer(customer);
+    setActiveModalTab(initialTab);
+    setLedgerData(null);
+    setNewTransaction({ type: 'alacak', amount: '', description: '' });
+    loadLedger(customer.id);
+  };
+
+  const handleAddLedgerEntry = async () => {
+    if (!statementCustomer || !newTransaction.amount || parseFloat(newTransaction.amount) <= 0) {
+      alert('Lütfen geçerli bir tutar girin.');
+      return;
+    }
+    setAddingTransaction(true);
+    try {
+      await addCustomerLedgerEntry(statementCustomer.id, newTransaction);
+      setNewTransaction({ type: 'alacak', amount: '', description: '' });
+      await loadLedger(statementCustomer.id);
+      await load();
+    } catch (e: any) {
+      alert('İşlem başarısız: ' + e.message);
+    } finally {
+      setAddingTransaction(false);
+    }
+  };
 
   const filtered = customers.filter(customer => {
     const text = `${customer.firstName} ${customer.lastName} ${customer.email} ${customer.phone} ${customer.companyName} ${customer.accountCode}`.toLowerCase();
@@ -74,7 +180,7 @@ export default function AdminCustomers() {
       return;
     }
     if (!form.firstName || !form.email) return;
-    
+
     const submitData = { ...form };
     if (form.customerType === 'bireysel') {
       submitData.companyName = '';
@@ -89,8 +195,11 @@ export default function AdminCustomers() {
       else await createAdminCustomer(submitData);
       setShowModal(false);
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
-    finally { setSaving(false); }
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveAssignment = async () => {
@@ -100,8 +209,11 @@ export default function AdminCustomers() {
       await assignCustomerSubscription(assignment.customerId, assignment);
       setAssignment({ customerId: 0, planId: '', status: 'active', currentPeriodEnd: '' });
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
-    finally { setSaving(false); }
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleMigrateCustomers = async () => {
@@ -110,38 +222,58 @@ export default function AdminCustomers() {
       const result = await migrateCustomerUsers();
       alert(`${result.migrated || 0} eski müşteri kaydı yeni cari tabloya taşındı.`);
       await load();
-    } catch (e: any) { alert('Hata: ' + e.message); }
-    finally { setMigrating(false); }
+    } catch (e: any) {
+      alert('Hata: ' + e.message);
+    } finally {
+      setMigrating(false);
+    }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Müşteriler</h1>
-          <p className="text-sm text-gray-500 mt-1">Müşteri kullanıcılarını, cari bilgilerini ve abonelik paketlerini yönetin.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Müşteriler & Cari / Garanti Yönetimi</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Müşteri hesaplarını, cari bakiye hareketlerini, cihaz tamirlerini ve garanti durumlarını yönetin.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={handleMigrateCustomers} disabled={migrating} className="inline-flex items-center px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-theme border border-gray-200 shadow-sm disabled:opacity-60">
+          <button
+            onClick={handleMigrateCustomers}
+            disabled={migrating}
+            className="inline-flex items-center px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-theme border border-gray-200 shadow-sm disabled:opacity-60 transition"
+          >
             <RefreshCw className={`w-4 h-4 mr-2 ${migrating ? 'animate-spin' : ''}`} /> Eski Müşterileri Taşı
           </button>
-          <button onClick={openCreate} className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-theme shadow-sm">
-            <UserPlus className="w-4 h-4 mr-2" /> Yeni Müşteri
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center px-4 py-2 bg-primary hover:bg-secondary text-white text-sm font-medium rounded-theme shadow-sm transition"
+          >
+            <UserPlus className="w-4 h-4 mr-2" /> Yeni Müşteri Ekle
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
+        {/* Customer Table */}
         <div className="bg-white rounded-theme border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-gray-100">
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Müşteri, firma, e-posta veya telefon..." className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-theme text-sm focus:ring-2 focus:ring-primary" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Müşteri, firma, e-posta veya telefon..."
+                className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-theme text-sm focus:ring-2 focus:ring-primary"
+              />
             </div>
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center h-32"><div className="w-8 h-8 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div></div>
+            <div className="flex items-center justify-center h-32">
+              <div className="w-8 h-8 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -151,92 +283,194 @@ export default function AdminCustomers() {
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cari / Firma</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bakiye</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Paket</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">İşlem</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center py-10 text-gray-400 font-medium">Müşteri bulunamadı</td></tr>
-                  ) : filtered.map(customer => (
-                    <tr key={customer.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-4">
-                        <div className="font-semibold text-sm text-gray-900">{customer.firstName} {customer.lastName}</div>
-                        <div className="text-xs text-gray-500">{customer.email}</div>
-                        {customer.phone && <div className="text-xs text-gray-400">{customer.phone}</div>}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-2 font-medium text-gray-800"><Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}</div>
-                        <div className="text-xs text-gray-400 mt-1">{customer.accountCode || 'Cari kod yok'} • {customer.taxId || customer.taxOffice ? `${customer.taxOffice || ''} ${customer.taxId || ''}` : customer.sector || 'Cari bilgi bekliyor'}</div>
-                      </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">
-                        <div className="font-semibold text-gray-900">{Number(customer.balance || 0).toLocaleString('tr-TR')} TL</div>
-                        <div className="text-xs text-gray-400">Limit: {Number(customer.creditLimit || 0).toLocaleString('tr-TR')} TL</div>
-                      </td>
-                      <td className="px-5 py-4">
-                        {customer.planName ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary bg-blue-50 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> {customer.planName}</span>
-                            <div className="text-xs text-gray-400 mt-1">{customer.currentPeriodEnd ? new Date(customer.currentPeriodEnd).toLocaleDateString('tr-TR') : 'Süresiz'}</div>
-                          </div>
-                        ) : <span className="text-xs text-gray-400">Paket tanımlı değil</span>}
-                      </td>
-                      <td className="px-5 py-4 text-right space-x-1.5">
-                        <button onClick={() => setStatementCustomer(customer)} className="text-xs px-2.5 py-1.5 rounded-theme bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium inline-flex items-center gap-1">
-                          <FileText className="w-3.5 h-3.5" /> Ekstre
-                        </button>
-                        <button onClick={() => setAssignment({ customerId: customer.id, planId: customer.planId || '', status: customer.subscriptionStatus || 'active', currentPeriodEnd: customer.currentPeriodEnd ? String(customer.currentPeriodEnd).slice(0, 10) : '' })} className="text-xs px-2.5 py-1.5 rounded-theme bg-blue-50 text-primary hover:bg-blue-100 font-medium">Paket Ata</button>
-                        <button onClick={() => openEdit(customer)} className="text-xs px-2.5 py-1.5 rounded-theme bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium">Düzenle</button>
+                    <tr>
+                      <td colSpan={5} className="text-center py-10 text-gray-400 font-medium">
+                        Müşteri bulunamadı
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filtered.map(customer => (
+                      <tr key={customer.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-4">
+                          <div className="font-semibold text-sm text-gray-900">
+                            {customer.firstName} {customer.lastName}
+                          </div>
+                          <div className="text-xs text-gray-500">{customer.email}</div>
+                          {customer.phone && <div className="text-xs text-gray-400">{customer.phone}</div>}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-2 font-medium text-gray-800">
+                            <Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {customer.accountCode || 'Cari kod yok'} •{' '}
+                            {customer.taxId || customer.taxOffice
+                              ? `${customer.taxOffice || ''} ${customer.taxId || ''}`
+                              : customer.sector || 'Bireysel Hesap'}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-gray-600">
+                          <div
+                            className={`font-bold ${
+                              Number(customer.balance || 0) > 0 ? 'text-red-600' : 'text-emerald-600'
+                            }`}
+                          >
+                            {Number(customer.balance || 0).toLocaleString('tr-TR')} TL
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Limit: {Number(customer.creditLimit || 0).toLocaleString('tr-TR')} TL
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          {customer.planName ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary bg-blue-50 px-2 py-1 rounded-full">
+                                <CheckCircle className="w-3 h-3" /> {customer.planName}
+                              </span>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {customer.currentPeriodEnd
+                                  ? new Date(customer.currentPeriodEnd).toLocaleDateString('tr-TR')
+                                  : 'Süresiz'}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">Paket tanımlı değil</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-right space-x-1.5">
+                          <button
+                            onClick={() => openStatement(customer, 'ledger')}
+                            className="text-xs px-2.5 py-1.5 rounded-theme bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium inline-flex items-center gap-1 transition"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> Cari Hareketler
+                          </button>
+                          <button
+                            onClick={() => openStatement(customer, 'repairs')}
+                            className="text-xs px-2.5 py-1.5 rounded-theme bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium inline-flex items-center gap-1 transition"
+                          >
+                            <Wrench className="w-3.5 h-3.5" /> Tamirler
+                          </button>
+                          <button
+                            onClick={() => openStatement(customer, 'warranties')}
+                            className="text-xs px-2.5 py-1.5 rounded-theme bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium inline-flex items-center gap-1 transition"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" /> Garanti
+                          </button>
+                          <button
+                            onClick={() => openEdit(customer)}
+                            className="text-xs px-2.5 py-1.5 rounded-theme bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium transition"
+                          >
+                            Düzenle
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
+        {/* Subscription Plan Assignment Sidebar */}
         <div className="bg-white rounded-theme border border-gray-200 shadow-sm p-5 h-fit">
           <div className="flex items-center gap-2 mb-4">
             <CreditCard className="w-5 h-5 text-primary" />
             <h2 className="text-base font-bold text-gray-900">Abonelik Atama</h2>
           </div>
           <div className="space-y-3">
-            <select value={assignment.customerId} onChange={e => setAssignment({ ...assignment, customerId: Number(e.target.value) })} className={inputCls}>
-              <option value={0}>Müşteri seçin</option>
-              {customers.map(customer => <option key={customer.id} value={customer.id}>{customer.firstName} {customer.lastName}</option>)}
-            </select>
-            <select value={assignment.planId} onChange={e => setAssignment({ ...assignment, planId: e.target.value })} className={inputCls}>
-              <option value="">Paket seçin</option>
-              {plans.filter(plan => plan.isActive !== false).map(plan => <option key={plan.id} value={plan.id}>{plan.name} - {Number(plan.price).toLocaleString('tr-TR')} TL / {plan.billingCycle === 'yearly' ? 'Yıllık' : 'Aylık'}{Number(plan.discountRate || 0) > 0 ? ` - %${Number(plan.discountRate)} avantaj` : ''}</option>)}
-            </select>
-            <select value={assignment.status} onChange={e => setAssignment({ ...assignment, status: e.target.value })} className={inputCls}>
-              <option value="active">Aktif</option>
-              <option value="trial">Deneme</option>
-              <option value="past_due">Ödeme Bekliyor</option>
-              <option value="canceled">İptal</option>
-            </select>
-            <input type="date" value={assignment.currentPeriodEnd} onChange={e => setAssignment({ ...assignment, currentPeriodEnd: e.target.value })} className={inputCls} />
-            <button onClick={saveAssignment} disabled={saving || !assignment.customerId || !assignment.planId} className="w-full bg-primary hover:bg-secondary text-white py-2.5 rounded-theme font-semibold disabled:opacity-50">Paketi Kaydet</button>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Müşteri Seçin</label>
+              <select
+                value={assignment.customerId}
+                onChange={e => setAssignment({ ...assignment, customerId: Number(e.target.value) })}
+                className={inputCls}
+              >
+                <option value={0}>Müşteri seçin...</option>
+                {customers.map(customer => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.firstName} {customer.lastName} ({customer.companyName || customer.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Abonelik Paketi</label>
+              <select
+                value={assignment.planId}
+                onChange={e => setAssignment({ ...assignment, planId: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">Paket seçin...</option>
+                {plans
+                  .filter(plan => plan.isActive !== false)
+                  .map(plan => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} - {Number(plan.price).toLocaleString('tr-TR')} TL /{' '}
+                      {plan.billingCycle === 'yearly' ? 'Yıllık' : 'Aylık'}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Durum</label>
+              <select
+                value={assignment.status}
+                onChange={e => setAssignment({ ...assignment, status: e.target.value })}
+                className={inputCls}
+              >
+                <option value="active">Aktif</option>
+                <option value="trial">Deneme Süresi</option>
+                <option value="past_due">Ödeme Bekliyor</option>
+                <option value="canceled">İptal Edildi</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Bitiş Tarihi</label>
+              <input
+                type="date"
+                value={assignment.currentPeriodEnd}
+                onChange={e => setAssignment({ ...assignment, currentPeriodEnd: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+            <button
+              onClick={saveAssignment}
+              disabled={saving || !assignment.customerId || !assignment.planId}
+              className="w-full bg-primary hover:bg-secondary text-white py-2.5 rounded-theme font-semibold disabled:opacity-50 transition"
+            >
+              {saving ? 'Kaydediliyor...' : 'Paketi Kaydet'}
+            </button>
           </div>
         </div>
       </div>
 
+      {/* Customer Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">{editing ? 'Müşteri Düzenle' : 'Yeni Müşteri'}</h2>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-theme"><X className="w-5 h-5 text-gray-500" /></button>
+              <h2 className="text-lg font-bold text-gray-900">
+                {editing ? 'Müşteri Bilgilerini Düzenle' : 'Yeni Müşteri Oluştur'}
+              </h2>
+              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-theme">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
-            
-            {/* Müşteri Türü Seçimi */}
+
+            {/* Customer Type Selector */}
             <div className="px-6 pt-4">
-              <label className="block text-xs font-semibold text-gray-505 mb-2">Müşteri Türü</label>
+              <label className="block text-xs font-semibold text-gray-500 mb-2">Müşteri Türü</label>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, customerType: 'bireysel' })}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-theme border transition-all ${
+                  className={`flex-1 py-2.5 text-sm font-semibold rounded-theme border transition-all ${
                     form.customerType === 'bireysel'
                       ? 'bg-primary text-white border-primary shadow-sm'
                       : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
@@ -247,7 +481,7 @@ export default function AdminCustomers() {
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, customerType: 'kurumsal' })}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-theme border transition-all ${
+                  className={`flex-1 py-2.5 text-sm font-semibold rounded-theme border transition-all ${
                     form.customerType === 'kurumsal'
                       ? 'bg-primary text-white border-primary shadow-sm'
                       : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
@@ -260,139 +494,623 @@ export default function AdminCustomers() {
 
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               {form.customerType === 'kurumsal' && (
-                <div className="md:col-span-2 animate-in fade-in duration-200">
+                <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ünvanı *</label>
-                  <input value={form.companyName} onChange={e => setForm({ ...form, companyName: e.target.value })} className={inputCls} placeholder="Firma Ünvanı" required />
+                  <input
+                    value={form.companyName}
+                    onChange={e => setForm({ ...form, companyName: e.target.value })}
+                    className={inputCls}
+                    placeholder="Firma Ticari Ünvanı"
+                    required
+                  />
                 </div>
               )}
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   {form.customerType === 'kurumsal' ? 'Yetkili Adı *' : 'Ad *'}
                 </label>
-                <input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className={inputCls} placeholder="Ad" required />
+                <input
+                  value={form.firstName}
+                  onChange={e => setForm({ ...form, firstName: e.target.value })}
+                  className={inputCls}
+                  placeholder="Ad"
+                  required
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   {form.customerType === 'kurumsal' ? 'Yetkili Soyadı' : 'Soyad'}
                 </label>
-                <input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className={inputCls} placeholder="Soyad" />
+                <input
+                  value={form.lastName}
+                  onChange={e => setForm({ ...form, lastName: e.target.value })}
+                  className={inputCls}
+                  placeholder="Soyad"
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">E-posta adresi *</label>
-                <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className={inputCls} placeholder="E-posta" required />
+                <input
+                  value={form.email}
+                  onChange={e => setForm({ ...form, email: e.target.value })}
+                  className={inputCls}
+                  placeholder="E-posta"
+                  required
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Telefon Numarası</label>
-                <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} placeholder="Telefon" />
+                <input
+                  value={form.phone}
+                  onChange={e => setForm({ ...form, phone: e.target.value })}
+                  className={inputCls}
+                  placeholder="Telefon"
+                />
               </div>
               {!editing && (
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Giriş Şifresi</label>
-                  <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className={inputCls} placeholder="Şifre" />
+                  <input
+                    value={form.password}
+                    onChange={e => setForm({ ...form, password: e.target.value })}
+                    className={inputCls}
+                    placeholder="Şifre"
+                  />
                 </div>
               )}
-              
+
               {form.customerType === 'kurumsal' && (
                 <>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
-                    <input value={form.taxOffice} onChange={e => setForm({ ...form, taxOffice: e.target.value })} className={inputCls} placeholder="Vergi dairesi" />
+                    <input
+                      value={form.taxOffice}
+                      onChange={e => setForm({ ...form, taxOffice: e.target.value })}
+                      className={inputCls}
+                      placeholder="Vergi Dairesi"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi / TCKN</label>
-                    <input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} className={inputCls} placeholder="Vergi / TCKN" />
+                    <input
+                      value={form.taxId}
+                      onChange={e => setForm({ ...form, taxId: e.target.value })}
+                      className={inputCls}
+                      placeholder="Vergi No / TCKN"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Sektör</label>
-                    <input value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} className={inputCls} placeholder="Sektör" />
+                    <input
+                      value={form.sector}
+                      onChange={e => setForm({ ...form, sector: e.target.value })}
+                      className={inputCls}
+                      placeholder="Faaliyet Sektörü"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Kod</label>
-                    <input value={form.accountCode} onChange={e => setForm({ ...form, accountCode: e.target.value })} className={inputCls} placeholder="Cari kod" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Bakiye</label>
-                    <input type="number" value={form.balance} onChange={e => setForm({ ...form, balance: e.target.value })} className={inputCls} placeholder="Cari bakiye" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Kredi Limiti</label>
-                    <input type="number" value={form.creditLimit} onChange={e => setForm({ ...form, creditLimit: e.target.value })} className={inputCls} placeholder="Kredi limiti" />
+                    <input
+                      value={form.accountCode}
+                      onChange={e => setForm({ ...form, accountCode: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: MUS-001"
+                    />
                   </div>
                 </>
               )}
-              
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Başlangıç Bakiyesi (TL)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.balance}
+                  onChange={e => setForm({ ...form, balance: e.target.value })}
+                  className={inputCls}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Kredi Limiti (TL)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.creditLimit}
+                  onChange={e => setForm({ ...form, creditLimit: e.target.value })}
+                  className={inputCls}
+                  placeholder="0.00"
+                />
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Adres</label>
-                <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className={`${inputCls} resize-none`} rows={2} placeholder="Adres" />
+                <textarea
+                  value={form.address}
+                  onChange={e => setForm({ ...form, address: e.target.value })}
+                  className={`${inputCls} resize-none`}
+                  rows={2}
+                  placeholder="Açık Adres"
+                />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Anlaşma Notları</label>
-                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className={`${inputCls} resize-none`} rows={2} placeholder="Cari not / anlaşma bilgisi" />
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Notlar & Anlaşma Detayları</label>
+                <textarea
+                  value={form.notes}
+                  onChange={e => setForm({ ...form, notes: e.target.value })}
+                  className={`${inputCls} resize-none`}
+                  rows={2}
+                  placeholder="Özel anlaşma koşulları, iskonto veya cari notlar"
+                />
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">
-              <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-theme font-semibold hover:bg-gray-50">İptal</button>
-              <button onClick={saveCustomer} disabled={saving || !form.firstName || !form.email} className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-theme font-semibold disabled:opacity-50 flex items-center justify-center">
-                <Plus className="w-4 h-4 mr-2" /> Kaydet
+              <button
+                onClick={() => setShowModal(false)}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-theme font-semibold hover:bg-gray-50 transition"
+              >
+                İptal
+              </button>
+              <button
+                onClick={saveCustomer}
+                disabled={saving || !form.firstName || !form.email}
+                className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-theme font-semibold disabled:opacity-50 flex items-center justify-center transition"
+              >
+                {saving ? (
+                  'Kaydediliyor...'
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" /> Kaydet
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Cari Ekstre Modalı */}
+      {/* Customer Full Detail / Statement / Repairs / Warranty Modal */}
       {statementCustomer && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setStatementCustomer(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                <h3 className="text-base font-bold text-gray-900">
-                  Cari Ekstre — {statementCustomer.companyName || `${statementCustomer.firstName} ${statementCustomer.lastName}`}
-                </h3>
-              </div>
-              <button onClick={() => setStatementCustomer(null)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3 bg-gray-50 p-4 rounded-theme border border-gray-200">
-                <div>
-                  <p className="text-xs text-gray-400">Güncel Bakiye</p>
-                  <p className="text-xl font-bold text-gray-900">{Number(statementCustomer.balance || 0).toLocaleString('tr-TR')} TL</p>
+        <div
+          className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setStatementCustomer(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">
+                      Müşteri Detayı — {statementCustomer.companyName || `${statementCustomer.firstName} ${statementCustomer.lastName}`}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {statementCustomer.accountCode || 'Cari No Belirtilmemiş'} • {statementCustomer.email} • {statementCustomer.phone || 'Telefon Yok'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-400">Kredi Limiti</p>
-                  <p className="text-xl font-bold text-emerald-600">{Number(statementCustomer.creditLimit || 0).toLocaleString('tr-TR')} TL</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Telefon</p>
-                  <p className="text-sm font-semibold text-gray-800">{statementCustomer.phone || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">E-Posta</p>
-                  <p className="text-sm font-semibold text-gray-800">{statementCustomer.email || '—'}</p>
-                </div>
+                <button
+                  onClick={() => setStatementCustomer(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {statementCustomer.phone && (
-                <a
-                  href={`https://wa.me/${statementCustomer.phone.replace(/\D/g, '').startsWith('0') ? '90' + statementCustomer.phone.replace(/\D/g, '').substring(1) : statementCustomer.phone.replace(/\D/g, '').startsWith('90') ? statementCustomer.phone.replace(/\D/g, '') : '90' + statementCustomer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Sayın ${statementCustomer.companyName || statementCustomer.firstName}, güncel cari hesap bakiyeniz: ${Number(statementCustomer.balance || 0).toLocaleString('tr-TR')} TL'dir.`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-semibold text-xs rounded-theme flex items-center justify-center gap-2 transition-colors"
+              {/* Modal Navigation Tabs */}
+              <div className="flex border-b border-gray-200 gap-2">
+                <button
+                  onClick={() => setActiveModalTab('ledger')}
+                  className={`pb-2.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+                    activeModalTab === 'ledger'
+                      ? 'border-emerald-600 text-emerald-700 bg-white shadow-sm rounded-t-lg'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                  }`}
                 >
-                  <Send className="w-4 h-4 text-green-600" /> WhatsApp İle Ekstre Hatırlatması Gönder
-                </a>
+                  <CreditCard className="w-4 h-4" /> Cari Ekstre & Bakiyeler
+                </button>
+                <button
+                  onClick={() => setActiveModalTab('repairs')}
+                  className={`pb-2.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+                    activeModalTab === 'repairs'
+                      ? 'border-amber-600 text-amber-700 bg-white shadow-sm rounded-t-lg'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  <Wrench className="w-4 h-4" /> Cihaz Tamir Geçmişi ({ledgerData?.repairs?.length || 0})
+                </button>
+                <button
+                  onClick={() => setActiveModalTab('warranties')}
+                  className={`pb-2.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+                    activeModalTab === 'warranties'
+                      ? 'border-indigo-600 text-indigo-700 bg-white shadow-sm rounded-t-lg'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" /> Ürün Garanti Takibi ({ledgerData?.warranties?.length || 0})
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6 flex-1">
+              {/* TAB 1: CARİ EKSTRE & BAKIYELER */}
+              {activeModalTab === 'ledger' && (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-xs text-gray-500 font-medium">Güncel Bakiye</p>
+                      <p
+                        className={`text-2xl font-black mt-1 ${
+                          Number(ledgerData?.summary?.balance || statementCustomer.balance || 0) > 0
+                            ? 'text-red-600'
+                            : 'text-emerald-600'
+                        }`}
+                      >
+                        {Number(ledgerData?.summary?.balance || statementCustomer.balance || 0).toLocaleString('tr-TR')} TL
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {Number(ledgerData?.summary?.balance || statementCustomer.balance || 0) > 0
+                          ? 'Müşteri Borçlu'
+                          : 'Alacaklı / Sıfır Bakiye'}
+                      </p>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-xs text-gray-500 font-medium">Kredi Limiti</p>
+                      <p className="text-2xl font-black text-gray-800 mt-1">
+                        {Number(statementCustomer.creditLimit || 0).toLocaleString('tr-TR')} TL
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Tanımlı Kredi Limiti</p>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-xs text-gray-500 font-medium">Toplam Borç İşlemleri</p>
+                      <p className="text-2xl font-bold text-red-600 mt-1">
+                        {Number(ledgerData?.summary?.totalDebit || 0).toLocaleString('tr-TR')} TL
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Servis / Satış / Borç</p>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-xs text-gray-500 font-medium">Toplam Tahsilat / Ödeme</p>
+                      <p className="text-2xl font-bold text-emerald-600 mt-1">
+                        {Number(ledgerData?.summary?.totalCredit || 0).toLocaleString('tr-TR')} TL
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Yapılan Tahsilatlar</p>
+                    </div>
+                  </div>
+
+                  {/* Add Transaction Form */}
+                  <div className="bg-emerald-50/60 rounded-xl p-4 border border-emerald-200/80">
+                    <div className="flex items-center gap-2 mb-3">
+                      <PlusCircle className="w-4 h-4 text-emerald-700" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-900">
+                        Yeni Cari Hareket Ekle (Tahsilat / Borçlandırma)
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <select
+                          value={newTransaction.type}
+                          onChange={e => setNewTransaction({ ...newTransaction, type: e.target.value })}
+                          className={inputCls}
+                        >
+                          <option value="alacak">Tahsilat / Ödeme Al (Alacak)</option>
+                          <option value="borc">Borçlandırma Ekle (Borç)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Tutar (TL)"
+                          value={newTransaction.amount}
+                          onChange={e => setNewTransaction({ ...newTransaction, amount: e.target.value })}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Açıklama (Örn: Havale ile tahsilat)"
+                          value={newTransaction.description}
+                          onChange={e => setNewTransaction({ ...newTransaction, description: e.target.value })}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <button
+                          onClick={handleAddLedgerEntry}
+                          disabled={addingTransaction || !newTransaction.amount}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-theme text-sm disabled:opacity-50 transition"
+                        >
+                          {addingTransaction ? 'Ekleniyor...' : 'Hareket Ekle'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action bar: WhatsApp Reminder */}
+                  {statementCustomer.phone && (
+                    <a
+                      href={`https://wa.me/${
+                        statementCustomer.phone.replace(/\D/g, '').startsWith('0')
+                          ? '90' + statementCustomer.phone.replace(/\D/g, '').substring(1)
+                          : statementCustomer.phone.replace(/\D/g, '').startsWith('90')
+                          ? statementCustomer.phone.replace(/\D/g, '')
+                          : '90' + statementCustomer.phone.replace(/\D/g, '')
+                      }?text=${encodeURIComponent(
+                        `Sayın ${statementCustomer.companyName || statementCustomer.firstName}, güncel cari hesap bakiyeniz: ${Number(
+                          ledgerData?.summary?.balance || statementCustomer.balance || 0
+                        ).toLocaleString('tr-TR')} TL'dir.`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-xs rounded-theme flex items-center justify-center gap-2 shadow-sm transition"
+                    >
+                      <Send className="w-4 h-4 text-white" /> WhatsApp İle Bakiye Hatırlatması Gönder
+                    </a>
+                  )}
+
+                  {/* Ledger Transactions Table */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Cari Hareket Geçmişi</h4>
+                      <span className="text-xs text-gray-500 font-medium">
+                        {ledgerData?.transactions?.length || 0} Hareket Kaydı
+                      </span>
+                    </div>
+
+                    {ledgerLoading ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="w-8 h-8 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+                      </div>
+                    ) : !ledgerData?.transactions || ledgerData.transactions.length === 0 ? (
+                      <div className="py-12 text-center text-gray-400 text-sm">
+                        Bu müşteriye ait cari hareket kaydı bulunmamaktadır.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 text-sm">
+                          <thead className="bg-gray-100/70">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Tarih</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Tür</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Açıklama</th>
+                              <th className="px-4 py-3 text-right text-xs font-semibold text-red-600">Borç (TL)</th>
+                              <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-600">Alacak (TL)</th>
+                              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-800">Yürüyen Bakiye</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 bg-white">
+                            {ledgerData.transactions.map((tx: any) => (
+                              <tr key={tx.id} className="hover:bg-gray-50/80 transition-colors">
+                                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                                  {new Date(tx.date).toLocaleDateString('tr-TR')}{' '}
+                                  {new Date(tx.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-xs">
+                                  {tx.debit > 0 ? (
+                                    <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 px-2 py-0.5 rounded-full font-medium">
+                                      <ArrowUpRight className="w-3 h-3" /> Borç
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
+                                      <ArrowDownLeft className="w-3 h-3" /> Alacak
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-xs text-gray-800 font-medium max-w-xs truncate">
+                                  {tx.description}
+                                </td>
+                                <td className="px-4 py-3 text-right text-xs font-semibold text-red-600 whitespace-nowrap">
+                                  {tx.debit > 0 ? `${tx.debit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL` : '—'}
+                                </td>
+                                <td className="px-4 py-3 text-right text-xs font-semibold text-emerald-600 whitespace-nowrap">
+                                  {tx.credit > 0 ? `${tx.credit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL` : '—'}
+                                </td>
+                                <td className="px-4 py-3 text-right text-xs font-bold text-gray-900 whitespace-nowrap">
+                                  {Number(tx.runningBalance).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
 
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-xs font-semibold text-gray-500 mb-2">Cari Anlaşma Notları:</p>
-                <p className="text-xs text-gray-700 bg-gray-50 p-3 rounded-theme border border-gray-200">
-                  {statementCustomer.notes || 'Bu müşteriye ait özel bir cari not bulunmamaktadır.'}
+              {/* TAB 2: CİHAZ TAMİR GEÇMİŞİ */}
+              {activeModalTab === 'repairs' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between bg-amber-50 p-4 rounded-xl border border-amber-200">
+                    <div className="flex items-center gap-3">
+                      <Wrench className="w-6 h-6 text-amber-700" />
+                      <div>
+                        <h4 className="text-sm font-bold text-amber-900">Müşterinin Servis ve Cihaz Tamir Geçmişi</h4>
+                        <p className="text-xs text-amber-700">
+                          Müşteriye ait tüm servis kayıtları, tamir ücretleri ve garanti durumları.
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={`/admin/servis?userId=${statementCustomer.id}`}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition"
+                    >
+                      Yeni Servis Kaydı Aç <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+
+                  {ledgerLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="w-8 h-8 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin"></div>
+                    </div>
+                  ) : !ledgerData?.repairs || ledgerData.repairs.length === 0 ? (
+                    <div className="py-12 text-center text-gray-400 text-sm bg-gray-50 rounded-xl border border-gray-200">
+                      <Laptop className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      Bu müşteriye ait verilmiş bir cihaz tamir / servis kaydı bulunmamaktadır.
+                    </div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Servis No</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Cihaz / Arıza Konusu</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Durum</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Garanti Durumu</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">Servis Tutarı</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">Tarih</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                          {ledgerData.repairs.map((r: any) => {
+                            const st = statusLabels[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-700' };
+                            return (
+                              <tr key={r.id} className="hover:bg-gray-50 transition">
+                                <td className="px-4 py-3 text-xs font-bold text-primary whitespace-nowrap">
+                                  #{r.ticketNumber}
+                                </td>
+                                <td className="px-4 py-3 text-xs text-gray-900 font-medium">
+                                  <div>{r.subject}</div>
+                                  {r.accessories && <div className="text-[11px] text-gray-400 mt-0.5">Aksesuar: {r.accessories}</div>}
+                                </td>
+                                <td className="px-4 py-3 text-xs whitespace-nowrap">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${st.color}`}>
+                                    {st.label}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-xs whitespace-nowrap">
+                                  {r.isUnderWarranty ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <ShieldCheck className="w-3.5 h-3.5" /> Garanti Kapsamında
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                      <ShieldAlert className="w-3.5 h-3.5 text-gray-400" /> Ücretli Onarım
+                                    </span>
+                                  )}
+                                  {r.warrantyNote && (
+                                    <div className="text-[11px] text-gray-400 mt-0.5 italic">{r.warrantyNote}</div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right text-xs font-bold text-gray-900 whitespace-nowrap">
+                                  {Number(r.cost || 0).toLocaleString('tr-TR')} TL
+                                </td>
+                                <td className="px-4 py-3 text-right text-xs text-gray-500 whitespace-nowrap">
+                                  {new Date(r.createdAt).toLocaleDateString('tr-TR')}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: ÜRÜN & PARÇA GARANTİ TAKİBİ */}
+              {activeModalTab === 'warranties' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between bg-indigo-50 p-4 rounded-xl border border-indigo-200">
+                    <div className="flex items-center gap-3">
+                      <ShieldCheck className="w-6 h-6 text-indigo-700" />
+                      <div>
+                        <h4 className="text-sm font-bold text-indigo-900">Müşterinin Ürün ve Yedek Parça Garanti Durumu</h4>
+                        <p className="text-xs text-indigo-700">
+                          Müşteriye takılan yedek parçaların, satılan ürünlerin garanti süreleri ve sayaç takibi.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {ledgerLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                    </div>
+                  ) : !ledgerData?.warranties || ledgerData.warranties.length === 0 ? (
+                    <div className="py-12 text-center text-gray-400 text-sm bg-gray-50 rounded-xl border border-gray-200">
+                      <ShieldAlert className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      Bu müşteriye ait kayıtlı garantili ürün veya yedek parça bulunmamaktadır.
+                    </div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Ürün / Parça Adı</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Marka</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Montaj / Satış Tarihi</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Garanti Süresi</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Bitiş Tarihi</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">Garanti Durumu</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                          {ledgerData.warranties.map((w: any) => (
+                            <tr key={w.id} className="hover:bg-gray-50 transition">
+                              <td className="px-4 py-3 text-xs font-bold text-gray-900">
+                                {w.partName || 'Tanımsız Parça'}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-gray-600 font-medium">
+                                {w.brand || '—'}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-gray-600">
+                                {new Date(w.installDate).toLocaleDateString('tr-TR')}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-gray-700 font-semibold">
+                                {w.warrantyMonths} Ay
+                              </td>
+                              <td className="px-4 py-3 text-xs text-gray-600">
+                                {new Date(w.warrantyEndDate).toLocaleDateString('tr-TR')}
+                              </td>
+                              <td className="px-4 py-3 text-right text-xs whitespace-nowrap">
+                                {w.isExpired ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                                    <AlertTriangle className="w-3 h-3" /> Garanti Bitti
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <Clock className="w-3 h-3" /> {w.remainingDays} Gün Kaldı
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Customer Agreement / Anlaşma Notları Footer */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <p className="text-xs font-semibold text-gray-500 mb-1">Cari Anlaşma & Özel Notlar:</p>
+                <p className="text-xs text-gray-700 whitespace-pre-wrap">
+                  {statementCustomer.notes || 'Bu müşteriye ait özel bir cari anlaşma notu belirtilmemiştir.'}
                 </p>
               </div>
             </div>
-            <div className="flex justify-end p-4 border-t border-gray-100 bg-gray-50">
-              <button onClick={() => setStatementCustomer(null)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-semibold rounded-theme">Kapat</button>
+
+            {/* Footer */}
+            <div className="flex justify-end p-4 border-t border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setStatementCustomer(null)}
+                className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-semibold rounded-theme transition"
+              >
+                Kapat
+              </button>
             </div>
           </div>
         </div>

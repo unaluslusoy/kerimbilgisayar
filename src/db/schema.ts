@@ -1069,4 +1069,22 @@ export const serviceStatusLogs = mysqlTable('service_status_logs', {
   ticketIdx: index('idx_service_status_logs_ticket').on(t.ticketId),
 }));
 
+// ============================================================
+// MÜŞTERİ CARİ HAREKETLERİ (Customer Ledger)
+// ============================================================
+export const customerLedger = mysqlTable('customer_ledger', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  userId: int('user_id').references(() => users.id).notNull(),
+  ticketId: int('ticket_id').references(() => tickets.id),
+  type: mysqlEnum('type', ['borc', 'alacak']).notNull(), // borc = borçlandırma/servis/satış, alacak = tahsilat/ödeme
+  amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+  description: varchar('description', { length: 500 }),
+  createdByUserId: int('created_by_user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  userIdx: index('idx_customer_ledger_user').on(t.userId),
+}));
+
+
 

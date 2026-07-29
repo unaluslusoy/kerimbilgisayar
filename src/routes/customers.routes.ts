@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { eq, and, or, desc, sql, like } from 'drizzle-orm';
 import { db } from '../db/index';
-import { customers, users, companies, customerSubscriptions, plans } from '../db/schema';
+import { customers, users, companies, customerSubscriptions, plans, customerLedger, tickets, sales, ticketParts, stockItems } from '../db/schema';
 import { requireAdmin, hashPassword } from '../server/middleware';
 import { generateSlug } from '../server/utils';
 
@@ -189,9 +189,9 @@ customersRouter.patch('/api/admin/customers/:id', requireAdmin, async (req, res)
     const id = parseInt(req.params.id);
     const { firstName, lastName, email, phone, isActive, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes } = req.body;
     const existing = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    if (existing.length === 0 || existing[0].roleType !== 'customer') return res.status(404).json({ error: 'Müşteri bulunamadı' });
+    if (existing.length === 0) return res.status(404).json({ error: 'Müşteri bulunamadı' });
 
-    const userUpdates: any = {};
+    const userUpdates: any = { roleType: 'customer' };
     if (firstName !== undefined) userUpdates.firstName = firstName;
     if (lastName !== undefined) userUpdates.lastName = lastName;
     if (email !== undefined) userUpdates.email = email;
@@ -235,19 +235,235 @@ customersRouter.patch('/api/admin/customers/:id', requireAdmin, async (req, res)
     if (Object.keys(companyUpdates).length > 0) {
       if (existing[0].companyId) {
         await db.update(companies).set(companyUpdates).where(eq(companies.id, existing[0].companyId));
-      } else {
+      } else if (companyName) {
         const insertedCompany = await db.insert(companies).values({
           tenantId: 1,
-          name: companyName || `${firstName || existing[0].firstName} ${lastName || existing[0].lastName || ''}`.trim(),
+          name: companyName,
           phone: phone || existing[0].phone || null,
           email: email || existing[0].email || null,
           type: 'customer',
           ...companyUpdates,
         });
-        await db.update(users).set({ companyId: (insertedCompany[0] as any).insertId }).where(eq(users.id, id));
-        await db.update(customers).set({ companyId: (insertedCompany[0] as any).insertId }).where(eq(customers.userId, id));
+        const newCompId = (insertedCompany[0] as any).insertId;
+        await db.update(users).set({ companyId: newCompId }).where(eq(users.id, id));
+        await db.update(customers).set({ companyId: newCompId }).where(eq(customers.userId, id));
       }
     }
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/customers/:id/ledger (Cari Ekstre / Hareketler)
+customersRouter.get('/api/admin/customers/:id/ledger', requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const [customerRow] = await db.select({
+      id: customers.userId,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      companyName: companies.name,
+      phone: users.phone,
+      email: users.email,
+      balance: customers.balance,
+      creditLimit: customers.creditLimit,
+      accountCode: customers.accountCode,
+      notes: customers.notes,
+    }).from(customers)
+      .leftJoin(users, eq(customers.userId, users.id))
+      .leftJoin(companies, eq(customers.companyId, companies.id))
+      .where(eq(customers.userId, userId))
+      .limit(1);
+
+    if (!customerRow) return res.status(404).json({ error: 'Müşteri bulunamadı' });
+
+    let ledgerEntries: any[] = [];
+    try {
+      ledgerEntries = await db.select().from(customerLedger)
+        .where(eq(customerLedger.userId, userId))
+        .orderBy(desc(customerLedger.createdAt));
+    } catch (_) {
+      ledgerEntries = [];
+    }
+
+    const customerTickets = await db.select({
+      id: tickets.id,
+      ticketNumber: tickets.ticketNumber,
+      subject: tickets.subject,
+      description: tickets.description,
+      type: tickets.type,
+      priority: tickets.priority,
+      cost: tickets.cost,
+      laborCost: tickets.laborCost,
+      status: tickets.status,
+      isUnderWarranty: tickets.isUnderWarranty,
+      warrantyNote: tickets.warrantyNote,
+      accessories: tickets.accessories,
+      createdAt: tickets.createdAt,
+      resolvedAt: tickets.resolvedAt,
+      deliveredAt: tickets.deliveredAt,
+    }).from(tickets).where(eq(tickets.userId, userId)).orderBy(desc(tickets.createdAt));
+
+    const customerSales = await db.select({
+      id: sales.id,
+      receiptNumber: sales.receiptNumber,
+      totalAmount: sales.totalAmount,
+      paymentType: sales.paymentType,
+      status: sales.status,
+      createdAt: sales.createdAt,
+    }).from(sales).where(eq(sales.customerId, userId));
+
+    const transactions: any[] = [];
+
+    ledgerEntries.forEach(entry => {
+      transactions.push({
+        id: `ledger-${entry.id}`,
+        rawId: entry.id,
+        date: entry.createdAt,
+        type: entry.type,
+        source: 'manuel',
+        description: entry.description || (entry.type === 'borc' ? 'Manuel Borçlandırma' : 'Tahsilat / Ödeme'),
+        debit: entry.type === 'borc' ? parseFloat(entry.amount) : 0,
+        credit: entry.type === 'alacak' ? parseFloat(entry.amount) : 0,
+      });
+    });
+
+    customerTickets.forEach(t => {
+      const ticketCost = parseFloat(t.cost || '0');
+      if (ticketCost > 0) {
+        transactions.push({
+          id: `ticket-${t.id}`,
+          rawId: t.id,
+          date: t.createdAt,
+          type: 'borc',
+          source: 'servis',
+          description: `Servis Kaydı #${t.ticketNumber} — ${t.subject}`,
+          debit: ticketCost,
+          credit: 0,
+        });
+      }
+    });
+
+    customerSales.forEach(s => {
+      const saleAmount = parseFloat(s.totalAmount || '0');
+      if (saleAmount > 0) {
+        transactions.push({
+          id: `sale-${s.id}`,
+          rawId: s.id,
+          date: s.createdAt,
+          type: s.paymentType === 'cari' ? 'borc' : 'alacak',
+          source: 'pos',
+          description: `POS Satış #${s.receiptNumber} (${s.paymentType})`,
+          debit: s.paymentType === 'cari' ? saleAmount : 0,
+          credit: s.paymentType !== 'cari' ? saleAmount : 0,
+        });
+      }
+    });
+
+    transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let runningBalance = 0;
+    const enrichedTransactions = transactions.map(tx => {
+      runningBalance += (tx.debit - tx.credit);
+      return {
+        ...tx,
+        runningBalance: runningBalance.toFixed(2),
+      };
+    });
+
+    let partsWarranties: any[] = [];
+    if (customerTickets.length > 0) {
+      const ticketIds = customerTickets.map(t => t.id);
+      try {
+        const partsList = await db.select({
+          id: ticketParts.id,
+          ticketId: ticketParts.ticketId,
+          partName: ticketParts.name,
+          brand: ticketParts.brand,
+          quantity: ticketParts.quantity,
+          unitPrice: ticketParts.unitPrice,
+          totalPrice: ticketParts.totalPrice,
+          createdAt: ticketParts.createdAt,
+          warrantyMonths: stockItems.warrantyMonths,
+        }).from(ticketParts)
+          .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
+          .where(sql`${ticketParts.ticketId} IN (${sql.join(ticketIds.map(id => sql`${id}`), sql`, `)})`);
+
+        partsWarranties = partsList.map(p => {
+          const installDate = p.createdAt ? new Date(p.createdAt) : new Date();
+          const months = p.warrantyMonths || 12;
+          const warrantyEndDate = new Date(installDate);
+          warrantyEndDate.setMonth(warrantyEndDate.getMonth() + months);
+          const isExpired = new Date() > warrantyEndDate;
+          const diffDays = Math.max(0, Math.ceil((warrantyEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+          return {
+            ...p,
+            warrantyMonths: months,
+            installDate: installDate.toISOString(),
+            warrantyEndDate: warrantyEndDate.toISOString(),
+            isExpired,
+            remainingDays: isExpired ? 0 : diffDays,
+          };
+        });
+      } catch (err) {
+        console.warn('Parts warranties query warning:', err);
+      }
+    }
+
+    res.json({
+      customer: customerRow,
+      transactions: enrichedTransactions.reverse(),
+      repairs: customerTickets,
+      warranties: partsWarranties,
+      summary: {
+        totalDebit: transactions.reduce((acc, t) => acc + t.debit, 0).toFixed(2),
+        totalCredit: transactions.reduce((acc, t) => acc + t.credit, 0).toFixed(2),
+        balance: runningBalance.toFixed(2),
+        repairCount: customerTickets.length,
+        underWarrantyCount: customerTickets.filter(t => t.isUnderWarranty).length,
+      }
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/customers/:id/ledger (Manuel Tahsilat / Borçlandırma Ekleme)
+customersRouter.post('/api/admin/customers/:id/ledger', requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const { type, amount, description } = req.body;
+    if (!type || !amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({ error: 'Geçerli işlem türü ve tutar zorunludur' });
+    }
+
+    const adminUser = (req as any).adminUser;
+    const numericAmount = parseFloat(amount);
+
+    await db.transaction(async (tx) => {
+      try {
+        await tx.insert(customerLedger).values({
+          tenantId: 1,
+          userId,
+          type: type === 'borc' ? 'borc' : 'alacak',
+          amount: numericAmount.toFixed(2),
+          description: description || (type === 'borc' ? 'Manuel Borç Kaydı' : 'Tahsilat'),
+          createdByUserId: adminUser?.userId || null,
+        });
+      } catch (err) {
+        console.warn('customerLedger insert warning:', err);
+      }
+
+      const [cust] = await tx.select().from(customers).where(eq(customers.userId, userId)).limit(1);
+      if (cust) {
+        const currentBal = parseFloat(cust.balance || '0');
+        const newBal = type === 'borc' ? currentBal + numericAmount : currentBal - numericAmount;
+        await tx.update(customers).set({ balance: newBal.toFixed(2) }).where(eq(customers.userId, userId));
+      }
+    });
+
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

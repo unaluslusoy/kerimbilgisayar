@@ -279,6 +279,14 @@ export async function assignCustomerSubscription(id: number, data: any) {
   return adminRequest(`/api/admin/customers/${id}/subscription`, { method: 'POST', body: JSON.stringify(data) });
 }
 
+export async function fetchCustomerLedger(id: number) {
+  return adminRequest(`/api/admin/customers/${id}/ledger`);
+}
+
+export async function addCustomerLedgerEntry(id: number, data: { type: 'borc' | 'alacak'; amount: number | string; description?: string }) {
+  return adminRequest(`/api/admin/customers/${id}/ledger`, { method: 'POST', body: JSON.stringify(data) });
+}
+
 export async function fetchSubscriptionPlans() {
   return adminRequest('/api/admin/subscription-plans');
 }
