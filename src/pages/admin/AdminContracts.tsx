@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FileSignature, Plus, Search, X, Edit2, Trash2, Calendar, AlertTriangle, CheckCircle, Clock, Ban } from 'lucide-react';
-import { fetchAdminContracts, createAdminContract, updateAdminContract, deleteAdminContract } from '../../lib/api';
+import { fetchAdminContracts, createAdminContract, updateAdminContract, deleteAdminContract, fetchAdminCustomers } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
@@ -26,6 +26,7 @@ export default function AdminContracts() {
   usePageTitle('Bakım Sözleşmeleri');
 
   const [contracts, setContracts] = useState<any[]>([]);
+  const [customersList, setCustomersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -36,8 +37,12 @@ export default function AdminContracts() {
 
   const load = async () => {
     try {
-      const data = await fetchAdminContracts();
+      const [data, custs] = await Promise.all([
+        fetchAdminContracts(),
+        fetchAdminCustomers().catch(() => [])
+      ]);
       setContracts(Array.isArray(data) ? data : []);
+      setCustomersList(Array.isArray(custs) ? custs : []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -291,8 +296,19 @@ export default function AdminContracts() {
                 <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className={inputCls} placeholder="Yıllık bakım sözleşmesi" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Firma ID (opsiyonel)</label>
-                <input type="number" value={form.companyId} onChange={e => setForm({ ...form, companyId: e.target.value })} className={inputCls} placeholder="Firma ID" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Müşteri / Firma Seçin *</label>
+                <select
+                  value={form.companyId}
+                  onChange={e => setForm({ ...form, companyId: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">Firma / Müşteri Seçin...</option>
+                  {customersList.map((c: any) => (
+                    <option key={c.id} value={c.companyId || c.id}>
+                      {c.companyName || `${c.firstName} ${c.lastName}`} - {c.email}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

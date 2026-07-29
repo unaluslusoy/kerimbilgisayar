@@ -55,8 +55,10 @@ customersRouter.get('/api/admin/customers/search', requireAdmin, async (req, res
           like(sql<string>`LOWER(${users.firstName})`, `%${q}%`),
           like(sql<string>`LOWER(${users.lastName})`, `%${q}%`),
           like(sql<string>`LOWER(CONCAT(${users.firstName}, ' ', ${users.lastName}))`, `%${q}%`),
+          like(sql<string>`LOWER(${companies.name})`, `%${q}%`),
           like(users.phone, `%${q}%`),
-          like(sql<string>`LOWER(${users.email})`, `%${q}%`)
+          like(sql<string>`LOWER(${users.email})`, `%${q}%`),
+          like(sql<string>`LOWER(${customers.accountCode})`, `%${q}%`)
         )
       )
       .limit(10);

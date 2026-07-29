@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FileText, Plus, Search, X, Printer, Eye, Edit2, Trash2, ChevronDown, CheckCircle, AlertCircle, Clock, CreditCard } from 'lucide-react';
-import { fetchAdminInvoices, createAdminInvoice, updateAdminInvoice, deleteAdminInvoice, createOdealPaymentLink } from '../../lib/api';
+import { fetchAdminInvoices, createAdminInvoice, updateAdminInvoice, deleteAdminInvoice, createOdealPaymentLink, fetchAdminCustomers } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
@@ -33,6 +33,7 @@ export default function AdminInvoices() {
   usePageTitle('Fatura Yönetimi');
 
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [customersList, setCustomersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -44,8 +45,12 @@ export default function AdminInvoices() {
 
   const load = async () => {
     try {
-      const data = await fetchAdminInvoices();
+      const [data, custs] = await Promise.all([
+        fetchAdminInvoices(),
+        fetchAdminCustomers().catch(() => [])
+      ]);
       setInvoices(Array.isArray(data) ? data : []);
+      setCustomersList(Array.isArray(custs) ? custs : []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -383,6 +388,28 @@ export default function AdminInvoices() {
             </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Müşteri Seçin *</label>
+                  <select
+                    value={form.userId}
+                    onChange={e => {
+                      const selectedCust = customersList.find(c => String(c.id) === e.target.value);
+                      setForm({
+                        ...form,
+                        userId: e.target.value,
+                        companyId: selectedCust?.companyId || form.companyId,
+                      });
+                    }}
+                    className={inputCls}
+                  >
+                    <option value="">Müşteri Seçin...</option>
+                    {customersList.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.firstName} {c.lastName} {c.companyName ? `(${c.companyName})` : ''} - {c.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Fatura No *</label>
                   <input value={form.invoiceNumber} onChange={e => setForm({ ...form, invoiceNumber: e.target.value })} className={inputCls} placeholder="FTR-001" />

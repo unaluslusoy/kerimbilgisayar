@@ -311,16 +311,33 @@ export default function ServiceManager() {
 
   const loadDependencies = async () => {
     try {
-      const [users, stock, dealersData, deviceTypesData] = await Promise.all([
+      const [users, stock, dealersData, deviceTypesData, customersData] = await Promise.all([
         fetchAdminUsers(),
         fetchAdminStock(),
         adminRequest('/api/admin/dealers').catch(() => []),
-        fetchAdminDeviceTypes().catch(() => [])
+        fetchAdminDeviceTypes().catch(() => []),
+        fetchAdminCustomers().catch(() => [])
       ]);
-      // Sadece admin ve teknisyenleri filtrele
       const staff = users.filter((u: any) => u.roleType === 'superadmin' || u.roleType === 'tenant_admin' || u.roleType === 'staff' || u.roleType === 'technician');
       setStaffUsers(staff);
-      setAllUsers(users);
+      
+      const combinedUsers = [...users];
+      if (Array.isArray(customersData)) {
+        customersData.forEach((c: any) => {
+          if (!combinedUsers.some(u => u.id === c.id)) {
+            combinedUsers.push({
+              id: c.id,
+              firstName: c.firstName,
+              lastName: c.lastName,
+              email: c.email,
+              phone: c.phone,
+              companyName: c.companyName,
+              roleType: 'customer',
+            });
+          }
+        });
+      }
+      setAllUsers(combinedUsers);
       setStockItems(stock);
       setDealers(Array.isArray(dealersData) ? dealersData : []);
       setDeviceTypes(Array.isArray(deviceTypesData) ? deviceTypesData : []);
