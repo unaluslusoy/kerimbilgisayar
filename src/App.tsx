@@ -7,6 +7,7 @@ import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { AuthProvider } from './context/AuthContext';
 import { CustomerAuthProvider } from './context/CustomerAuthContext';
 import { ToastProvider } from './context/ToastContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import PwaInstallBanner from './components/ui/PwaInstallBanner';
 
 // Lazy load layout components
@@ -251,7 +252,9 @@ export default function App() {
         <CustomerAuthProvider>
           <SettingsProvider>
             <ToastProvider>
-              <AppContent />
+              <ErrorBoundary>
+                <AppContent />
+              </ErrorBoundary>
               <PwaInstallBanner />
             </ToastProvider>
           </SettingsProvider>

@@ -41,10 +41,10 @@ import {
   triggerWebhook,
 } from '../server/helpers';
 
-export const publicRouter = express.Router();
-
 let gmbCache: any = null;
 let gmbCacheTime = 0;
+
+export const publicRouter = express.Router();
 
 // --- SITEMAP ---
 publicRouter.get('/sitemap.xml', async (req, res) => {
