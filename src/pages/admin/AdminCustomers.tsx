@@ -30,6 +30,8 @@ import {
   MapPin,
   Shield,
   CreditCard as PayIcon,
+  FileSignature,
+  Award,
 } from 'lucide-react';
 import {
   assignCustomerSubscription,
@@ -85,9 +87,12 @@ export default function AdminCustomers() {
   const [saving, setSaving] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [search, setSearch] = useState('');
-  const [filterTab, setFilterTab] = useState<'all' | 'debtors' | 'cleared' | 'corporate' | 'individual'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'contracted' | 'debtors' | 'cleared' | 'corporate' | 'individual'>('all');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
+
+  // Sözleşme Modalı State
+  const [contractModalCustomer, setContractModalCustomer] = useState<any | null>(null);
 
   // Cari Ekstre & Detay Modalı State
   const [statementCustomer, setStatementCustomer] = useState<any | null>(null);
@@ -134,6 +139,16 @@ export default function AdminCustomers() {
     setLedgerData(null);
     setNewTransaction({ type: 'alacak', amount: '', description: '' });
     loadLedger(customer.id);
+  };
+
+  const openContractModal = (customer: any) => {
+    setContractModalCustomer(customer);
+    setAssignment({
+      customerId: customer.id,
+      planId: customer.planId ? String(customer.planId) : '',
+      status: customer.subscriptionStatus || 'active',
+      currentPeriodEnd: customer.currentPeriodEnd ? new Date(customer.currentPeriodEnd).toISOString().split('T')[0] : '',
+    });
   };
 
   const handleAddLedgerEntry = async () => {
@@ -208,7 +223,7 @@ export default function AdminCustomers() {
   // Export Customer List to CSV
   const handleExportCSV = () => {
     if (!customers.length) return;
-    const headers = ['Musteri Ad Soyad', 'E-posta', 'Telefon', 'Firma Unvani', 'Cari Kod', 'Bakiye (TL)', 'Kredi Limiti (TL)', 'Paket'];
+    const headers = ['Musteri Ad Soyad', 'E-posta', 'Telefon', 'Firma Unvani', 'Cari Kod', 'Bakiye (TL)', 'Kredi Limiti (TL)', 'Sozlesme / Bakim Anlasmasi'];
     const rows = filtered.map(c => [
       `"${c.firstName} ${c.lastName}"`,
       `"${c.email || ''}"`,
@@ -217,7 +232,7 @@ export default function AdminCustomers() {
       `"${c.accountCode || ''}"`,
       `"${Number(c.balance || 0).toFixed(2)}"`,
       `"${Number(c.creditLimit || 0).toFixed(2)}"`,
-      `"${c.planName || '—'}"`,
+      `"${c.planName ? `Anlaşmalı (${c.planName})` : 'Anlaşma Yok'}"`,
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -233,7 +248,7 @@ export default function AdminCustomers() {
   const totalReceivables = customers.reduce((sum, c) => sum + (Number(c.balance || 0) > 0 ? Number(c.balance) : 0), 0);
   const debtorCount = customers.filter(c => Number(c.balance || 0) > 0).length;
   const corporateCount = customers.filter(c => !!c.companyName).length;
-  const activeSubscribedCount = customers.filter(c => !!c.planName).length;
+  const contractedCount = customers.filter(c => !!c.planName).length;
 
   const filtered = customers.filter(customer => {
     const text = `${customer.firstName} ${customer.lastName} ${customer.email} ${customer.phone} ${customer.companyName} ${customer.accountCode}`.toLowerCase();
@@ -241,6 +256,7 @@ export default function AdminCustomers() {
 
     if (!matchSearch) return false;
 
+    if (filterTab === 'contracted') return !!customer.planName;
     if (filterTab === 'debtors') return Number(customer.balance || 0) > 0;
     if (filterTab === 'cleared') return Number(customer.balance || 0) <= 0;
     if (filterTab === 'corporate') return !!customer.companyName;
@@ -311,6 +327,7 @@ export default function AdminCustomers() {
     setSaving(true);
     try {
       await assignCustomerSubscription(assignment.customerId, assignment);
+      setContractModalCustomer(null);
       setAssignment({ customerId: 0, planId: '', status: 'active', currentPeriodEnd: '' });
       await load();
     } catch (e: any) {
@@ -340,7 +357,7 @@ export default function AdminCustomers() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Müşteriler & Cari / Garanti Yönetimi</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Müşteri hesaplarını, cari bakiye hareketlerini, cihaz tamirlerini ve garanti durumlarını yönetin.
+            Müşteri hesaplarını, cari bakiye hareketlerini, bakım sözleşmelerini ve cihaz tamirlerini yönetin.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -407,283 +424,309 @@ export default function AdminCustomers() {
 
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Aktif Abonelikler</p>
-            <h3 className="text-2xl font-black text-emerald-600 mt-1">{activeSubscribedCount} Müşteri</h3>
-            <p className="text-[11px] text-gray-500 mt-0.5">Paket Tanımlı Cari Hesap</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sözleşmeli / Bakım Anlaşmalı</p>
+            <h3 className="text-2xl font-black text-emerald-600 mt-1">{contractedCount} Müşteri</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Aktif Bakım Sözleşmesi Var</p>
           </div>
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <UserCheck className="w-6 h-6" />
+            <Award className="w-6 h-6" />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
-        {/* Customer Table Section */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-          {/* Search & Filter Bar */}
-          <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Müşteri, firma, e-posta veya telefon..."
-                className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-theme text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-
-            {/* Quick Filter Tabs */}
-            <div className="flex bg-gray-100 p-1 rounded-xl gap-1 text-xs font-semibold overflow-x-auto">
-              <button
-                onClick={() => setFilterTab('all')}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  filterTab === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Tümü ({customers.length})
-              </button>
-              <button
-                onClick={() => setFilterTab('debtors')}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  filterTab === 'debtors' ? 'bg-red-50 text-red-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Borçlular ({debtorCount})
-              </button>
-              <button
-                onClick={() => setFilterTab('cleared')}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  filterTab === 'cleared' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Sıfır / Alacaklı
-              </button>
-              <button
-                onClick={() => setFilterTab('corporate')}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  filterTab === 'corporate' ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Kurumsal ({corporateCount})
-              </button>
-              <button
-                onClick={() => setFilterTab('individual')}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  filterTab === 'individual' ? 'bg-gray-200 text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Bireysel
-              </button>
-            </div>
+      {/* Customer Table Section */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+        {/* Search & Filter Bar */}
+        <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Müşteri, firma, e-posta veya telefon..."
+              className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-theme text-sm focus:ring-2 focus:ring-primary"
+            />
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="w-8 h-8 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto flex-1">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Müşteri</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cari / Firma</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bakiye & Risk</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Paket</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-10 text-gray-400 font-medium">
-                        Müşteri bulunamadı
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map(customer => {
-                      const bal = Number(customer.balance || 0);
-                      const limit = Number(customer.creditLimit || 0);
-                      const isHighRisk = limit > 0 && bal >= limit;
-
-                      return (
-                        <tr key={customer.id} className="hover:bg-gray-50 transition">
-                          <td className="px-5 py-4">
-                            <div className="font-semibold text-sm text-gray-900 flex items-center gap-1.5">
-                              {customer.firstName} {customer.lastName}
-                              {customer.address && (
-                                <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.address)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-gray-400 hover:text-primary transition"
-                                  title="Google Maps Yol Tarifi Al"
-                                >
-                                  <MapPin className="w-3.5 h-3.5" />
-                                </a>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500">{customer.email}</div>
-                            {customer.phone && <div className="text-xs text-gray-400">{customer.phone}</div>}
-                          </td>
-                          <td className="px-5 py-4 text-sm text-gray-600">
-                            <div className="flex items-center gap-2 font-medium text-gray-800">
-                              <Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}
-                            </div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              {customer.accountCode || 'Cari kod yok'} •{' '}
-                              {customer.taxId || customer.taxOffice
-                                ? `${customer.taxOffice || ''} ${customer.taxId || ''}`
-                                : customer.sector || 'Bireysel Hesap'}
-                            </div>
-                          </td>
-                          <td className="px-5 py-4 text-sm text-gray-600">
-                            <div className={`font-bold ${bal > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                              {bal.toLocaleString('tr-TR')} TL
-                            </div>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className="text-xs text-gray-400">Limit: {limit.toLocaleString('tr-TR')} TL</span>
-                              {isHighRisk && (
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 text-red-700">
-                                  <Shield className="w-3 h-3" /> Riskli
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            {customer.planName ? (
-                              <div>
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary bg-blue-50 px-2 py-1 rounded-full">
-                                  <CheckCircle className="w-3 h-3" /> {customer.planName}
-                                </span>
-                                <div className="text-xs text-gray-400 mt-1">
-                                  {customer.currentPeriodEnd
-                                    ? new Date(customer.currentPeriodEnd).toLocaleDateString('tr-TR')
-                                    : 'Süresiz'}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-400">Paket tanımlı değil</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-4 text-right space-x-1">
-                            {bal > 0 && (
-                              <button
-                                onClick={() => handleCreatePaymentLink(customer)}
-                                className="text-xs px-2 py-1.5 rounded-theme bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium inline-flex items-center gap-1 transition"
-                                title="Kredi Kartı Ödeme Linki Üret"
-                              >
-                                <PayIcon className="w-3.5 h-3.5" /> Ödeme Linki
-                              </button>
-                            )}
-                            <button
-                              onClick={() => openStatement(customer, 'ledger')}
-                              className="text-xs px-2.5 py-1.5 rounded-theme bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium inline-flex items-center gap-1 transition"
-                            >
-                              <FileText className="w-3.5 h-3.5" /> Ekstre
-                            </button>
-                            <button
-                              onClick={() => openStatement(customer, 'repairs')}
-                              className="text-xs px-2.5 py-1.5 rounded-theme bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium inline-flex items-center gap-1 transition"
-                            >
-                              <Wrench className="w-3.5 h-3.5" /> Tamirler
-                            </button>
-                            <button
-                              onClick={() => openEdit(customer)}
-                              className="text-xs px-2.5 py-1.5 rounded-theme bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium transition"
-                            >
-                              Düzenle
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCustomer(customer)}
-                              className="text-xs p-1.5 rounded-theme text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
-                              title="Müşteriyi Sil"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Subscription Plan Assignment Sidebar */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 h-fit">
-          <div className="flex items-center gap-2 mb-4">
-            <CreditCard className="w-5 h-5 text-primary" />
-            <h2 className="text-base font-bold text-gray-900">Abonelik Atama</h2>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Müşteri Seçin</label>
-              <select
-                value={assignment.customerId}
-                onChange={e => setAssignment({ ...assignment, customerId: Number(e.target.value) })}
-                className={inputCls}
-              >
-                <option value={0}>Müşteri seçin...</option>
-                {customers.map(customer => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.firstName} {customer.lastName} ({customer.companyName || customer.email})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Abonelik Paketi</label>
-              <select
-                value={assignment.planId}
-                onChange={e => setAssignment({ ...assignment, planId: e.target.value })}
-                className={inputCls}
-              >
-                <option value="">Paket seçin...</option>
-                {plans
-                  .filter(plan => plan.isActive !== false)
-                  .map(plan => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} - {Number(plan.price).toLocaleString('tr-TR')} TL /{' '}
-                      {plan.billingCycle === 'yearly' ? 'Yıllık' : 'Aylık'}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Durum</label>
-              <select
-                value={assignment.status}
-                onChange={e => setAssignment({ ...assignment, status: e.target.value })}
-                className={inputCls}
-              >
-                <option value="active">Aktif</option>
-                <option value="trial">Deneme Süresi</option>
-                <option value="past_due">Ödeme Bekliyor</option>
-                <option value="canceled">İptal Edildi</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Bitiş Tarihi</label>
-              <input
-                type="date"
-                value={assignment.currentPeriodEnd}
-                onChange={e => setAssignment({ ...assignment, currentPeriodEnd: e.target.value })}
-                className={inputCls}
-              />
-            </div>
+          {/* Quick Filter Tabs */}
+          <div className="flex bg-gray-100 p-1 rounded-xl gap-1 text-xs font-semibold overflow-x-auto">
             <button
-              onClick={saveAssignment}
-              disabled={saving || !assignment.customerId || !assignment.planId}
-              className="w-full bg-primary hover:bg-secondary text-white py-2.5 rounded-theme font-semibold disabled:opacity-50 transition"
+              onClick={() => setFilterTab('all')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
             >
-              {saving ? 'Kaydediliyor...' : 'Paketi Kaydet'}
+              Tümü ({customers.length})
+            </button>
+            <button
+              onClick={() => setFilterTab('contracted')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'contracted' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Bakım Anlaşmalı ({contractedCount})
+            </button>
+            <button
+              onClick={() => setFilterTab('debtors')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'debtors' ? 'bg-red-50 text-red-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Borçlular ({debtorCount})
+            </button>
+            <button
+              onClick={() => setFilterTab('cleared')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'cleared' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Sıfır / Alacaklı
+            </button>
+            <button
+              onClick={() => setFilterTab('corporate')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'corporate' ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Kurumsal ({corporateCount})
+            </button>
+            <button
+              onClick={() => setFilterTab('individual')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'individual' ? 'bg-gray-200 text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Bireysel
             </button>
           </div>
         </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="w-8 h-8 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto flex-1">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Müşteri</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cari / Firma</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bakiye & Risk</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">İşlemler</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-10 text-gray-400 font-medium">
+                      Müşteri bulunamadı
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map(customer => {
+                    const bal = Number(customer.balance || 0);
+                    const limit = Number(customer.creditLimit || 0);
+                    const isHighRisk = limit > 0 && bal >= limit;
+
+                    return (
+                      <tr key={customer.id} className="hover:bg-gray-50 transition">
+                        <td className="px-5 py-4">
+                          <div className="font-semibold text-sm text-gray-900 flex items-center gap-1.5">
+                            {customer.firstName} {customer.lastName}
+                            {customer.address && (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.address)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-gray-400 hover:text-primary transition"
+                                title="Google Maps Yol Tarifi Al"
+                              >
+                                <MapPin className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">{customer.email}</div>
+                          {customer.phone && <div className="text-xs text-gray-400">{customer.phone}</div>}
+                          {customer.planName ? (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                <Award className="w-3 h-3 text-emerald-600" /> Bakım Anlaşmalı ({customer.planName})
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="mt-1">
+                              <span className="text-[10px] text-gray-400">Anlaşma Yok</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-2 font-medium text-gray-800">
+                            <Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {customer.accountCode || 'Cari kod yok'} •{' '}
+                            {customer.taxId || customer.taxOffice
+                              ? `${customer.taxOffice || ''} ${customer.taxId || ''}`
+                              : customer.sector || 'Bireysel Hesap'}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-gray-600">
+                          <div className={`font-bold ${bal > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {bal.toLocaleString('tr-TR')} TL
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-xs text-gray-400">Limit: {limit.toLocaleString('tr-TR')} TL</span>
+                            {isHighRisk && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 text-red-700">
+                                <Shield className="w-3 h-3" /> Riskli
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-right space-x-1">
+                          <button
+                            onClick={() => openContractModal(customer)}
+                            className={`text-xs px-2.5 py-1.5 rounded-theme font-medium inline-flex items-center gap-1 transition ${
+                              customer.planName
+                                ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="Bakım Anlaşması / Sözleşme Yönetimi"
+                          >
+                            <FileSignature className="w-3.5 h-3.5" /> {customer.planName ? 'Sözleşmeli' : 'Sözleşme Ekle'}
+                          </button>
+
+                          {bal > 0 && (
+                            <button
+                              onClick={() => handleCreatePaymentLink(customer)}
+                              className="text-xs px-2 py-1.5 rounded-theme bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium inline-flex items-center gap-1 transition"
+                              title="Kredi Kartı Ödeme Linki Üret"
+                            >
+                              <PayIcon className="w-3.5 h-3.5" /> Ödeme Linki
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openStatement(customer, 'ledger')}
+                            className="text-xs px-2.5 py-1.5 rounded-theme bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium inline-flex items-center gap-1 transition"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> Ekstre
+                          </button>
+                          <button
+                            onClick={() => openStatement(customer, 'repairs')}
+                            className="text-xs px-2.5 py-1.5 rounded-theme bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium inline-flex items-center gap-1 transition"
+                          >
+                            <Wrench className="w-3.5 h-3.5" /> Tamirler
+                          </button>
+                          <button
+                            onClick={() => openEdit(customer)}
+                            className="text-xs px-2.5 py-1.5 rounded-theme bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium transition"
+                          >
+                            Düzenle
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCustomer(customer)}
+                            className="text-xs p-1.5 rounded-theme text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                            title="Müşteriyi Sil"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {/* Contract / Bakım Anlaşması Modal */}
+      {contractModalCustomer && (
+        <div
+          className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setContractModalCustomer(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+              <div className="flex items-center gap-2">
+                <FileSignature className="w-5 h-5 text-emerald-700" />
+                <h3 className="text-base font-bold text-gray-900">
+                  Bakım Anlaşması & Sözleşme — {contractModalCustomer.companyName || `${contractModalCustomer.firstName} ${contractModalCustomer.lastName}`}
+                </h3>
+              </div>
+              <button onClick={() => setContractModalCustomer(null)} className="p-1 hover:bg-gray-200 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Bakım Anlaşma Paketi Seçin *</label>
+                <select
+                  value={assignment.planId}
+                  onChange={e => setAssignment({ ...assignment, planId: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">Anlaşma Yok / Paket Seçin...</option>
+                  {plans
+                    .filter(plan => plan.isActive !== false)
+                    .map(plan => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name} - {Number(plan.price).toLocaleString('tr-TR')} TL /{' '}
+                        {plan.billingCycle === 'yearly' ? 'Yıllık' : 'Aylık'}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Sözleşme Durumu</label>
+                <select
+                  value={assignment.status}
+                  onChange={e => setAssignment({ ...assignment, status: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="active">🟢 Aktif Anlaşmalı</option>
+                  <option value="trial">🟡 Deneme Süresi</option>
+                  <option value="past_due">🔴 Ödeme Bekliyor</option>
+                  <option value="canceled">⚪ İptal Edildi</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Sözleşme Bitiş Tarihi</label>
+                <input
+                  type="date"
+                  value={assignment.currentPeriodEnd}
+                  onChange={e => setAssignment({ ...assignment, currentPeriodEnd: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setContractModalCustomer(null)}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-theme font-semibold hover:bg-gray-100 transition"
+              >
+                İptal
+              </button>
+              <button
+                onClick={saveAssignment}
+                disabled={saving || !assignment.planId}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-theme font-semibold disabled:opacity-50 flex items-center justify-center gap-1 transition"
+              >
+                {saving ? 'Kaydediliyor...' : 'Sözleşmeyi Kaydet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Customer Create/Edit Modal */}
       {showModal && (
