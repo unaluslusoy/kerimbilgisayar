@@ -287,6 +287,14 @@ export async function addCustomerLedgerEntry(id: number, data: { type: 'borc' | 
   return adminRequest(`/api/admin/customers/${id}/ledger`, { method: 'POST', body: JSON.stringify(data) });
 }
 
+export async function deleteCustomerLedgerEntry(customerId: number, entryId: number) {
+  return adminRequest(`/api/admin/customers/${customerId}/ledger/${entryId}`, { method: 'DELETE' });
+}
+
+export async function deleteAdminCustomer(id: number) {
+  return adminRequest(`/api/admin/customers/${id}`, { method: 'DELETE' });
+}
+
 export async function fetchSubscriptionPlans() {
   return adminRequest('/api/admin/subscription-plans');
 }

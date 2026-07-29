@@ -26,6 +26,10 @@ import {
   TrendingUp,
   AlertCircle,
   UserCheck,
+  Trash2,
+  MapPin,
+  Shield,
+  CreditCard as PayIcon,
 } from 'lucide-react';
 import {
   assignCustomerSubscription,
@@ -36,6 +40,9 @@ import {
   updateAdminCustomer,
   fetchCustomerLedger,
   addCustomerLedgerEntry,
+  deleteAdminCustomer,
+  deleteCustomerLedgerEntry,
+  createOdealPaymentLink,
 } from '../../lib/api';
 
 const inputCls = 'w-full border border-gray-300 rounded-theme px-3 py-2 text-sm focus:ring-2 focus:ring-primary';
@@ -144,6 +151,57 @@ export default function AdminCustomers() {
       alert('İşlem başarısız: ' + e.message);
     } finally {
       setAddingTransaction(false);
+    }
+  };
+
+  const handleDeleteLedgerEntry = async (rawId: number) => {
+    if (!statementCustomer || !rawId) return;
+    if (!window.confirm('Bu hatalı cari hareketi silmek istediğinize emin misiniz? Cari bakiye otomatik olarak düzeltilecektir.')) {
+      return;
+    }
+    try {
+      await deleteCustomerLedgerEntry(statementCustomer.id, rawId);
+      await loadLedger(statementCustomer.id);
+      await load();
+    } catch (e: any) {
+      alert('Silme başarısız: ' + e.message);
+    }
+  };
+
+  const handleDeleteCustomer = async (customer: any) => {
+    const custName = customer.companyName || `${customer.firstName} ${customer.lastName}`;
+    if (!window.confirm(`"${custName}" isimli müşteriyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+      return;
+    }
+    try {
+      await deleteAdminCustomer(customer.id);
+      await load();
+    } catch (e: any) {
+      alert('Müşteri silinirken hata: ' + e.message);
+    }
+  };
+
+  const handleCreatePaymentLink = async (customer: any) => {
+    const bal = Number(customer.balance || 0);
+    if (bal <= 0) {
+      alert('Bu müşterinin borcu bulunmamaktadır.');
+      return;
+    }
+    try {
+      const res = await createOdealPaymentLink({
+        amount: bal,
+        description: `Cari Borç Ödemesi - ${customer.companyName || customer.firstName}`,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+      });
+      if (res?.paymentUrl) {
+        window.prompt('Kredi Kartı Tahsilat Bağlantısı Oluşturuldu:', res.paymentUrl);
+      } else {
+        alert('Ödeme linki oluşturulamadı.');
+      }
+    } catch (e: any) {
+      alert('Ödeme linki hatası: ' + e.message);
     }
   };
 
@@ -430,7 +488,7 @@ export default function AdminCustomers() {
                   <tr>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Müşteri</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cari / Firma</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bakiye</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bakiye & Risk</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Paket</th>
                     <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">İşlemler</th>
                   </tr>
@@ -443,82 +501,110 @@ export default function AdminCustomers() {
                       </td>
                     </tr>
                   ) : (
-                    filtered.map(customer => (
-                      <tr key={customer.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-4">
-                          <div className="font-semibold text-sm text-gray-900">
-                            {customer.firstName} {customer.lastName}
-                          </div>
-                          <div className="text-xs text-gray-500">{customer.email}</div>
-                          {customer.phone && <div className="text-xs text-gray-400">{customer.phone}</div>}
-                        </td>
-                        <td className="px-5 py-4 text-sm text-gray-600">
-                          <div className="flex items-center gap-2 font-medium text-gray-800">
-                            <Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}
-                          </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            {customer.accountCode || 'Cari kod yok'} •{' '}
-                            {customer.taxId || customer.taxOffice
-                              ? `${customer.taxOffice || ''} ${customer.taxId || ''}`
-                              : customer.sector || 'Bireysel Hesap'}
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-gray-600">
-                          <div
-                            className={`font-bold ${
-                              Number(customer.balance || 0) > 0 ? 'text-red-600' : 'text-emerald-600'
-                            }`}
-                          >
-                            {Number(customer.balance || 0).toLocaleString('tr-TR')} TL
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            Limit: {Number(customer.creditLimit || 0).toLocaleString('tr-TR')} TL
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          {customer.planName ? (
-                            <div>
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary bg-blue-50 px-2 py-1 rounded-full">
-                                <CheckCircle className="w-3 h-3" /> {customer.planName}
-                              </span>
-                              <div className="text-xs text-gray-400 mt-1">
-                                {customer.currentPeriodEnd
-                                  ? new Date(customer.currentPeriodEnd).toLocaleDateString('tr-TR')
-                                  : 'Süresiz'}
-                              </div>
+                    filtered.map(customer => {
+                      const bal = Number(customer.balance || 0);
+                      const limit = Number(customer.creditLimit || 0);
+                      const isHighRisk = limit > 0 && bal >= limit;
+
+                      return (
+                        <tr key={customer.id} className="hover:bg-gray-50 transition">
+                          <td className="px-5 py-4">
+                            <div className="font-semibold text-sm text-gray-900 flex items-center gap-1.5">
+                              {customer.firstName} {customer.lastName}
+                              {customer.address && (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.address)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-gray-400 hover:text-primary transition"
+                                  title="Google Maps Yol Tarifi Al"
+                                >
+                                  <MapPin className="w-3.5 h-3.5" />
+                                </a>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">Paket tanımlı değil</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-right space-x-1.5">
-                          <button
-                            onClick={() => openStatement(customer, 'ledger')}
-                            className="text-xs px-2.5 py-1.5 rounded-theme bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium inline-flex items-center gap-1 transition"
-                          >
-                            <FileText className="w-3.5 h-3.5" /> Cari Ekstre
-                          </button>
-                          <button
-                            onClick={() => openStatement(customer, 'repairs')}
-                            className="text-xs px-2.5 py-1.5 rounded-theme bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium inline-flex items-center gap-1 transition"
-                          >
-                            <Wrench className="w-3.5 h-3.5" /> Tamirler
-                          </button>
-                          <button
-                            onClick={() => openStatement(customer, 'warranties')}
-                            className="text-xs px-2.5 py-1.5 rounded-theme bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium inline-flex items-center gap-1 transition"
-                          >
-                            <ShieldCheck className="w-3.5 h-3.5" /> Garanti
-                          </button>
-                          <button
-                            onClick={() => openEdit(customer)}
-                            className="text-xs px-2.5 py-1.5 rounded-theme bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium transition"
-                          >
-                            Düzenle
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                            <div className="text-xs text-gray-500">{customer.email}</div>
+                            {customer.phone && <div className="text-xs text-gray-400">{customer.phone}</div>}
+                          </td>
+                          <td className="px-5 py-4 text-sm text-gray-600">
+                            <div className="flex items-center gap-2 font-medium text-gray-800">
+                              <Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              {customer.accountCode || 'Cari kod yok'} •{' '}
+                              {customer.taxId || customer.taxOffice
+                                ? `${customer.taxOffice || ''} ${customer.taxId || ''}`
+                                : customer.sector || 'Bireysel Hesap'}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-sm text-gray-600">
+                            <div className={`font-bold ${bal > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                              {bal.toLocaleString('tr-TR')} TL
+                            </div>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs text-gray-400">Limit: {limit.toLocaleString('tr-TR')} TL</span>
+                              {isHighRisk && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 text-red-700">
+                                  <Shield className="w-3 h-3" /> Riskli
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            {customer.planName ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary bg-blue-50 px-2 py-1 rounded-full">
+                                  <CheckCircle className="w-3 h-3" /> {customer.planName}
+                                </span>
+                                <div className="text-xs text-gray-400 mt-1">
+                                  {customer.currentPeriodEnd
+                                    ? new Date(customer.currentPeriodEnd).toLocaleDateString('tr-TR')
+                                    : 'Süresiz'}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">Paket tanımlı değil</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-right space-x-1">
+                            {bal > 0 && (
+                              <button
+                                onClick={() => handleCreatePaymentLink(customer)}
+                                className="text-xs px-2 py-1.5 rounded-theme bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium inline-flex items-center gap-1 transition"
+                                title="Kredi Kartı Ödeme Linki Üret"
+                              >
+                                <PayIcon className="w-3.5 h-3.5" /> Ödeme Linki
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openStatement(customer, 'ledger')}
+                              className="text-xs px-2.5 py-1.5 rounded-theme bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium inline-flex items-center gap-1 transition"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> Ekstre
+                            </button>
+                            <button
+                              onClick={() => openStatement(customer, 'repairs')}
+                              className="text-xs px-2.5 py-1.5 rounded-theme bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium inline-flex items-center gap-1 transition"
+                            >
+                              <Wrench className="w-3.5 h-3.5" /> Tamirler
+                            </button>
+                            <button
+                              onClick={() => openEdit(customer)}
+                              className="text-xs px-2.5 py-1.5 rounded-theme bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium transition"
+                            >
+                              Düzenle
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCustomer(customer)}
+                              className="text-xs p-1.5 rounded-theme text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                              title="Müşteriyi Sil"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -1044,6 +1130,7 @@ export default function AdminCustomers() {
                               <th className="px-4 py-3 text-right text-xs font-semibold text-red-600">Borç (TL)</th>
                               <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-600">Alacak (TL)</th>
                               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-800">Yürüyen Bakiye</th>
+                              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600">İşlem</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100 bg-white">
@@ -1075,6 +1162,19 @@ export default function AdminCustomers() {
                                 </td>
                                 <td className="px-4 py-3 text-right text-xs font-bold text-gray-900 whitespace-nowrap">
                                   {Number(tx.runningBalance).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL
+                                </td>
+                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                  {tx.source === 'manuel' ? (
+                                    <button
+                                      onClick={() => handleDeleteLedgerEntry(tx.rawId)}
+                                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                      title="Hatalı Kaydı Sil"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-300">—</span>
+                                  )}
                                 </td>
                               </tr>
                             ))}

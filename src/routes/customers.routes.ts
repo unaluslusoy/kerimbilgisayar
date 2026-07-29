@@ -472,6 +472,50 @@ customersRouter.post('/api/admin/customers/:id/ledger', requireAdmin, async (req
   }
 });
 
+// DELETE /api/admin/customers/:id (Müşteri Silme)
+customersRouter.delete('/api/admin/customers/:id', requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    await db.transaction(async (tx) => {
+      await tx.delete(customers).where(eq(customers.userId, userId));
+      await tx.update(users).set({ isActive: false }).where(eq(users.id, userId));
+    });
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/admin/customers/:id/ledger/:entryId (Hatalı Cari Kaydı Silme)
+customersRouter.delete('/api/admin/customers/:id/ledger/:entryId', requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const entryId = parseInt(req.params.entryId);
+
+    await db.transaction(async (tx) => {
+      const [entry] = await tx.select().from(customerLedger)
+        .where(and(eq(customerLedger.id, entryId), eq(customerLedger.userId, userId)))
+        .limit(1);
+
+      if (!entry) return res.status(404).json({ error: 'Cari hareket kaydı bulunamadı' });
+
+      const entryAmount = parseFloat(entry.amount || '0');
+      const [cust] = await tx.select().from(customers).where(eq(customers.userId, userId)).limit(1);
+      if (cust) {
+        const currentBal = parseFloat(cust.balance || '0');
+        const newBal = entry.type === 'borc' ? currentBal - entryAmount : currentBal + entryAmount;
+        await tx.update(customers).set({ balance: newBal.toFixed(2) }).where(eq(customers.userId, userId));
+      }
+
+      await tx.delete(customerLedger).where(eq(customerLedger.id, entryId));
+    });
+
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 customersRouter.post('/api/admin/customers/migrate-from-users', requireAdmin, async (req, res) => {
   try {
     const migrated = await ensureCustomerRowsFromUsers();
