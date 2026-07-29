@@ -20,6 +20,12 @@ import {
   ExternalLink,
   Laptop,
   AlertTriangle,
+  Printer,
+  Download,
+  Users,
+  TrendingUp,
+  AlertCircle,
+  UserCheck,
 } from 'lucide-react';
 import {
   assignCustomerSubscription,
@@ -72,6 +78,7 @@ export default function AdminCustomers() {
   const [saving, setSaving] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [search, setSearch] = useState('');
+  const [filterTab, setFilterTab] = useState<'all' | 'debtors' | 'cleared' | 'corporate' | 'individual'>('all');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
 
@@ -140,9 +147,48 @@ export default function AdminCustomers() {
     }
   };
 
+  // Export Customer List to CSV
+  const handleExportCSV = () => {
+    if (!customers.length) return;
+    const headers = ['Musteri Ad Soyad', 'E-posta', 'Telefon', 'Firma Unvani', 'Cari Kod', 'Bakiye (TL)', 'Kredi Limiti (TL)', 'Paket'];
+    const rows = filtered.map(c => [
+      `"${c.firstName} ${c.lastName}"`,
+      `"${c.email || ''}"`,
+      `"${c.phone || ''}"`,
+      `"${c.companyName || 'Bireysel'}"`,
+      `"${c.accountCode || ''}"`,
+      `"${Number(c.balance || 0).toFixed(2)}"`,
+      `"${Number(c.creditLimit || 0).toFixed(2)}"`,
+      `"${c.planName || '—'}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `musteri_listesi_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Aggregated Stats
+  const totalReceivables = customers.reduce((sum, c) => sum + (Number(c.balance || 0) > 0 ? Number(c.balance) : 0), 0);
+  const debtorCount = customers.filter(c => Number(c.balance || 0) > 0).length;
+  const corporateCount = customers.filter(c => !!c.companyName).length;
+  const activeSubscribedCount = customers.filter(c => !!c.planName).length;
+
   const filtered = customers.filter(customer => {
     const text = `${customer.firstName} ${customer.lastName} ${customer.email} ${customer.phone} ${customer.companyName} ${customer.accountCode}`.toLowerCase();
-    return !search || text.includes(search.toLowerCase());
+    const matchSearch = !search || text.includes(search.toLowerCase());
+
+    if (!matchSearch) return false;
+
+    if (filterTab === 'debtors') return Number(customer.balance || 0) > 0;
+    if (filterTab === 'cleared') return Number(customer.balance || 0) <= 0;
+    if (filterTab === 'corporate') return !!customer.companyName;
+    if (filterTab === 'individual') return !customer.companyName;
+
+    return true;
   });
 
   const openCreate = () => {
@@ -231,6 +277,7 @@ export default function AdminCustomers() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Müşteriler & Cari / Garanti Yönetimi</h1>
@@ -239,6 +286,12 @@ export default function AdminCustomers() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-theme border border-gray-200 shadow-sm transition"
+          >
+            <Download className="w-4 h-4 mr-1.5 text-gray-500" /> Excel / CSV Aktar
+          </button>
           <button
             onClick={handleMigrateCustomers}
             disabled={migrating}
@@ -255,11 +308,63 @@ export default function AdminCustomers() {
         </div>
       </div>
 
+      {/* Top Overview Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Toplam Müşteri</p>
+            <h3 className="text-2xl font-black text-gray-900 mt-1">{customers.length}</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {corporateCount} Kurumsal • {customers.length - corporateCount} Bireysel
+            </p>
+          </div>
+          <div className="p-3 bg-blue-50 text-primary rounded-xl">
+            <Users className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Toplam Cari Alacak</p>
+            <h3 className="text-2xl font-black text-red-600 mt-1">
+              {totalReceivables.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL
+            </h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Piyasa Alacak Bakiyesi</p>
+          </div>
+          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+            <TrendingUp className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Borçlu Müşteri Sayısı</p>
+            <h3 className="text-2xl font-black text-amber-600 mt-1">{debtorCount} Müşteri</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Ödeme / Tahsilat Bekleyen</p>
+          </div>
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Aktif Abonelikler</p>
+            <h3 className="text-2xl font-black text-emerald-600 mt-1">{activeSubscribedCount} Müşteri</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Paket Tanımlı Cari Hesap</p>
+          </div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <UserCheck className="w-6 h-6" />
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
-        {/* Customer Table */}
-        <div className="bg-white rounded-theme border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-100">
-            <div className="relative max-w-md">
+        {/* Customer Table Section */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+          {/* Search & Filter Bar */}
+          <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 value={search}
@@ -268,6 +373,50 @@ export default function AdminCustomers() {
                 className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-theme text-sm focus:ring-2 focus:ring-primary"
               />
             </div>
+
+            {/* Quick Filter Tabs */}
+            <div className="flex bg-gray-100 p-1 rounded-xl gap-1 text-xs font-semibold overflow-x-auto">
+              <button
+                onClick={() => setFilterTab('all')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterTab === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Tümü ({customers.length})
+              </button>
+              <button
+                onClick={() => setFilterTab('debtors')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterTab === 'debtors' ? 'bg-red-50 text-red-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Borçlular ({debtorCount})
+              </button>
+              <button
+                onClick={() => setFilterTab('cleared')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterTab === 'cleared' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Sıfır / Alacaklı
+              </button>
+              <button
+                onClick={() => setFilterTab('corporate')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterTab === 'corporate' ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Kurumsal ({corporateCount})
+              </button>
+              <button
+                onClick={() => setFilterTab('individual')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterTab === 'individual' ? 'bg-gray-200 text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Bireysel
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -275,7 +424,7 @@ export default function AdminCustomers() {
               <div className="w-8 h-8 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto flex-1">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -347,7 +496,7 @@ export default function AdminCustomers() {
                             onClick={() => openStatement(customer, 'ledger')}
                             className="text-xs px-2.5 py-1.5 rounded-theme bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium inline-flex items-center gap-1 transition"
                           >
-                            <FileText className="w-3.5 h-3.5" /> Cari Hareketler
+                            <FileText className="w-3.5 h-3.5" /> Cari Ekstre
                           </button>
                           <button
                             onClick={() => openStatement(customer, 'repairs')}
@@ -378,7 +527,7 @@ export default function AdminCustomers() {
         </div>
 
         {/* Subscription Plan Assignment Sidebar */}
-        <div className="bg-white rounded-theme border border-gray-200 shadow-sm p-5 h-fit">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 h-fit">
           <div className="flex items-center gap-2 mb-4">
             <CreditCard className="w-5 h-5 text-primary" />
             <h2 className="text-base font-bold text-gray-900">Abonelik Atama</h2>
@@ -695,12 +844,20 @@ export default function AdminCustomers() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setStatementCustomer(null)}
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.open(`/print/customer-statement/${statementCustomer.id}`, '_blank')}
+                    className="px-3 py-1.5 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Cari Ekstre PDF / Yazdır
+                  </button>
+                  <button
+                    onClick={() => setStatementCustomer(null)}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Modal Navigation Tabs */}

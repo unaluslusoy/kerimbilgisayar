@@ -68,6 +68,7 @@ const CustomerDashboard = lazy(() => import('./pages/customer/CustomerDashboard'
 const CustomerTickets = lazy(() => import('./pages/customer/CustomerTickets'));
 const TicketPrintView = lazy(() => import('./pages/shared/TicketPrintView'));
 const PrintTicketTagView = lazy(() => import('./pages/shared/PrintTicketTagView'));
+const CustomerStatementPrintView = lazy(() => import('./pages/shared/CustomerStatementPrintView'));
 
 const AdminLiveCustomizer = lazy(() => import('./pages/admin/AdminLiveCustomizer'));
 const AdminLayouts = lazy(() => import('./pages/admin/AdminLayouts'));
@@ -239,6 +240,7 @@ function AppContent() {
          {/* Shared / Print Routes */}
          <Route path="/print/ticket/:ticketNumber" element={<TicketPrintView />} />
          <Route path="/print/ticket-tag/:ticketNumber" element={<PrintTicketTagView />} />
+         <Route path="/print/customer-statement/:id" element={<CustomerStatementPrintView />} />
       </Routes>
     </Suspense>
   );
