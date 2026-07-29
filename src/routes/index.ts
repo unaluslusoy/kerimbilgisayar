@@ -1,34 +1,48 @@
-﻿/**
- * src/routes/index.ts
- * 
- * Route modulleri icin merkezi kayit noktasi.
- * Her modul (app, deps: RouteDeps) => void seklinde bir fonksiyon export eder.
- * 
- * KULLANIM (server.ts icinde):
- *   import { registerPaytrRoutes }   from "./src/routes/payments";
- *   import { registerPageBlockRoutes } from "./src/routes/admin/pageBlocks";
- *   import { registerIpBlockRoutes }   from "./src/routes/admin/security";
- *   // ... startServer() icinde:
- *   registerPaytrRoutes(app, deps);
- *   registerPageBlockRoutes(app, deps);
- *   registerIpBlockRoutes(app, deps);
- */
+import express from 'express';
+import { publicRouter } from './public.routes';
+import { customerRouter } from './customer.routes';
+import { authRouter } from './auth.routes';
+import { servicesRouter } from './services.routes';
+import { translationsRouter } from './translations.routes';
+import { ticketsRouter } from './tickets.routes';
+import { dealersRouter } from './dealers.routes';
+import { financeRouter } from './finance.routes';
+import { notificationsRouter } from './notifications.routes';
+import { logisticsRouter } from './logistics.routes';
+import { dashboardRouter } from './dashboard.routes';
+import { stockRouter } from './stock.routes';
+import { salesRouter } from './sales.routes';
+import { settingsRouter } from './settings.routes';
+import { usersRouter } from './users.routes';
+import { customersRouter } from './customers.routes';
+import { contentRouter } from './content.routes';
+import { mediaRouter } from './media.routes';
+import { integrationsRouter } from './integrations.routes';
+import { webhooksRouter } from './webhooks.routes';
+import { invoicesRouter } from './invoices.routes';
+import { reportsRouter } from './reports.routes';
 
-import type { Express } from "express";
-import type { db as DrizzleDb } from "../db/index";
+export const routes = express.Router();
 
-export interface RouteDeps {
-  db: typeof DrizzleDb;
-  requireAdmin: (req: any, res: any, next: any) => void;
-  getClientIp: (req: any) => string;
-  readSettingsMap: () => Promise<Record<string, string>>;
-  autoBlockedIps: Map<string, number>;
-  plugins: any;
-  pageBlocks: any;
-  blockedIps: any;
-  eq: any;
-  desc: any;
-  asc: any;
-  and: any;
-  crypto: any;
-}
+routes.use(publicRouter);
+routes.use(customerRouter);
+routes.use(authRouter);
+routes.use(servicesRouter);
+routes.use(translationsRouter);
+routes.use(ticketsRouter);
+routes.use(dealersRouter);
+routes.use(financeRouter);
+routes.use(notificationsRouter);
+routes.use(logisticsRouter);
+routes.use(dashboardRouter);
+routes.use(stockRouter);
+routes.use(salesRouter);
+routes.use(settingsRouter);
+routes.use(usersRouter);
+routes.use(customersRouter);
+routes.use(contentRouter);
+routes.use(mediaRouter);
+routes.use(integrationsRouter);
+routes.use(webhooksRouter);
+routes.use(invoicesRouter);
+routes.use(reportsRouter);
