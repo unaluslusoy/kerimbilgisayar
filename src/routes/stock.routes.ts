@@ -1,8 +1,8 @@
 import express from 'express';
 import fs from 'fs';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, or, and } from 'drizzle-orm';
 import { db } from '../db/index';
-import { stockItems, inventoryCategories } from '../db/schema';
+import { stockItems, inventoryCategories, stockMovements, stockCountSessions, stockCountLines, stockChannelMappings } from '../db/schema';
 import { requireAdmin } from '../server/middleware';
 import { upload } from '../server/helpers';
 
@@ -55,9 +55,9 @@ stockRouter.get('/api/admin/stock', requireAdmin, async (req, res) => {
 
 stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
   try {
-    const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId, hasSerialTracking, warrantyMonths } = req.body;
+    const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId, hasSerialTracking, warrantyMonths, supplier } = req.body;
     const finalBarcode = barcode && barcode.trim() !== '' ? barcode.trim() : generateEAN13Backend();
-    
+
     await db.insert(stockItems).values({
       tenantId: 1,
       sku: sku || `SKU-${Date.now()}`,
@@ -75,6 +75,7 @@ stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
       minStockLevel: parseInt(minStockLevel) || 5,
       hasSerialTracking: hasSerialTracking === true || hasSerialTracking === 'true',
       warrantyMonths: parseInt(warrantyMonths) || 0,
+      supplier: supplier || null,
       categoryId: categoryId ? parseInt(categoryId) : null,
     });
     res.json({ success: true });
@@ -85,7 +86,7 @@ stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
 
 stockRouter.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
   try {
-    const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive, hasSerialTracking, warrantyMonths } = req.body;
+    const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive, hasSerialTracking, warrantyMonths, supplier } = req.body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
@@ -102,12 +103,23 @@ stockRouter.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
     if (isActive !== undefined) updateData.isActive = isActive;
     if (hasSerialTracking !== undefined) updateData.hasSerialTracking = hasSerialTracking === true || hasSerialTracking === 'true';
     if (warrantyMonths !== undefined) updateData.warrantyMonths = parseInt(warrantyMonths) || 0;
-    
+    if (supplier !== undefined) updateData.supplier = supplier;
+
     if (adjustment !== undefined) {
       const [current] = await db.select({ stock: stockItems.currentStock }).from(stockItems).where(eq(stockItems.id, parseInt(req.params.id)));
       updateData.currentStock = Math.max(0, (current?.stock || 0) + parseInt(adjustment));
     }
     await db.update(stockItems).set(updateData).where(eq(stockItems.id, parseInt(req.params.id)));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.delete('/api/admin/stock/:id', requireAdmin, async (req, res) => {
+  try {
+    // Soft delete: ticketParts/saleItems/stockMovements bu kayda referans veriyor olabilir
+    await db.update(stockItems).set({ isActive: false }).where(eq(stockItems.id, parseInt(req.params.id)));
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -303,6 +315,274 @@ stockRouter.patch('/api/admin/inventory-categories/:id', requireAdmin, async (re
 stockRouter.delete('/api/admin/inventory-categories/:id', requireAdmin, async (req, res) => {
   try {
     await db.delete(inventoryCategories).where(eq(inventoryCategories.id, parseInt(req.params.id)));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// SAYIM (STOCKTAKE)
+
+stockRouter.post('/api/admin/stock/count-sessions', requireAdmin, async (req, res) => {
+  try {
+    const { categoryId } = req.body;
+    const [openSession] = await db.select({ id: stockCountSessions.id }).from(stockCountSessions).where(eq(stockCountSessions.status, 'acik')).limit(1);
+    if (openSession) {
+      return res.status(409).json({ error: 'Zaten açık bir sayım oturumu var. Önce onu tamamlayın veya iptal edin.' });
+    }
+    const adminUser = (req as any).adminUser;
+    const result = await db.insert(stockCountSessions).values({
+      tenantId: 1,
+      categoryId: categoryId ? parseInt(categoryId) : null,
+      status: 'acik',
+      startedById: adminUser?.userId || null,
+    });
+    const insertId = (result as any)[0]?.insertId;
+    const [session] = await db.select().from(stockCountSessions).where(eq(stockCountSessions.id, insertId));
+    res.json(session);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.get('/api/admin/stock/count-sessions', requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const sessions = await db.select({
+      id: stockCountSessions.id,
+      categoryId: stockCountSessions.categoryId,
+      categoryName: inventoryCategories.name,
+      status: stockCountSessions.status,
+      startedAt: stockCountSessions.startedAt,
+      finalizedAt: stockCountSessions.finalizedAt,
+      notes: stockCountSessions.notes,
+    }).from(stockCountSessions)
+      .leftJoin(inventoryCategories, eq(stockCountSessions.categoryId, inventoryCategories.id))
+      .where(status ? eq(stockCountSessions.status, status as any) : undefined)
+      .orderBy(desc(stockCountSessions.startedAt));
+    res.json(sessions);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.get('/api/admin/stock/count-sessions/:id', requireAdmin, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.id);
+    const [session] = await db.select().from(stockCountSessions).where(eq(stockCountSessions.id, sessionId));
+    if (!session) return res.status(404).json({ error: 'Sayım oturumu bulunamadı' });
+
+    const lines = await db.select({
+      id: stockCountLines.id,
+      stockItemId: stockCountLines.stockItemId,
+      sku: stockItems.sku,
+      barcode: stockItems.barcode,
+      name: stockItems.name,
+      expectedQty: stockCountLines.expectedQty,
+      countedQty: stockCountLines.countedQty,
+      scanCount: stockCountLines.scanCount,
+      lastScannedAt: stockCountLines.lastScannedAt,
+    }).from(stockCountLines)
+      .innerJoin(stockItems, eq(stockCountLines.stockItemId, stockItems.id))
+      .where(eq(stockCountLines.sessionId, sessionId))
+      .orderBy(desc(stockCountLines.lastScannedAt));
+
+    res.json({ session, lines });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.post('/api/admin/stock/count-sessions/:id/scan', requireAdmin, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.id);
+    const { code } = req.body;
+    if (!code || !code.trim()) return res.status(400).json({ error: 'Barkod/SKU gerekli' });
+    const trimmedCode = code.trim();
+
+    const [session] = await db.select().from(stockCountSessions).where(eq(stockCountSessions.id, sessionId));
+    if (!session) return res.status(404).json({ error: 'Sayım oturumu bulunamadı' });
+    if (session.status !== 'acik') return res.status(400).json({ error: 'Bu oturum artık açık değil' });
+
+    const matches = await db.select().from(stockItems)
+      .where(or(eq(stockItems.barcode, trimmedCode), eq(stockItems.sku, trimmedCode)))
+      .limit(2);
+    if (matches.length === 0) return res.status(404).json({ error: 'Barkod/SKU bulunamadı' });
+    if (matches.length > 1) return res.status(409).json({ error: 'Birden fazla ürün eşleşti, lütfen manuel seçin' });
+
+    const item = matches[0];
+    const [existingLine] = await db.select().from(stockCountLines)
+      .where(and(eq(stockCountLines.sessionId, sessionId), eq(stockCountLines.stockItemId, item.id)))
+      .limit(1);
+
+    if (existingLine) {
+      await db.update(stockCountLines).set({
+        countedQty: existingLine.countedQty + 1,
+        scanCount: existingLine.scanCount + 1,
+        lastScannedAt: new Date(),
+      }).where(eq(stockCountLines.id, existingLine.id));
+    } else {
+      await db.insert(stockCountLines).values({
+        sessionId,
+        stockItemId: item.id,
+        expectedQty: item.currentStock || 0,
+        countedQty: 1,
+        scanCount: 1,
+        lastScannedAt: new Date(),
+      });
+    }
+
+    const [line] = await db.select({
+      id: stockCountLines.id,
+      stockItemId: stockCountLines.stockItemId,
+      sku: stockItems.sku,
+      barcode: stockItems.barcode,
+      name: stockItems.name,
+      expectedQty: stockCountLines.expectedQty,
+      countedQty: stockCountLines.countedQty,
+      scanCount: stockCountLines.scanCount,
+      lastScannedAt: stockCountLines.lastScannedAt,
+    }).from(stockCountLines)
+      .innerJoin(stockItems, eq(stockCountLines.stockItemId, stockItems.id))
+      .where(and(eq(stockCountLines.sessionId, sessionId), eq(stockCountLines.stockItemId, item.id)));
+
+    res.json({ line });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.patch('/api/admin/stock/count-sessions/:id/lines/:lineId', requireAdmin, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.id);
+    const { countedQty } = req.body;
+    const [session] = await db.select().from(stockCountSessions).where(eq(stockCountSessions.id, sessionId));
+    if (!session) return res.status(404).json({ error: 'Sayım oturumu bulunamadı' });
+    if (session.status !== 'acik') return res.status(400).json({ error: 'Bu oturum artık açık değil' });
+
+    await db.update(stockCountLines).set({ countedQty: parseInt(countedQty) || 0 })
+      .where(and(eq(stockCountLines.id, parseInt(req.params.lineId)), eq(stockCountLines.sessionId, sessionId)));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.post('/api/admin/stock/count-sessions/:id/finalize', requireAdmin, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.id);
+    const { notes } = req.body;
+    const adminUser = (req as any).adminUser;
+
+    const [session] = await db.select().from(stockCountSessions).where(eq(stockCountSessions.id, sessionId));
+    if (!session) return res.status(404).json({ error: 'Sayım oturumu bulunamadı' });
+    if (session.status !== 'acik') return res.status(400).json({ error: 'Bu oturum artık açık değil' });
+
+    const lines = await db.select().from(stockCountLines).where(eq(stockCountLines.sessionId, sessionId));
+    let varianceCount = 0;
+
+    await db.transaction(async (tx) => {
+      for (const line of lines) {
+        const delta = line.countedQty - line.expectedQty;
+        if (delta !== 0) {
+          varianceCount++;
+          await tx.insert(stockMovements).values({
+            tenantId: 1,
+            stockItemId: line.stockItemId,
+            quantity: delta,
+            type: 'sayim',
+            reason: 'Sayım farkı',
+            referenceId: sessionId,
+            createdById: adminUser?.userId || null,
+          });
+          await tx.update(stockItems).set({ currentStock: line.countedQty }).where(eq(stockItems.id, line.stockItemId));
+        }
+      }
+      await tx.update(stockCountSessions).set({
+        status: 'tamamlandi',
+        finalizedById: adminUser?.userId || null,
+        finalizedAt: new Date(),
+        notes: notes || session.notes,
+      }).where(eq(stockCountSessions.id, sessionId));
+    });
+
+    res.json({ success: true, varianceCount });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.post('/api/admin/stock/count-sessions/:id/cancel', requireAdmin, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.id);
+    await db.update(stockCountSessions).set({ status: 'iptal' }).where(eq(stockCountSessions.id, sessionId));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// E-TİCARET KANAL EŞLEME
+
+stockRouter.get('/api/admin/stock/:stockItemId/channel-mappings', requireAdmin, async (req, res) => {
+  try {
+    const mappings = await db.select().from(stockChannelMappings)
+      .where(eq(stockChannelMappings.stockItemId, parseInt(req.params.stockItemId)));
+    res.json(mappings);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.post('/api/admin/stock/:stockItemId/channel-mappings', requireAdmin, async (req, res) => {
+  try {
+    const stockItemId = parseInt(req.params.stockItemId);
+    const { channel, externalProductId, externalSku, notes } = req.body;
+
+    const [existing] = await db.select().from(stockChannelMappings)
+      .where(and(eq(stockChannelMappings.stockItemId, stockItemId), eq(stockChannelMappings.channel, channel)))
+      .limit(1);
+
+    if (existing) {
+      await db.update(stockChannelMappings).set({
+        externalProductId: externalProductId || null,
+        externalSku: externalSku || null,
+        notes: notes || null,
+      }).where(eq(stockChannelMappings.id, existing.id));
+    } else {
+      await db.insert(stockChannelMappings).values({
+        tenantId: 1,
+        stockItemId,
+        channel,
+        externalProductId: externalProductId || null,
+        externalSku: externalSku || null,
+        notes: notes || null,
+      });
+    }
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.patch('/api/admin/stock/channel-mappings/:id', requireAdmin, async (req, res) => {
+  try {
+    const { externalProductId, externalSku, syncStatus, notes } = req.body;
+    const updateData: any = {};
+    if (externalProductId !== undefined) updateData.externalProductId = externalProductId;
+    if (externalSku !== undefined) updateData.externalSku = externalSku;
+    if (syncStatus !== undefined) updateData.syncStatus = syncStatus;
+    if (notes !== undefined) updateData.notes = notes;
+    await db.update(stockChannelMappings).set(updateData).where(eq(stockChannelMappings.id, parseInt(req.params.id)));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.delete('/api/admin/stock/channel-mappings/:id', requireAdmin, async (req, res) => {
+  try {
+    await db.delete(stockChannelMappings).where(eq(stockChannelMappings.id, parseInt(req.params.id)));
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

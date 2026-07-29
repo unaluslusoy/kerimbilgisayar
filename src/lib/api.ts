@@ -541,6 +541,57 @@ export const updateInventoryCategory = async (id: number, data: any) => {
   return adminRequest(`/api/admin/inventory-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 };
 
+// ============================================================
+// SAYIM (STOCKTAKE)
+// ============================================================
+export async function fetchCountSessions(status?: string) {
+  const q = status ? `?status=${status}` : '';
+  return adminRequest(`/api/admin/stock/count-sessions${q}`);
+}
+
+export async function createCountSession(data: { categoryId?: number | null }) {
+  return adminRequest('/api/admin/stock/count-sessions', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function fetchCountSession(id: number) {
+  return adminRequest(`/api/admin/stock/count-sessions/${id}`);
+}
+
+export async function scanCountItem(sessionId: number, code: string) {
+  return adminRequest(`/api/admin/stock/count-sessions/${sessionId}/scan`, { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+export async function updateCountLine(sessionId: number, lineId: number, countedQty: number) {
+  return adminRequest(`/api/admin/stock/count-sessions/${sessionId}/lines/${lineId}`, { method: 'PATCH', body: JSON.stringify({ countedQty }) });
+}
+
+export async function finalizeCountSession(sessionId: number, notes?: string) {
+  return adminRequest(`/api/admin/stock/count-sessions/${sessionId}/finalize`, { method: 'POST', body: JSON.stringify({ notes }) });
+}
+
+export async function cancelCountSession(sessionId: number) {
+  return adminRequest(`/api/admin/stock/count-sessions/${sessionId}/cancel`, { method: 'POST' });
+}
+
+// ============================================================
+// E-TİCARET KANAL EŞLEME
+// ============================================================
+export async function fetchChannelMappings(stockItemId: number) {
+  return adminRequest(`/api/admin/stock/${stockItemId}/channel-mappings`);
+}
+
+export async function createChannelMapping(stockItemId: number, data: { channel: string; externalProductId?: string; externalSku?: string; notes?: string }) {
+  return adminRequest(`/api/admin/stock/${stockItemId}/channel-mappings`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateChannelMapping(id: number, data: any) {
+  return adminRequest(`/api/admin/stock/channel-mappings/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function deleteChannelMapping(id: number) {
+  return adminRequest(`/api/admin/stock/channel-mappings/${id}`, { method: 'DELETE' });
+}
+
 
 
 // ============================================================

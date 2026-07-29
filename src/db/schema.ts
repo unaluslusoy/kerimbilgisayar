@@ -436,6 +436,7 @@ export const stockItems = mysqlTable('stock_items', {
   minStockLevel: int('min_stock_level').default(0),
   hasSerialTracking: boolean('has_serial_tracking').default(false),
   warrantyMonths: int('warranty_months').default(0),
+  supplier: varchar('supplier', { length: 150 }),
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
@@ -906,12 +907,59 @@ export const stockMovements = mysqlTable('stock_movements', {
   fromWarehouseId: int('from_warehouse_id').references(() => warehouses.id),
   toWarehouseId: int('to_warehouse_id').references(() => warehouses.id),
   quantity: int('quantity').notNull().default(0),
-  type: mysqlEnum('type', ['giris', 'cikis', 'transfer', 'iade', 'fire']).notNull(),
+  type: mysqlEnum('type', ['giris', 'cikis', 'transfer', 'iade', 'fire', 'sayim']).notNull(),
   reason: varchar('reason', { length: 255 }),
   referenceId: int('reference_id'),
   createdById: int('created_by_id').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// --- STOK SAYIMI (STOCKTAKE) ---
+
+export const stockCountSessions = mysqlTable('stock_count_sessions', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  categoryId: int('category_id').references(() => inventoryCategories.id),
+  status: mysqlEnum('status', ['acik', 'tamamlandi', 'iptal']).default('acik').notNull(),
+  startedById: int('started_by_id').references(() => users.id),
+  startedAt: timestamp('started_at').defaultNow(),
+  finalizedById: int('finalized_by_id').references(() => users.id),
+  finalizedAt: timestamp('finalized_at'),
+  notes: text('notes'),
+}, (t) => ({
+  statusIdx: index('idx_countsession_status').on(t.status),
+}));
+
+export const stockCountLines = mysqlTable('stock_count_lines', {
+  id: int('id').autoincrement().primaryKey(),
+  sessionId: int('session_id').references(() => stockCountSessions.id, { onDelete: 'cascade' }).notNull(),
+  stockItemId: int('stock_item_id').references(() => stockItems.id).notNull(),
+  expectedQty: int('expected_qty').notNull(),
+  countedQty: int('counted_qty').notNull().default(0),
+  scanCount: int('scan_count').notNull().default(0),
+  lastScannedAt: timestamp('last_scanned_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  sessionItemIdx: index('idx_countline_session_item').on(t.sessionId, t.stockItemId),
+}));
+
+// --- E-TİCARET KANAL EŞLEME ---
+
+export const stockChannelMappings = mysqlTable('stock_channel_mappings', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  stockItemId: int('stock_item_id').references(() => stockItems.id, { onDelete: 'cascade' }).notNull(),
+  channel: mysqlEnum('channel', ['ikas', 'shopify', 'trendyol', 'hepsiburada', 'n11', 'diger']).notNull(),
+  externalProductId: varchar('external_product_id', { length: 255 }),
+  externalSku: varchar('external_sku', { length: 255 }),
+  syncStatus: mysqlEnum('sync_status', ['eslenmedi', 'eslendi', 'hata']).default('eslenmedi').notNull(),
+  lastSyncedAt: timestamp('last_synced_at'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+}, (t) => ({
+  itemChannelIdx: index('idx_channelmap_item_channel').on(t.stockItemId, t.channel),
+}));
 
 // --- SATIŞ & POS ---
 

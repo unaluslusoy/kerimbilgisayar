@@ -251,8 +251,8 @@ export default function TicketPrintView() {
         )}
         <div className="flex-1 min-w-0 text-left">
           <div className="font-bold text-[10pt] uppercase tracking-tight">{posConfig.headerTitle || settings.siteTitle || "KERİM BİLGİSAYAR"}</div>
-          <div className="text-[7.5pt] leading-tight mb-1 font-normal text-black">{posConfig.headerSub || "TEKNİK SERVİS FİŞİ"}</div>
-          <div className="text-[8.5pt] font-normal">{posConfig.headerInfo || settings.contactPhone}</div>
+          <div className="text-[7.5pt] leading-tight mb-1 font-semibold text-black">{posConfig.headerSub || "TEKNİK SERVİS FİŞİ"}</div>
+          <div className="text-[8.5pt] font-semibold">{posConfig.headerInfo || settings.contactPhone}</div>
           <div className="font-bold text-[8.5pt] bg-black text-white px-2 py-0.5 mt-1 inline-block uppercase">{copyType} NÜSHASI</div>
         </div>
       </div>
@@ -261,7 +261,7 @@ export default function TicketPrintView() {
       <div className="flex justify-between items-center mb-2 pb-1 border-b border-dashed border-black">
         <div>
           <div className="text-[10pt] font-bold">SERVİS TAKİP FİŞİ</div>
-          <div className="text-[8.5pt] font-normal">{new Date(ticket.createdAt).toLocaleString("tr-TR")}</div>
+          <div className="text-[8.5pt] font-semibold">{new Date(ticket.createdAt).toLocaleString("tr-TR")}</div>
         </div>
         <div className="text-right">
           <div className="text-[12.5pt] font-bold tracking-tight">{ticketNumber}</div>
@@ -272,48 +272,48 @@ export default function TicketPrintView() {
       <div className="space-y-0.5 text-[9.5pt] border-b border-dashed border-black pb-2 mb-2 text-left">
         <div className="flex justify-between">
           <span className="font-bold">Müşteri:</span>
-          <span className="font-normal">{ticket.customerName}</span>
+          <span className="font-semibold">{ticket.customerName}</span>
         </div>
         {ticket.companyName && (
           <div className="flex justify-between">
             <span className="font-bold">Firma:</span>
-            <span className="font-normal">{ticket.companyName}</span>
+            <span className="font-semibold">{ticket.companyName}</span>
           </div>
         )}
         {ticket.taxId && (
           <div className="flex justify-between">
             <span className="font-bold">Vergi:</span>
-            <span className="font-normal">{ticket.taxOffice} / {ticket.taxId}</span>
+            <span className="font-semibold">{ticket.taxOffice} / {ticket.taxId}</span>
           </div>
         )}
         {ticket.customerPhone && (
           <div className="flex justify-between">
             <span className="font-bold">Tel:</span>
-            <span className="font-normal">{ticket.customerPhone}</span>
+            <span className="font-semibold">{ticket.customerPhone}</span>
           </div>
         )}
         {ticket.customerAddress && (
           <div className="flex justify-between">
             <span className="font-bold">Adres:</span>
-            <span className="font-normal text-[8.5pt] text-right truncate max-w-[210px]">{ticket.customerAddress}</span>
+            <span className="font-semibold text-[8.5pt] text-right truncate max-w-[210px]">{ticket.customerAddress}</span>
           </div>
         )}
         <div className="flex justify-between">
           <span className="font-bold">Cihaz:</span>
-          <span className="font-normal">{ticket.deviceType || '—'}</span>
+          <span className="font-semibold">{ticket.deviceType || '—'}</span>
         </div>
         <div className="flex justify-between">
           <span className="font-bold">Model:</span>
-          <span className="font-normal">{ticket.brandModel || [ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || '—'}</span>
+          <span className="font-semibold">{ticket.brandModel || [ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || '—'}</span>
         </div>
         <div className="flex justify-between">
           <span className="font-bold">Seri No:</span>
-          <span className="font-normal font-mono">{ticket.deviceSerial || ticket.serialNumber || '—'}</span>
+          <span className="font-semibold font-mono">{ticket.deviceSerial || ticket.serialNumber || '—'}</span>
         </div>
         {ticket.imei && (
           <div className="flex justify-between">
             <span className="font-bold">IMEI:</span>
-            <span className="font-normal font-mono">{ticket.imei}</span>
+            <span className="font-semibold font-mono">{ticket.imei}</span>
           </div>
         )}
         <div className="flex justify-between">
@@ -345,18 +345,18 @@ export default function TicketPrintView() {
       {ticket.accessories && (
         <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt] text-left">
           <span className="font-bold">Emanet Alınanlar:</span>
-          <p className="font-normal mt-0.5 text-[9pt] leading-tight text-black">{ticket.accessories}</p>
+          <p className="font-semibold mt-0.5 text-[9pt] leading-tight text-black">{ticket.accessories}</p>
         </div>
       )}
 
       {/* Şikayet / Açıklama */}
       <div className="mb-2 border-b border-dashed border-black pb-2 text-[9.5pt] text-left">
         <p className="font-bold mb-0.5">Şikayet / Açıklama:</p>
-        <p className="font-normal text-[9pt] whitespace-pre-wrap leading-tight text-black" dangerouslySetInnerHTML={{ __html: ticket.issueDescription || ticket.description || "Şikayet belirtilmemiş." }}></p>
+        <p className="font-semibold text-[9pt] whitespace-pre-wrap leading-tight text-black" dangerouslySetInnerHTML={{ __html: ticket.issueDescription || ticket.description || "Şikayet belirtilmemiş." }}></p>
       </div>
 
       {/* Masraf & İşlem Dökümü */}
-      <div className="mb-2 border border-black p-2 bg-gray-50/50 text-[9.5pt] text-left">
+      <div className="mb-2 border border-black p-2 bg-white text-[9.5pt] text-left">
         <p className="font-bold mb-1 uppercase tracking-wider text-[9.5pt] border-b border-black pb-1">💵 MASRAF & İŞLEM DÖKÜMÜ</p>
         <pre className="font-mono text-[9pt] leading-normal whitespace-pre bg-transparent p-0 m-0 border-0 text-black" style={{ fontFamily: "'DejaVu Sans Mono', Monaco, Consolas, 'Courier New', monospace" }}>
           {formatMonoRow("ÜRÜN / İŞLEM", "ADET", "TUTAR")}
@@ -383,12 +383,12 @@ export default function TicketPrintView() {
       {ticket.technicianNotes && (
         <div className="border-b border-dashed border-black pb-2 mb-2 text-[9.5pt] text-left">
           <span className="font-bold block">Teknisyen Görüşü / Raporu:</span>
-          <p className="font-normal text-[9pt] text-black italic leading-tight mt-0.5" dangerouslySetInnerHTML={{ __html: ticket.technicianNotes }}></p>
+          <p className="font-semibold text-[9pt] text-black italic leading-tight mt-0.5" dangerouslySetInnerHTML={{ __html: ticket.technicianNotes }}></p>
         </div>
       )}
 
       {/* Yasal Onay Metinleri */}
-      <div className="mb-2 text-[7.5pt] text-left text-black leading-tight space-y-0.5">
+      <div className="mb-2 text-[7.5pt] text-left text-black font-semibold leading-tight space-y-0.5">
         <p>{ticket.kvkkConsentAt ? "☑" : "☐"} KVKK aydınlatma metni onayı</p>
         <p>{ticket.dataLossConsentAt ? "☑" : "☐"} Veri kaybı riski bilgilendirmesi</p>
         <p>{ticket.accessInfoConsentAt ? "☑" : "☐"} Cihaz erişim bilgisi kullanım onayı</p>
@@ -412,24 +412,24 @@ export default function TicketPrintView() {
       )}
 
       {/* Alt Bilgilendirme - Sola Yaslı */}
-      <div className="mt-2 text-left text-[8pt] leading-normal font-normal space-y-1">
+      <div className="mt-2 text-left text-[8pt] leading-normal font-semibold space-y-1">
         <p className="text-[8.5pt] text-black font-semibold whitespace-pre-line">{posConfig.footerText || "Bizi tercih ettiğiniz için teşekkür ederiz."}</p>
         {posConfig.showQrCode && (
-          <p className="text-[7.5pt] text-black border-t border-dotted border-black pt-1 mt-1">
+          <p className="text-[7.5pt] text-black font-semibold border-t border-dotted border-black pt-1 mt-1">
             * Cihaz durumunu sol üstteki QR kod ile anlık sorgulayabilirsiniz.
           </p>
         )}
       </div>
       {/* Otomatik Bıçak Kesme Boşluğu (Thermal Cutting Margins) */}
       <div className="pt-24 border-t border-transparent">
-        <div className="text-center font-mono text-[7pt] text-gray-400">--- FİŞ SONU / KESİM NOKTASI ---</div>
+        <div className="text-center font-mono text-[7pt] font-semibold text-black">--- FİŞ SONU / KESİM NOKTASI ---</div>
       </div>
     </div>
   );
 
   // --- BİLEŞEN: A5 Form Nüshası (A4 Kağıdı 2'ye Bölen A5 Formatı) ---
   const A5Form = ({ copyType }: { copyType: "MÜŞTERİ NÜSHASI" | "FİRMA NÜSHASI" }) => (
-    <div className="bg-white text-black font-sans w-full p-3.5 box-border flex flex-col justify-between h-[135mm] border-2 border-gray-900 rounded-xl print:rounded-none" style={{
+    <div className="bg-white text-black font-sans w-full p-3.5 box-border flex flex-col justify-between h-[135mm] border border-gray-900 rounded-xl print:rounded-none" style={{
       fontFamily: a4Config.fontFamily || "Inter, sans-serif",
       fontSize: `${a4Config.fontSize || 10.5}pt`,
       paddingTop: `${a4Config.marginTop || 12}px`,
@@ -468,7 +468,7 @@ export default function TicketPrintView() {
         {/* Content Body Grid */}
         <div className="grid grid-cols-2 gap-4 mb-2">
           {/* Customer Card */}
-          <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50">
+          <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50 print:bg-white print:border-gray-400 print:rounded-none">
             <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Müşteri Bilgileri</h3>
             <table className="w-full text-[10px] leading-relaxed">
               <tbody>
@@ -503,7 +503,7 @@ export default function TicketPrintView() {
           </div>
 
           {/* Device Card */}
-          <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50 flex justify-between gap-2">
+          <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50 print:bg-white print:border-gray-400 print:rounded-none flex justify-between gap-2">
             <div className="flex-1">
               <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Cihaz Bilgileri</h3>
               <table className="w-full text-[10px] leading-relaxed">
@@ -555,19 +555,19 @@ export default function TicketPrintView() {
         </div>
 
         {ticket.accessories && (
-          <div className="border border-gray-200 rounded-xl p-2 bg-amber-50/20 mb-2 text-[10px] leading-tight">
+          <div className="border border-gray-200 rounded-xl p-2 bg-amber-50/20 print:bg-white print:border-gray-400 print:rounded-none mb-2 text-[10px] leading-tight">
             <span className="font-bold text-gray-700">Emanetler:</span> {ticket.accessories}
           </div>
         )}
 
         {/* Issue Description block */}
-        <div className="border border-gray-200 rounded-xl p-2.5 mb-2">
+        <div className="border border-gray-200 rounded-xl p-2.5 mb-2 print:border-gray-400 print:rounded-none">
           <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Müşteri Şikayeti / Açıklama</h3>
           <p className="text-[10px] text-gray-800 leading-normal whitespace-pre-wrap min-h-[30px]" dangerouslySetInnerHTML={{ __html: ticket.issueDescription || "Açıklama belirtilmemiş." }}></p>
         </div>
 
         {/* Masraflar ve İşlemler Listesi */}
-        <div className="border border-gray-200 rounded-xl p-2.5 mb-2 bg-slate-50/30">
+        <div className="border border-gray-200 rounded-xl p-2.5 mb-2 bg-slate-50/30 print:bg-white print:border-gray-400 print:rounded-none">
           <h3 className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 border-b pb-0.5">Yapılan İşlemler & Masraf Dökümü</h3>
           <div className="text-[10px] space-y-0.5">
             {ticket.parts && ticket.parts.length > 0 ? (
@@ -592,7 +592,7 @@ export default function TicketPrintView() {
         {/* Cost & QR tracking */}
         <div className="flex justify-between items-center gap-3">
           {a4Config.showQrCode && qrCodeDataUrl ? (
-            <div className="flex items-center gap-2.5 border border-gray-100 rounded-xl p-1.5 bg-gray-50/30">
+            <div className="flex items-center gap-2.5 border border-gray-100 rounded-xl p-1.5 bg-gray-50/30 print:bg-white print:border-gray-400 print:rounded-none">
               <img src={qrCodeDataUrl} alt="Takip QR" className="w-12 h-12" />
               <div>
                 <p className="text-[8.5px] font-bold text-gray-800 leading-tight">Cihaz Durumunu Cepten Sorgulayın</p>
@@ -629,11 +629,17 @@ export default function TicketPrintView() {
         {a4Config.showSignature && (
           <div className="grid grid-cols-2 gap-2 text-center text-[9px]">
             <div>
-              <p className="font-bold text-gray-600 mb-6">Müşteri (Teslim Eden)</p>
+              <p className="font-bold text-gray-600 mb-1">Müşteri (Teslim Eden)</p>
+              {ticket.customerSignature ? (
+                <img src={ticket.customerSignature} alt="Müşteri İmzası" className="h-8 mx-auto my-0.5 object-contain" />
+              ) : (
+                <div className="h-6" />
+              )}
               <p className="text-gray-400 text-[8px]">İmza / Tarih</p>
             </div>
             <div>
-              <p className="font-bold text-gray-600 mb-6">{a4Config.signatureText || "Yetkili Servis (Teslim Alan)"}</p>
+              <p className="font-bold text-gray-600 mb-1">{a4Config.signatureText || "Yetkili Servis (Teslim Alan)"}</p>
+              <div className="h-6" />
               <p className="text-gray-400 text-[8px]">İmza / Kaşe</p>
             </div>
           </div>
@@ -741,25 +747,31 @@ export default function TicketPrintView() {
 
       <style>{`
         @media print {
-          body, html { 
-            background: white !important; 
-            margin: 0 !important; 
-            padding: 0 !important; 
+          body, html {
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
             width: 100%;
             color: black !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           ::-webkit-scrollbar { display: none; }
-          
+
           ${printMode === "a4" ? `
             @page { size: A4 portrait; margin: 0; }
             .print-container-pos { display: none !important; }
-            .print-container-a4 { 
-              display: block !important; 
-              width: 210mm !important; 
-              height: 297mm !important; 
-              margin: 0 auto !important; 
-              padding: 6mm 10mm !important; 
+            .print-container-a4 {
+              display: block !important;
+              width: 210mm !important;
+              height: 297mm !important;
+              margin: 0 auto !important;
+              padding: 6mm 10mm !important;
               box-sizing: border-box !important;
+            }
+            .print-container-a4 *, .print-container-a4 {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
           ` : `
             @page { size: 80mm auto; margin: 0; }
@@ -778,6 +790,17 @@ export default function TicketPrintView() {
               break-after: avoid;
             }
             .pos-receipt { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+            .pos-receipt, .pos-receipt * {
+              font-weight: 600 !important;
+              -webkit-font-smoothing: antialiased;
+              text-rendering: optimizeLegibility;
+              background-image: none !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .pos-receipt b, .pos-receipt strong, .pos-receipt .font-bold {
+              font-weight: 800 !important;
+            }
           `}
         }
       `}</style>
