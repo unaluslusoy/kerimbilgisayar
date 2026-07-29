@@ -16,6 +16,9 @@ export const rootDir = fs.existsSync(path.join(process.cwd(), 'uploads'))
   ? process.cwd()
   : path.resolve(process.cwd(), '..');
 
+// ─── LOG BUFFER ──────────────────────────────────────────────────────────────
+export const logBuffer: { time: string; type: 'log' | 'error'; message: string }[] = [];
+
 // ─── ENV ─────────────────────────────────────────────────────────────────────
 export const isDev = process.env.NODE_ENV !== 'production';
 

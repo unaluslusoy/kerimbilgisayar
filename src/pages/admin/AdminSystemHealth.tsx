@@ -111,11 +111,12 @@ export default function AdminSystemHealth() {
   };
 
   // Filter logs based on search and log filter type
-  const filteredLogs = data?.logs.filter(log => {
-    const matchesSearch = log.message.toLowerCase().includes(searchTerm.toLowerCase());
+  const logsList = Array.isArray(data?.logs) ? data.logs : [];
+  const filteredLogs = logsList.filter(log => {
+    const matchesSearch = (log.message || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = logFilter === 'all' || log.type === logFilter;
     return matchesSearch && matchesFilter;
-  }) || [];
+  });
 
   return (
     <div className="space-y-6">

@@ -10,7 +10,7 @@ import {
   loginLimiter,
   ADMIN_TOKEN_TTL
 } from '../server/middleware';
-import { verifyTurnstile, readSettingsMap } from '../server/helpers';
+import { verifyTurnstile, readSettingsMap, logBuffer } from '../server/helpers';
 
 export const authRouter = express.Router();
 
@@ -80,6 +80,7 @@ authRouter.get('/api/admin/system/health', requireAdmin, async (req, res) => {
       db: 'up',
       pid: process.pid,
       node: process.version,
+      logs: logBuffer,
     });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
