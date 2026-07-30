@@ -196,6 +196,7 @@ export default function DeviceStatus() {
     'dis_servis': { label: 'Dış Serviste', icon: Wrench, color: 'text-cyan-700', bg: 'bg-cyan-50' },
     'musteri_onayi_bekliyor': { label: 'Müşteri Onayı Bekleniyor', icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-100' },
     'onay_red': { label: 'Teklif Reddedildi', icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
+    'onarimda': { label: 'Onarımda', icon: Wrench, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     'ready': { label: 'Hazır / Test Edildi', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
     'cozuldu': { label: 'Onarım Tamamlandı (Teslime Hazır)', icon: CheckCircle2, color: 'text-emerald-700', bg: 'bg-emerald-100' },
     'iade': { label: 'İade Bekliyor', icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },

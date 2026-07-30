@@ -11,12 +11,13 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: React.Ele
   isleme_alindi: { label: 'İşlemde', color: 'bg-yellow-100 text-yellow-800', icon: Wrench },
   parca_bekliyor: { label: 'Parça Bekleniyor', color: 'bg-orange-100 text-orange-800', icon: Clock },
   musteri_onayi_bekliyor: { label: 'Onay Bekleniyor', color: 'bg-red-100 text-red-800', icon: AlertCircle },
+  onarimda: { label: 'Onarımda', color: 'bg-indigo-100 text-indigo-800', icon: Wrench },
   cozuldu: { label: 'Çözüldü', color: 'bg-green-100 text-green-800', icon: CheckCircle },
   kapatildi: { label: 'Teslim Edildi', color: 'bg-gray-100 text-gray-700', icon: CheckCircle },
   iptal: { label: 'İptal', color: 'bg-gray-100 text-gray-500', icon: AlertCircle },
 };
 
-const STEPS = ['yeni', 'isleme_alindi', 'parca_bekliyor', 'musteri_onayi_bekliyor', 'cozuldu', 'kapatildi'];
+const STEPS = ['yeni', 'isleme_alindi', 'parca_bekliyor', 'musteri_onayi_bekliyor', 'onarimda', 'cozuldu', 'kapatildi'];
 
 function SkeletonRow() {
   return (

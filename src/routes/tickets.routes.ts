@@ -381,7 +381,7 @@ ticketsRouter.post('/api/admin/tickets/:id/manual-approval', requireAdmin, async
       .where(and(eq(ticketParts.ticketId, ticketId), sql`${ticketParts.removedAt} IS NULL`));
     const partsTotal = partsRows.reduce((s, p) => s + parseFloat(p.totalPrice || '0'), 0);
     const grandTotal = partsTotal + parseFloat(ticket.laborCost || '0');
-    const newStatus = decision === 'approved' ? 'isleme_alindi' : 'onay_red';
+    const newStatus = decision === 'approved' ? 'onarimda' : 'onay_red';
 
     await db.transaction(async (tx) => {
       await tx.update(tickets).set({ status: newStatus, updatedAt: new Date() }).where(eq(tickets.id, ticketId));

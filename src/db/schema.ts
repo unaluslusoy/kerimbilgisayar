@@ -343,7 +343,7 @@ export const tickets = mysqlTable('tickets', {
   subject: varchar('subject', { length: 255 }).notNull(),
   description: text('description').notNull(),
   priority: mysqlEnum('priority', ['dusuk', 'normal', 'yuksek', 'acil']).default('normal'),
-  status: mysqlEnum('status', ['yeni', 'isleme_alindi', 'parca_bekliyor', 'dis_servis', 'musteri_onayi_bekliyor', 'onay_red', 'cozuldu', 'iade', 'kapatildi', 'iptal', 'teslim_edildi']).default('yeni'),
+  status: mysqlEnum('status', ['yeni', 'isleme_alindi', 'parca_bekliyor', 'dis_servis', 'musteri_onayi_bekliyor', 'onay_red', 'onarimda', 'cozuldu', 'iade', 'kapatildi', 'iptal', 'teslim_edildi']).default('yeni'),
   assignedTo: int('assigned_to').references(() => users.id),
   cost: decimal('cost', { precision: 10, scale: 2 }).default('0.00'),
   laborCost: decimal('labor_cost', { precision: 10, scale: 2 }).default('0.00'),

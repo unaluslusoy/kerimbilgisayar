@@ -74,6 +74,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
   parca_bekliyor: { label: 'Parça Bekliyor', color: 'bg-purple-50 text-purple-700 border-purple-200' },
   dis_servis: { label: 'Dış Serviste', color: 'bg-orange-50 text-orange-700 border-orange-200' },
   musteri_onayi_bekliyor: { label: 'Onay Bekliyor', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  onarimda: { label: 'Onarımda', color: 'bg-violet-50 text-violet-700 border-violet-200' },
   cozuldu: { label: 'Çözüldü / Hazır', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   teslim_edildi: { label: 'Teslim Edildi', color: 'bg-gray-100 text-gray-800 border-gray-300' },
   iade: { label: 'İade Edildi', color: 'bg-red-50 text-red-700 border-red-200' },

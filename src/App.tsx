@@ -70,6 +70,7 @@ const TicketPrintView = lazy(() => import('./pages/shared/TicketPrintView'));
 const PrintTicketTagView = lazy(() => import('./pages/shared/PrintTicketTagView'));
 const CustomerStatementPrintView = lazy(() => import('./pages/shared/CustomerStatementPrintView'));
 const TicketPublicApproval = lazy(() => import('./pages/public/TicketPublicApproval'));
+const DeviceHistory = lazy(() => import('./pages/public/DeviceHistory'));
 
 const AdminLiveCustomizer = lazy(() => import('./pages/admin/AdminLiveCustomizer'));
 const AdminLayouts = lazy(() => import('./pages/admin/AdminLayouts'));
@@ -149,6 +150,7 @@ function AppContent() {
             <Route path="blog/:slug" element={<BlogPost />} />
             <Route path="ariza-sorgulama" element={<DeviceStatus />} />
             <Route path="onay/:ticketNumber" element={<TicketPublicApproval />} />
+            <Route path="cihaz-gecmisi/:identifier" element={<DeviceHistory />} />
             <Route path="track/:orderNo" element={<DeviceStatus />} />
             <Route path="randevu" element={<Appointment />} />
             <Route path="hizmetler" element={<Services />} />

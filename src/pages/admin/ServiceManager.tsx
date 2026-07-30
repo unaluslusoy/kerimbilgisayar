@@ -1,4 +1,4 @@
-import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw, History, Settings2, ClipboardCheck, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
+import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, AlertTriangle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw, History, Settings2, ClipboardCheck, CheckCircle2, XCircle, MinusCircle, Save } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<string, string> = {
   'dis_servis': 'bg-cyan-100 text-cyan-700',
   'musteri_onayi_bekliyor': 'bg-amber-100 text-amber-700',
   'onay_red': 'bg-rose-100 text-rose-700',
+  'onarimda': 'bg-indigo-100 text-indigo-700',
   'cozuldu': 'bg-green-100 text-green-700',
   'iade': 'bg-orange-100 text-orange-700',
   'kapatildi': 'bg-gray-100 text-gray-500',
@@ -70,8 +71,9 @@ const SERVICE_STEPS = [
   { key: 'yeni', label: 'Kabul Edildi', stepNum: 1 },
   { key: 'isleme_alindi', label: 'Arıza Tespiti', stepNum: 2 },
   { key: 'musteri_onayi_bekliyor', label: 'Fiyat Onayı', stepNum: 3 },
-  { key: 'cozuldu', label: 'Çözüldü / Hazır', stepNum: 4 },
-  { key: 'teslim_edildi', label: 'Teslim Edildi', stepNum: 5 },
+  { key: 'onarimda', label: 'Onarımda', stepNum: 4 },
+  { key: 'cozuldu', label: 'Çözüldü / Hazır', stepNum: 5 },
+  { key: 'teslim_edildi', label: 'Teslim Edildi', stepNum: 6 },
 ];
 
 // IMEI Luhn algoritması doğrulaması (GSMA standardı — 15 hane). Server tarafında da tekrar kontrol edilir.
@@ -194,7 +196,19 @@ export default function ServiceManager() {
 
   // Edit Details Mode State
   const [isEditingDetails, setIsEditingDetails] = useState(false);
-  const [detailTab, setDetailTab] = useState<'genel' | 'fiziksel' | 'parca' | 'durum' | 'ekler'>('genel');
+  const [detailTab, setDetailTab] = useState<'genel' | 'fiziksel' | 'parca' | 'durum' | 'ekler' | 'aktivite'>('genel');
+  const [showDamageDetail, setShowDamageDetail] = useState(false);
+
+  // Özel bildirim/onay modalları (native alert/confirm yerine)
+  const [infoModal, setInfoModal] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; danger?: boolean; resolve: (v: boolean) => void } | null>(null);
+
+  function showAlert(message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') {
+    setInfoModal({ message, type });
+  }
+  function showConfirm(message: string, danger = false): Promise<boolean> {
+    return new Promise(resolve => setConfirmModal({ message, danger, resolve }));
+  }
   const [editCustomerName, setEditCustomerName] = useState('');
   const [editCustomerPhone, setEditCustomerPhone] = useState('');
   const [editCustomerEmail, setEditCustomerEmail] = useState('');
@@ -471,7 +485,7 @@ export default function ServiceManager() {
         }]);
       }
     } catch (err: any) {
-      alert('Dosya yüklenirken hata: ' + err.message);
+      showAlert('Dosya yüklenirken hata: ' + err.message, 'error');
     } finally {
       setNewTicketPhotoUploading(false);
       e.target.value = '';
@@ -534,7 +548,7 @@ export default function ServiceManager() {
         window.open(`/print/ticket/${res.ticketNumber}`, '_blank');
       }
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -567,7 +581,7 @@ export default function ServiceManager() {
       const atts = await fetchTicketAttachments(detailTicket.id);
       setTicketAttachments(atts || []);
     } catch (err: any) {
-      alert('Fotoğraf yüklenirken hata: ' + err.message);
+      showAlert('Fotoğraf yüklenirken hata: ' + err.message, 'error');
     } finally {
       setCameraUploading(false);
       e.target.value = '';
@@ -588,7 +602,7 @@ export default function ServiceManager() {
         fetchTicketApprovalRequests(id).then(r => setApprovalRequests(r || [])).catch(() => {});
       }
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     }
   };
 
@@ -603,7 +617,7 @@ export default function ServiceManager() {
       setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, cost } : t));
       setEditingCost(false);
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setCostSaving(false);
     }
@@ -708,9 +722,9 @@ export default function ServiceManager() {
       loadActivityFeed(detailTicket.id);
 
       setShowSignatureModal(false);
-      alert('Cihaz başarıyla dijital imza ile teslim edildi!');
+      showAlert('Cihaz başarıyla dijital imza ile teslim edildi!', 'success');
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setIsSignatureSaving(false);
     }
@@ -750,9 +764,9 @@ export default function ServiceManager() {
       setDetailTicket(updatedTicket);
       setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, ...dataToSave } : t));
       setIsEditingDetails(false);
-      alert('Servis kaydı başarıyla güncellendi.');
+      showAlert('Servis kaydı başarıyla güncellendi.', 'success');
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -760,15 +774,15 @@ export default function ServiceManager() {
 
   const handleDeleteTicket = async () => {
     if (!detailTicket) return;
-    if (!window.confirm('Bu servis kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) return;
+    if (!(await showConfirm('Bu servis kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!', true))) return;
     setIsDeletingTicket(true);
     try {
       await deleteAdminTicket(detailTicket.id);
       setDetailTicket(null);
       await loadTickets();
-      alert('Servis kaydı silindi.');
+      showAlert('Servis kaydı silindi.', 'success');
     } catch (e: any) {
-      alert('Silme işlemi başarısız: ' + e.message);
+      showAlert('Silme işlemi başarısız: ' + e.message, 'error');
     } finally {
       setIsDeletingTicket(false);
     }
@@ -780,11 +794,11 @@ export default function ServiceManager() {
     try {
       const res = await createInvoiceFromTicket(detailTicket.id);
       if (res.success) {
-        alert(`Servis #${detailTicket.ticketNumber} için Fatura #${res.invoiceNumber} başarıyla oluşturuldu!`);
+        showAlert(`Servis #${detailTicket.ticketNumber} için Fatura #${res.invoiceNumber} başarıyla oluşturuldu!`, 'success');
         window.open('/admin/faturalar', '_blank');
       }
     } catch (e: any) {
-      alert('Fatura oluşturulurken hata: ' + e.message);
+      showAlert('Fatura oluşturulurken hata: ' + e.message, 'error');
     } finally {
       setIsCreatingInvoice(false);
     }
@@ -794,7 +808,7 @@ export default function ServiceManager() {
     if (!detailTicket) return;
     const amount = detailTicket.cost || '0';
     if (parseFloat(amount) <= 0) {
-      alert('Lütfen önce servis tutarını belirleyin!');
+      showAlert('Lütfen önce servis tutarını belirleyin!', 'warning');
       return;
     }
     try {
@@ -811,11 +825,12 @@ export default function ServiceManager() {
           const waMsg = encodeURIComponent(`Sayın Müşterimiz, ${detailTicket.ticketNumber} servis kaydınız için Ödeal ile kredi kartıyla güvenli ödeme bağlantınız: ${res.paymentUrl}`);
           window.open(`https://wa.me/${waPhone}?text=${waMsg}`, '_blank');
         } else {
-          prompt('Ödeal Ödeme Linki Oluşturuldu:', res.paymentUrl);
+          navigator.clipboard.writeText(res.paymentUrl);
+          showAlert('Ödeal Ödeme Linki panoya kopyalandı:\n' + res.paymentUrl, 'success');
         }
       }
     } catch (e: any) {
-      alert('Ödeal linki oluşturulamadı: ' + e.message);
+      showAlert('Ödeal linki oluşturulamadı: ' + e.message, 'error');
     }
   };
 
@@ -830,7 +845,7 @@ export default function ServiceManager() {
         }
       }, 200);
     } catch (e: any) {
-      alert('Kamera erişimi sağlanamadı: ' + e.message);
+      showAlert('Kamera erişimi sağlanamadı: ' + e.message, 'error');
     }
   };
 
@@ -873,7 +888,7 @@ export default function ServiceManager() {
         const atts = await fetchTicketAttachments(detailTicket.id).catch(() => []);
         setTicketAttachments(atts || []);
         stopCamera();
-        alert('Fotoğraf servis kaydına eklendi!');
+        showAlert('Fotoğraf servis kaydına eklendi!', 'success');
       }
     }
   };
@@ -890,6 +905,7 @@ export default function ServiceManager() {
   const openDetail = async (ticket: any) => {
     setDetailTicket(ticket);
     setDetailTab('genel');
+    setShowDamageDetail(false);
     setCostValue(ticket.cost || '');
     setLaborCostValue(ticket.laborCost || '');
     setEditingCost(false);
@@ -1006,14 +1022,14 @@ export default function ServiceManager() {
       setNoteText('');
       setTimeout(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setNoteSending(false);
     }
   };
 
   const handleDeleteAttachment = async (id: number) => {
-    if (!window.confirm('Bu görseli silmek istediğinize emin misiniz?')) return;
+    if (!(await showConfirm('Bu görseli silmek istediğinize emin misiniz?', true))) return;
     try {
       await deleteTicketAttachment(id);
       if (detailTicket) {
@@ -1021,7 +1037,7 @@ export default function ServiceManager() {
         setTicketAttachments(atts || []);
       }
     } catch (e: any) {
-      alert('Silme hatası: ' + e.message);
+      showAlert('Silme hatası: ' + e.message, 'error');
     }
   };
 
@@ -1042,10 +1058,10 @@ export default function ServiceManager() {
         const shipmentsData = await fetchAdminShipments();
         const match = shipmentsData.find((s: any) => s.ticketId === detailTicket.id);
         setTicketShipment(match || null);
-        alert(`Kargo başarıyla oluşturuldu! Takip No: ${res.trackingNumber}`);
+        showAlert(`Kargo başarıyla oluşturuldu! Takip No: ${res.trackingNumber}`, 'success');
       }
     } catch (e: any) {
-      alert('Kargo oluşturulurken hata: ' + e.message);
+      showAlert('Kargo oluşturulurken hata: ' + e.message, 'error');
     } finally {
       setIsCreatingShipment(false);
     }
@@ -1058,7 +1074,7 @@ export default function ServiceManager() {
       setDetailTicket((prev: any) => ({ ...prev, assignedTo: userId ? parseInt(userId) : null }));
       setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, assignedTo: userId ? parseInt(userId) : null } : t));
     } catch (e: any) {
-      alert('Atama hatası: ' + e.message);
+      showAlert('Atama hatası: ' + e.message, 'error');
     } finally {
       setIsAssigning(false);
     }
@@ -1066,8 +1082,22 @@ export default function ServiceManager() {
 
   const handleAddPart = async () => {
     if (!detailTicket) return;
-    if (partMode === 'stok' && !selectedStockId) return;
-    if (partMode === 'manuel' && !manualPartName.trim()) return;
+    if (partMode === 'stok' && !selectedStockId) {
+      showAlert('Lütfen önce stoktan bir ürün/hizmet seçin.', 'warning');
+      return;
+    }
+    if (partMode === 'manuel' && !manualPartName.trim()) {
+      showAlert('Manuel kalem için isim girmelisiniz.', 'warning');
+      return;
+    }
+    if (partMode === 'stok') {
+      const selected = stockItems.find(s => s.id === parseInt(selectedStockId));
+      const qty = parseInt(partQuantity) || 1;
+      if (selected && qty > (selected.currentStock || 0)) {
+        showAlert(`Yetersiz stok: "${selected.name}" için elinizde ${selected.currentStock} ${selected.unit} var, ${qty} ${selected.unit} isteniyor.`, 'warning');
+        return;
+      }
+    }
     setIsAddingPart(true);
     try {
       await addTicketPart(detailTicket.id, {
@@ -1087,23 +1117,24 @@ export default function ServiceManager() {
       setPartVatRate('20');
       setManualPartName('');
       setManualPartBrand('');
-      alert('Parça/İşlem başarıyla eklendi.');
+      showAlert('Parça/İşlem başarıyla eklendi.', 'success');
     } catch (e: any) {
-      alert('Parça eklenirken hata: ' + e.message);
+      console.error('handleAddPart error:', e);
+      showAlert('Parça eklenirken hata oluştu:\n\n' + (e?.message || 'Bilinmeyen hata') + '\n\nLütfen bu mesajın tam metnini paylaşın.', 'error');
     } finally {
       setIsAddingPart(false);
     }
   };
 
   const handleRemovePart = async (partId: number) => {
-    if (!window.confirm('Bu parçayı/işlemi silmek istediğinize emin misiniz? Stok iade edilecektir.')) return;
+    if (!(await showConfirm('Bu parçayı/işlemi silmek istediğinize emin misiniz? Stok iade edilecektir.', true))) return;
     try {
       await deleteTicketPart(partId);
       const parts = await fetchTicketParts(detailTicket?.id);
       setTicketParts(parts || []);
       loadActivityFeed(detailTicket?.id);
     } catch (e: any) {
-      alert('Silme hatası: ' + e.message);
+      showAlert('Silme hatası: ' + e.message, 'error');
     }
   };
 
@@ -1128,9 +1159,9 @@ export default function ServiceManager() {
         functionTests: functionTestResults,
       });
       loadActivityFeed(detailTicket.id);
-      alert('Ekspertiz kaydedildi.');
+      showAlert('Ekspertiz kaydedildi.', 'success');
     } catch (e: any) {
-      alert('Ekspertiz kaydedilirken hata: ' + e.message);
+      showAlert('Ekspertiz kaydedilirken hata: ' + e.message, 'error');
     } finally {
       setIsSavingExpertise(false);
     }
@@ -1139,18 +1170,18 @@ export default function ServiceManager() {
   const handleManualApproval = async (decision: 'approved' | 'rejected') => {
     if (!detailTicket) return;
     const label = decision === 'approved' ? 'onayladığını' : 'reddettiğini';
-    if (!window.confirm(`Müşterinin teklifi telefon/yüz yüze görüşmede ${label} kaydetmek istediğinize emin misiniz?`)) return;
+    if (!(await showConfirm(`Müşterinin teklifi telefon/yüz yüze görüşmede ${label} kaydetmek istediğinize emin misiniz?`, decision === 'rejected'))) return;
     setIsRecordingManualApproval(true);
     try {
       await recordManualApproval(detailTicket.id, decision);
-      const newStatus = decision === 'approved' ? 'isleme_alindi' : 'onay_red';
+      const newStatus = decision === 'approved' ? 'onarimda' : 'onay_red';
       setDetailTicket((prev: any) => ({ ...prev, status: newStatus }));
       setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, status: newStatus } : t));
       loadActivityFeed(detailTicket.id);
       const reqs = await fetchTicketApprovalRequests(detailTicket.id);
       setApprovalRequests(reqs || []);
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setIsRecordingManualApproval(false);
     }
@@ -1165,7 +1196,7 @@ export default function ServiceManager() {
       const reqs = await fetchTicketApprovalRequests(detailTicket.id);
       setApprovalRequests(reqs || []);
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setIsSendingApprovalRequest(false);
     }
@@ -1183,7 +1214,7 @@ export default function ServiceManager() {
       setSupplySupplier('');
       setSupplyEta('');
     } catch (e: any) {
-      alert('Tedarik talebi eklenirken hata: ' + e.message);
+      showAlert('Tedarik talebi eklenirken hata: ' + e.message, 'error');
     } finally {
       setIsAddingSupplyRequest(false);
     }
@@ -1197,7 +1228,7 @@ export default function ServiceManager() {
       setSupplyRequests(reqs || []);
       loadActivityFeed(detailTicket.id);
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     }
   };
 
@@ -1208,8 +1239,9 @@ export default function ServiceManager() {
       await updateAdminTicket(detailTicket.id, { externalServiceName: editExternalServiceName, externalCost: editExternalCost || null });
       setDetailTicket((prev: any) => ({ ...prev, externalServiceName: editExternalServiceName, externalCost: editExternalCost }));
       setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, externalServiceName: editExternalServiceName, externalCost: editExternalCost } : t));
+      showAlert('Dış servis bilgileri kaydedildi.', 'success');
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     } finally {
       setIsSavingExternalService(false);
     }
@@ -1226,7 +1258,7 @@ export default function ServiceManager() {
       setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, [field]: now } : t));
       loadActivityFeed(detailTicket.id);
     } catch (e: any) {
-      alert('Hata: ' + e.message);
+      showAlert('Hata: ' + e.message, 'error');
     }
   };
 
@@ -1248,20 +1280,20 @@ export default function ServiceManager() {
       setPaymentNotes('');
       setPaymentIsRefund(false);
     } catch (e: any) {
-      alert('Tahsilat kaydedilirken hata: ' + e.message);
+      showAlert('Tahsilat kaydedilirken hata: ' + e.message, 'error');
     } finally {
       setIsAddingPayment(false);
     }
   };
 
   const handleReversePayment = async (paymentId: number) => {
-    if (!window.confirm('Bu ödeme kaydını iptal etmek istediğinize emin misiniz? Ters kayıt oluşturulacaktır.')) return;
+    if (!(await showConfirm('Bu ödeme kaydını iptal etmek istediğinize emin misiniz? Ters kayıt oluşturulacaktır.', true))) return;
     try {
       await reverseAdminPayment(paymentId);
       const pays = await fetchTicketPayments(detailTicket.id);
       setTicketPayments(pays || []);
     } catch (e: any) {
-      alert('İptal hatası: ' + e.message);
+      showAlert('İptal hatası: ' + e.message, 'error');
     }
   };
 
@@ -1273,8 +1305,9 @@ export default function ServiceManager() {
       await updateAdminTicket(detailTicket.id, { laborCost });
       setDetailTicket((prev: any) => ({ ...prev, laborCost }));
       setTickets(prev => prev.map(t => t.id === detailTicket.id ? { ...t, laborCost } : t));
+      showAlert('İşçilik maliyeti kaydedildi.', 'success');
     } catch (e: any) {
-      alert('İşçilik kaydedilirken hata: ' + e.message);
+      showAlert('İşçilik kaydedilirken hata: ' + e.message, 'error');
     } finally {
       setIsSavingLabor(false);
     }
@@ -1693,48 +1726,63 @@ export default function ServiceManager() {
             <div className="bg-white w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
               
               {/* Modal Header */}
-              <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-slate-50">
-                <div className="flex items-center gap-3">
+              <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-slate-50 flex-wrap gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="font-mono text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-xl shadow-sm">
                     {detailTicket.ticketNumber}
                   </span>
                   <h2 className="font-black text-gray-900 text-base leading-none">{detailTicket.subject}</h2>
+                  <span className={cn('px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/80 border border-gray-200', PRIORITY_COLORS[detailTicket.priority || 'normal'])}>
+                    ● {PRIORITY_LABELS[detailTicket.priority || 'normal']}
+                  </span>
+                  <span className={cn(
+                    'px-2.5 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1',
+                    detailTicket.assignedName ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-gray-100 text-gray-400 border-gray-200'
+                  )}>
+                    <Users className="w-3 h-3" /> {detailTicket.assignedName || 'Atanmamış'}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
+                  {/* Ödeme Grubu */}
+                  <div className="flex items-center gap-1.5 bg-blue-50/70 border border-blue-100 rounded-xl p-1">
+                    <button
+                      onClick={handleSendOdealPaymentLink}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-blue-700 hover:bg-blue-100 transition-colors"
+                      title="Ödeal ile Kredi Kartı Ödeme Linki Gönder"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" /> Ödeal Link
+                    </button>
+                  </div>
+                  {/* Belge/Yazdırma Grubu */}
+                  <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
+                    <button
+                      onClick={handleCreateInvoiceFromTicket}
+                      disabled={isCreatingInvoice}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      {isCreatingInvoice ? 'Oluşturuluyor...' : 'Fatura Oluştur'}
+                    </button>
+                    <Link
+                      to={`/print/ticket-tag/${detailTicket.ticketNumber}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-purple-700 hover:bg-purple-50 transition-colors"
+                      title="50x30mm Yapışkanlı Cihaz Takip Etiketi"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Cihaz Etiketi
+                    </Link>
+                    <Link
+                      to={`/print/ticket/${detailTicket.ticketNumber}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Servis Fişi
+                    </Link>
+                  </div>
                   <button
-                    onClick={handleSendOdealPaymentLink}
-                    className="flex items-center gap-1.5 px-3 py-2 border border-blue-300 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors shadow-sm"
-                    title="Ödeal ile Kredi Kartı Ödeme Linki Gönder"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" /> Ödeal Link
-                  </button>
-                  <button
-                    onClick={handleCreateInvoiceFromTicket}
-                    disabled={isCreatingInvoice}
-                    className="flex items-center gap-1.5 px-3 py-2 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    {isCreatingInvoice ? 'Oluşturuluyor...' : 'Fatura Oluştur'}
-                  </button>
-                  <Link
-                    to={`/print/ticket-tag/${detailTicket.ticketNumber}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-2 border border-purple-300 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors shadow-sm"
-                    title="58mm/80mm Termal QR Cihaz Etiketi"
-                  >
-                    <Printer className="w-3.5 h-3.5" /> Cihaz Etiketi
-                  </Link>
-                  <Link
-                    to={`/print/ticket/${detailTicket.ticketNumber}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-sm"
-                  >
-                    <Printer className="w-3.5 h-3.5" /> Servis Fişi
-                  </Link>
-                  <button 
-                    onClick={() => setDetailTicket(null)} 
+                    onClick={() => setDetailTicket(null)}
                     className="p-2 hover:bg-gray-200 rounded-xl text-gray-400 hover:text-gray-900 transition-colors"
                   >
                     <X className="w-5 h-5" />
@@ -1743,17 +1791,18 @@ export default function ServiceManager() {
               </div>
 
               {/* Modal Body */}
-              <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
-                {/* Left Area: Detail & Actions */}
-                <div className="w-full lg:w-3/5 flex flex-col min-h-0">
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                {/* Content Area: Detail & Actions */}
+                <div className="w-full flex flex-col min-h-0">
                   {/* Detail Tabs */}
                   <div className="flex gap-1 border-b border-gray-200 px-4 pt-2 bg-white shrink-0 overflow-x-auto">
                     {([
-                      { key: 'genel', label: 'Genel Bilgiler', icon: Users },
-                      { key: 'fiziksel', label: 'Fiziksel Durum', icon: ClipboardCheck },
-                      { key: 'parca', label: 'Parça & Ödeme', icon: Wallet },
-                      { key: 'durum', label: 'Durum & Onay', icon: CheckCircle2 },
-                      { key: 'ekler', label: 'Ekler & Kargo', icon: ImageIcon },
+                      { key: 'genel', label: 'Genel Bilgiler', icon: Users, active: 'border-blue-500 text-blue-600', chip: 'bg-blue-500' },
+                      { key: 'fiziksel', label: 'Fiziksel Durum', icon: ClipboardCheck, active: 'border-amber-500 text-amber-600', chip: 'bg-amber-500' },
+                      { key: 'parca', label: 'Parça & Ödeme', icon: Wallet, active: 'border-emerald-500 text-emerald-600', chip: 'bg-emerald-500' },
+                      { key: 'durum', label: 'Durum & Onay', icon: CheckCircle2, active: 'border-purple-500 text-purple-600', chip: 'bg-purple-500' },
+                      { key: 'ekler', label: 'Ekler & Kargo', icon: ImageIcon, active: 'border-indigo-500 text-indigo-600', chip: 'bg-indigo-500' },
+                      { key: 'aktivite', label: 'Aktivite', icon: History, active: 'border-slate-500 text-slate-600', chip: 'bg-slate-500' },
                     ] as const).map(tab => (
                       <button
                         key={tab.key}
@@ -1762,12 +1811,17 @@ export default function ServiceManager() {
                         className={cn(
                           'px-3.5 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap',
                           detailTab === tab.key
-                            ? 'border-primary text-primary'
+                            ? tab.active
                             : 'border-transparent text-gray-500 hover:text-gray-800'
                         )}
                       >
                         <tab.icon className="w-3.5 h-3.5" />
                         {tab.label}
+                        {tab.key === 'aktivite' && activityFeed.length > 0 && (
+                          <span className={cn('text-white text-[9px] px-1.5 py-0.5 rounded-full', detailTab === 'aktivite' ? tab.chip : 'bg-gray-400')}>
+                            {activityFeed.length}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -1781,7 +1835,7 @@ export default function ServiceManager() {
                       <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Cihaz Süreç Yolculuğu</span>
                       {getSlaBadge(detailTicket.estimatedDueAt)}
                     </div>
-                    <div className="grid grid-cols-5 gap-1 text-center relative pt-1">
+                    <div className="grid grid-cols-6 gap-1 text-center relative pt-1">
                       {SERVICE_STEPS.map((step, idx) => {
                         const activeIndex = SERVICE_STEPS.findIndex(s => s.key === detailTicket.status);
                         const isCurrent = detailTicket.status === step.key;
@@ -1999,12 +2053,12 @@ export default function ServiceManager() {
                                 try {
                                   const res = await triggerTicketWhatsApp(detailTicket.id);
                                   if (res.success) {
-                                    alert('WhatsApp bildirimi arka planda başarıyla sıraya alındı.');
+                                    showAlert('WhatsApp bildirimi arka planda başarıyla sıraya alındı.', 'success');
                                   } else {
-                                    alert('Hata: Gönderilemedi. Ayarları kontrol edin.');
+                                    showAlert('Gönderilemedi. Ayarları kontrol edin.', 'error');
                                   }
                                 } catch (e: any) {
-                                  alert('WhatsApp API hatası: ' + e.message);
+                                  showAlert('WhatsApp API hatası: ' + e.message, 'error');
                                 }
                               }}
                               className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold transition-colors"
@@ -2014,12 +2068,12 @@ export default function ServiceManager() {
                             <button
                               onClick={() => {
                                 if (!detailTicket.publicApprovalToken) {
-                                  alert('Bu servis kaydı için onay token\'ı bulunamadı. Kaydı yeniden açıp deneyin.');
+                                  showAlert('Bu servis kaydı için onay token\'ı bulunamadı. Kaydı yeniden açıp deneyin.', 'warning');
                                   return;
                                 }
                                 const link = `${window.location.origin}/onay/${detailTicket.ticketNumber}?token=${detailTicket.publicApprovalToken}`;
                                 navigator.clipboard.writeText(link);
-                                alert('Dijital Müşteri Onay Linki kopyalandı:\n' + link);
+                                showAlert('Dijital Müşteri Onay Linki kopyalandı:\n' + link, 'success');
                               }}
                               className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-lg text-[10px] font-bold transition-colors"
                               title="Müşteriye teklif onay linki gönderin"
@@ -2311,21 +2365,34 @@ export default function ServiceManager() {
                     </div>
                   </div>
 
-                  {/* Hasar Haritası & Teslim İmzası (Kabul Sırasında Alınan) */}
+                  {/* Hasar Haritası & Teslim İmzası (Kabul Sırasında Alınan) — sadece istenirse görüntülenir */}
                   {(detailTicket.damageMapJson || detailTicket.deliverySignature) && (
-                    <div className="border border-gray-200 rounded-2xl p-4 bg-white shadow-sm space-y-4">
-                      <p className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5 border-b pb-2">
-                        <AlertCircle className="w-4 h-4 text-amber-500" /> Hasar Haritası & Teslim İmzası
-                      </p>
-                      {detailTicket.damageMapJson && (
-                        <DamageMarkingCanvas
-                          deviceType={detailTicket.deviceType}
-                          value={JSON.parse(detailTicket.damageMapJson)}
-                          readOnly
-                        />
-                      )}
-                      {detailTicket.deliverySignature && (
-                        <SignatureCanvas value={detailTicket.deliverySignature} label="Teslim İmzası" readOnly />
+                    <div className="border border-gray-200 rounded-2xl p-4 bg-white shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => setShowDamageDetail(v => !v)}
+                        className="w-full flex items-center justify-between text-left"
+                      >
+                        <span className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4 text-amber-500" /> Hasar Haritası & Teslim İmzası
+                        </span>
+                        <span className="text-[11px] font-bold text-primary">
+                          {showDamageDetail ? 'Gizle' : 'Görüntüle'}
+                        </span>
+                      </button>
+                      {showDamageDetail && (
+                        <div className="space-y-4 mt-4 pt-4 border-t border-gray-100">
+                          {detailTicket.damageMapJson && (
+                            <DamageMarkingCanvas
+                              deviceType={detailTicket.deviceType}
+                              value={JSON.parse(detailTicket.damageMapJson)}
+                              readOnly
+                            />
+                          )}
+                          {detailTicket.deliverySignature && (
+                            <SignatureCanvas value={detailTicket.deliverySignature} label="Teslim İmzası" readOnly />
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -2407,6 +2474,7 @@ export default function ServiceManager() {
                           {[0, 1, 10, 20].map(r => <option key={r} value={r}>%{r} KDV</option>)}
                         </select>
                         <button
+                          type="button"
                           onClick={handleAddPart}
                           disabled={isAddingPart || (partMode === 'stok' ? !selectedStockId : !manualPartName.trim())}
                           className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50"
@@ -2463,12 +2531,18 @@ export default function ServiceManager() {
                             type="number"
                             value={laborCostValue}
                             onChange={e => setLaborCostValue(e.target.value)}
-                            onBlur={handleSaveLabor}
                             className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-sm font-bold focus:ring-1 focus:ring-primary outline-none"
                             placeholder="0.00"
                           />
                         </div>
-                        {isSavingLabor && <span className="text-[10px] text-blue-500">Kaydediliyor...</span>}
+                        <button
+                          type="button"
+                          onClick={handleSaveLabor}
+                          disabled={isSavingLabor}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-secondary text-white text-xs font-bold rounded-lg disabled:opacity-50 shrink-0"
+                        >
+                          <Save className="w-3.5 h-3.5" /> {isSavingLabor ? 'Kaydediliyor...' : 'Kaydet'}
+                        </button>
                       </div>
                       
                       <div className="flex items-center gap-3 mt-2 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
@@ -2529,15 +2603,23 @@ export default function ServiceManager() {
                     <div className="border border-gray-200 rounded-2xl p-4 bg-cyan-50/20">
                       <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Dış Servis Sevk</p>
                       <div className="flex flex-col md:flex-row gap-2 mb-3">
-                        <input type="text" value={editExternalServiceName} onChange={e => setEditExternalServiceName(e.target.value)} onBlur={handleSaveExternalService}
+                        <input type="text" value={editExternalServiceName} onChange={e => setEditExternalServiceName(e.target.value)}
                           className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary outline-none"
                           placeholder="Dış servis / yetkili adı" />
                         <div className="relative w-28">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₺</span>
-                          <input type="number" value={editExternalCost} onChange={e => setEditExternalCost(e.target.value)} onBlur={handleSaveExternalService}
+                          <input type="number" value={editExternalCost} onChange={e => setEditExternalCost(e.target.value)}
                             className="w-full pl-6 pr-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-primary outline-none"
                             placeholder="Maliyet" />
                         </div>
+                        <button
+                          type="button"
+                          onClick={handleSaveExternalService}
+                          disabled={isSavingExternalService}
+                          className="inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold rounded-lg disabled:opacity-50 shrink-0"
+                        >
+                          <Save className="w-3.5 h-3.5" /> {isSavingExternalService ? 'Kaydediliyor...' : 'Kaydet'}
+                        </button>
                       </div>
                       <div className="flex gap-2 text-[11px]">
                         <button onClick={() => handleExternalServiceAction('sent')} disabled={!!detailTicket.externalSentAt}
@@ -2916,31 +2998,31 @@ export default function ServiceManager() {
                   </div>
                   </>
                   )}
-                  </div>
-                </div>
 
-                {/* Right Area: Birleşik Aktivite Akışı (Not + Durum + Sistem/Denetim) */}
-                <div className="w-full lg:w-2/5 flex flex-col min-h-0 bg-slate-50/50 border-t lg:border-t-0 lg:border-l border-gray-200">
-                  <div className="border-b border-gray-200 shrink-0 bg-white px-3 pt-3 pb-2 flex items-center gap-1.5">
-                    <History className="w-4 h-4 text-gray-400 shrink-0" />
-                    <p className="text-xs font-bold text-gray-700 mr-1">Aktivite</p>
-                    {([
-                      { key: 'all', label: 'Tümü' },
-                      { key: 'note', label: 'Notlar' },
-                      { key: 'status', label: 'Durum' },
-                      { key: 'audit', label: 'Sistem' },
-                    ] as const).map(f => (
-                      <button key={f.key} type="button" onClick={() => setActivityFilter(f.key)}
-                        className={cn(
-                          'px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors',
-                          activityFilter === f.key ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        )}>
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
+                  {detailTab === 'aktivite' && (
+                  <>
+                  {/* Birleşik Aktivite Akışı (Not + Durum + Sistem/Denetim) */}
+                  <div className="border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+                    <div className="border-b border-gray-200 shrink-0 bg-slate-50/60 px-4 py-3 flex items-center gap-1.5 flex-wrap">
+                      <History className="w-4 h-4 text-slate-500 shrink-0" />
+                      <p className="text-xs font-bold text-gray-700 mr-1">Aktivite Akışı</p>
+                      {([
+                        { key: 'all', label: 'Tümü' },
+                        { key: 'note', label: 'Notlar' },
+                        { key: 'status', label: 'Durum' },
+                        { key: 'audit', label: 'Sistem' },
+                      ] as const).map(f => (
+                        <button key={f.key} type="button" onClick={() => setActivityFilter(f.key)}
+                          className={cn(
+                            'px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors',
+                            activityFilter === f.key ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          )}>
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
 
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    <div className="max-h-[420px] overflow-y-auto p-4 space-y-3">
                     {activityFeed.filter(a => activityFilter === 'all' || a.type === activityFilter).length === 0 && (
                       <p className="text-xs text-gray-400 italic text-center py-8">Henüz kayıt bulunmuyor.</p>
                     )}
@@ -3000,26 +3082,30 @@ export default function ServiceManager() {
                       );
                     })}
                     <div ref={notesEndRef} />
-                  </div>
+                    </div>
 
-                  <div className="p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
-                    <textarea
-                      rows={2}
-                      value={noteText}
-                      onChange={e => setNoteText(e.target.value)}
-                      placeholder="Dahili not ekle... (Ctrl+Enter ile gönder)"
-                      className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
-                      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSendNote}
-                      disabled={noteSending || !noteText.trim()}
-                      className="px-4 py-2 bg-primary hover:bg-secondary text-white rounded-xl transition-colors disabled:opacity-50 shrink-0 flex items-center justify-center"
-                      title="Gönder (Ctrl+Enter)"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
+                    <div className="p-4 border-t border-gray-200 bg-white flex gap-2 shrink-0">
+                      <textarea
+                        rows={2}
+                        value={noteText}
+                        onChange={e => setNoteText(e.target.value)}
+                        placeholder="Dahili not ekle... (Ctrl+Enter ile gönder)"
+                        className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-primary outline-none resize-none"
+                        onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSendNote(); }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSendNote}
+                        disabled={noteSending || !noteText.trim()}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl transition-colors disabled:opacity-50 shrink-0 flex items-center justify-center"
+                        title="Gönder (Ctrl+Enter)"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  </>
+                  )}
                   </div>
                 </div>
               </div>
@@ -3033,38 +3119,42 @@ export default function ServiceManager() {
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[90vw] max-h-[92vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-5 pb-0 border-b border-gray-100">
-              <h2 className="text-xl font-black text-gray-900 tracking-tight">Yeni Servis Kaydı Oluştur</h2>
-              <button onClick={() => { setShowModal(false); setModalTab('musteri'); }} className="p-2 hover:bg-gray-100 rounded-xl">
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-gray-900 tracking-tight leading-none">Yeni Servis Kaydı Oluştur</h2>
+                  <p className="text-xs text-gray-500 mt-1">5 adımda müşteri, cihaz ve servis bilgilerini kaydedin</p>
+                </div>
+              </div>
+              <button onClick={() => { setShowModal(false); setModalTab('musteri'); }} className="p-2 hover:bg-gray-200 rounded-xl">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-100 px-6 bg-white">
+            <div className="flex border-b border-gray-100 px-6 bg-white overflow-x-auto">
               {([
-                { key: 'musteri', label: 'Müşteri & Cari Bilgileri' },
-                { key: 'cihaz', label: 'Cihaz & Erişim Bilgileri' },
-                { key: 'servis', label: 'Servis Detayları' },
-                { key: 'fiziksel', label: 'Fiziksel Durum & Onaylar' },
-                { key: 'medya', label: 'Teslim Fotoğrafları & Ekler' },
+                { key: 'musteri', label: 'Müşteri & Cari Bilgileri', icon: Users, active: 'border-blue-500 text-blue-600' },
+                { key: 'cihaz', label: 'Cihaz & Erişim Bilgileri', icon: Shield, active: 'border-cyan-500 text-cyan-600' },
+                { key: 'servis', label: 'Servis Detayları', icon: Wrench, active: 'border-orange-500 text-orange-600' },
+                { key: 'fiziksel', label: 'Fiziksel Durum & Onaylar', icon: ClipboardCheck, active: 'border-amber-500 text-amber-600' },
+                { key: 'medya', label: 'Teslim Fotoğrafları & Ekler', icon: ImageIcon, active: 'border-indigo-500 text-indigo-600' },
               ] as const).map(tab => (
                 <button
                   key={tab.key}
                   type="button"
                   onClick={() => setModalTab(tab.key)}
                   className={cn(
-                    'px-5 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5',
+                    'px-5 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap',
                     modalTab === tab.key
-                      ? 'border-primary text-primary'
+                      ? tab.active
                       : 'border-transparent text-gray-500 hover:text-gray-800'
                   )}
                 >
-                  {tab.key === 'musteri' && <Users className="w-4 h-4" />}
-                  {tab.key === 'cihaz' && <Shield className="w-4 h-4" />}
-                  {tab.key === 'servis' && <Wrench className="w-4 h-4" />}
-                  {tab.key === 'fiziksel' && <ClipboardCheck className="w-4 h-4" />}
-                  {tab.key === 'medya' && <ImageIcon className="w-4 h-4" />}
+                  <tab.icon className="w-4 h-4" />
                   {tab.label}
                   {tab.key === 'medya' && newTicketPhotos.length > 0 && (
                     <span className="ml-1.5 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-full">{newTicketPhotos.length}</span>
@@ -3751,10 +3841,80 @@ export default function ServiceManager() {
             const atts = await fetchTicketAttachments(detailTicket.id);
             setTicketAttachments(atts || []);
           } catch (err: any) {
-            alert('Dosya ekleme hatası: ' + err.message);
+            showAlert('Dosya ekleme hatası: ' + err.message, 'error');
           }
         }}
       />
+
+      {/* Bilgi Modalı (alert() yerine) */}
+      {infoModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 text-center space-y-3">
+              <div className={cn(
+                'w-14 h-14 rounded-full flex items-center justify-center mx-auto',
+                infoModal.type === 'success' ? 'bg-emerald-50 text-emerald-600' :
+                infoModal.type === 'error' ? 'bg-red-50 text-red-600' :
+                infoModal.type === 'warning' ? 'bg-amber-50 text-amber-600' :
+                'bg-blue-50 text-blue-600'
+              )}>
+                {infoModal.type === 'success' && <CheckCircle2 className="w-7 h-7" />}
+                {infoModal.type === 'error' && <XCircle className="w-7 h-7" />}
+                {infoModal.type === 'warning' && <AlertTriangle className="w-7 h-7" />}
+                {infoModal.type === 'info' && <AlertCircle className="w-7 h-7" />}
+              </div>
+              <p className="text-sm text-gray-800 font-semibold whitespace-pre-line leading-relaxed">{infoModal.message}</p>
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => setInfoModal(null)}
+                autoFocus
+                className="w-full bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-bold text-sm transition-colors"
+              >
+                Tamam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Onay Modalı (window.confirm() yerine) */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 text-center space-y-3">
+              <div className={cn(
+                'w-14 h-14 rounded-full flex items-center justify-center mx-auto',
+                confirmModal.danger ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
+              )}>
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <p className="text-sm text-gray-800 font-semibold whitespace-pre-line leading-relaxed">{confirmModal.message}</p>
+            </div>
+            <div className="flex gap-2 p-4 border-t border-gray-100 bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => { confirmModal.resolve(false); setConfirmModal(null); }}
+                className="flex-1 border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 py-2.5 rounded-xl font-bold text-sm transition-colors"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => { confirmModal.resolve(true); setConfirmModal(null); }}
+                autoFocus
+                className={cn(
+                  'flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors text-white',
+                  confirmModal.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-secondary'
+                )}
+              >
+                Onayla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Image Preview Modal */}
       {previewImage && (
@@ -3811,7 +3971,7 @@ export default function ServiceManager() {
         onClose={() => setIsBarcodeScannerOpen(false)}
         onScan={(scannedCode) => {
           setSearch(scannedCode);
-          alert(`Barkod / QR tarandı: ${scannedCode}`);
+          showAlert(`Barkod / QR tarandı: ${scannedCode}`, 'info');
         }}
       />
 

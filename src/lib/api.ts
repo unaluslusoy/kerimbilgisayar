@@ -105,6 +105,11 @@ export async function fetchTicket(ticketNumber: string) {
   return handleResponse(res);
 }
 
+export async function fetchDeviceHistory(identifier: string) {
+  const res = await fetch(`/api/public/device-history/${identifier}`);
+  return handleResponse(res);
+}
+
 export async function submitAppointment(data: any) {
   const res = await fetch('/api/appointments', {
     method: 'POST',

@@ -17,6 +17,7 @@ export const TICKET_STATUSES: TicketStatusDef[] = [
   { key: 'dis_servis', label: 'Dış Serviste' },
   { key: 'musteri_onayi_bekliyor', label: 'Onay Bekleniyor' },
   { key: 'onay_red', label: 'Teklif Reddedildi' },
+  { key: 'onarimda', label: 'Onarımda' },
   { key: 'cozuldu', label: 'Çözüldü' },
   { key: 'iade', label: 'İade Bekliyor' },
   { key: 'teslim_edildi', label: 'Teslim Edildi' },

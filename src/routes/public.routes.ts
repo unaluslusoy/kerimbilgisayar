@@ -357,6 +357,63 @@ publicRouter.get(['/api/tickets/:ticketNumber', '/api/public/ticket/query'], tic
   }
 });
 
+// Cihaz Etiketi QR'ı — seri no/IMEI ile cihazın TÜM geçmiş servis kayıtlarını (özet) getirir.
+// Bilerek sadece özet döndürür (maliyet/teknisyen notu YOK) — seri no bilen herkes erişebildiği için
+// /api/public/ticket-approval-info'da bulunan aşırı bilgi ifşası hatası burada tekrarlanmıyor.
+publicRouter.get('/api/public/device-history/:identifier', ticketQueryLimiter, async (req, res) => {
+  try {
+    const rawId = (req.params.identifier || '').trim();
+    const cleanId = rawId.replace(/[^A-Za-z0-9\-]/g, '');
+    if (cleanId.length < 3 || cleanId.length > 50) {
+      return res.status(400).json({ error: 'Geçersiz seri no / IMEI biçimi' });
+    }
+
+    const matchingDevices = await db.select({ id: devices.id, brand: devices.brand, model: devices.model, deviceType: devices.deviceType })
+      .from(devices)
+      .where(or(eq(devices.serialNumber, cleanId), eq(devices.imei, cleanId)));
+
+    if (matchingDevices.length === 0) {
+      return res.status(404).json({ error: 'Bu seri no / IMEI ile eşleşen bir cihaz bulunamadı.' });
+    }
+
+    const deviceIds = matchingDevices.map(d => d.id);
+    const rows = await db.select({
+      id: tickets.id,
+      ticketNumber: tickets.ticketNumber,
+      subject: tickets.subject,
+      type: tickets.type,
+      status: tickets.status,
+      createdAt: tickets.createdAt,
+      resolvedAt: tickets.resolvedAt,
+      deliveredAt: tickets.deliveredAt,
+      customerFirstName: users.firstName,
+      customerLastName: users.lastName,
+    })
+      .from(tickets)
+      .leftJoin(users, eq(tickets.userId, users.id))
+      .where(sql`${tickets.deviceId} IN (${sql.join(deviceIds, sql`, `)})`)
+      .orderBy(desc(tickets.createdAt));
+
+    const latest = matchingDevices[0];
+    res.json({
+      device: { brand: latest.brand, model: latest.model, deviceType: latest.deviceType },
+      history: rows.map(r => ({
+        ticketNumber: r.ticketNumber,
+        subject: r.subject,
+        type: r.type,
+        status: r.status,
+        createdAt: r.createdAt,
+        resolvedAt: r.resolvedAt,
+        deliveredAt: r.deliveredAt,
+        customerName: maskName(`${r.customerFirstName || ''} ${r.customerLastName || ''}`.trim()),
+      })),
+    });
+  } catch (e: any) {
+    console.error('Device history query error:', e);
+    res.status(500).json({ error: 'Sorgulama işlemi sırasında hata oluştu' });
+  }
+});
+
 publicRouter.post('/api/tickets/:ticketNumber/approve', ticketActionLimiter, async (req, res) => {
   try {
     const rawCode = (req.params.ticketNumber || '').trim();
@@ -379,7 +436,7 @@ publicRouter.post('/api/tickets/:ticketNumber/approve', ticketActionLimiter, asy
     }
 
     await db.update(tickets).set({
-      status: 'isleme_alindi',
+      status: 'onarimda',
       updatedAt: new Date(),
     }).where(eq(tickets.id, ticket.id));
 
@@ -387,7 +444,7 @@ publicRouter.post('/api/tickets/:ticketNumber/approve', ticketActionLimiter, asy
       tenantId: ticket.tenantId,
       ticketId: ticket.id,
       fromStatus: ticket.status,
-      toStatus: 'isleme_alindi',
+      toStatus: 'onarimda',
       notes: `Müşteri web üzerinden (${getClientIp(req)}) onarım teklifini onayladı.`,
     }).catch((e) => console.error('serviceStatusLogs insert error:', e));
 
@@ -503,7 +560,7 @@ publicRouter.get('/api/public/ticket-approval-info/:ticketNumber', ticketQueryLi
     .where(eq(ticketParts.ticketId, ticket.id));
 
     let approvalStatus: 'pending' | 'approved' | 'rejected' = 'pending';
-    if (ticket.status === 'isleme_alindi' || ticket.status === 'cozuldu' || ticket.status === 'teslim_edildi') {
+    if (ticket.status === 'onarimda' || ticket.status === 'cozuldu' || ticket.status === 'teslim_edildi') {
       approvalStatus = 'approved';
     } else if (ticket.status === 'onay_red' || ticket.status === 'iptal') {
       approvalStatus = 'rejected';
@@ -540,7 +597,7 @@ publicRouter.post('/api/public/ticket-approval-submit', ticketActionLimiter, asy
     if (!ticket.publicApprovalToken || ticket.publicApprovalToken !== token) {
       return res.status(403).json({ error: 'Geçersiz veya eksik onay linki' });
     }
-    const newStatus = approved ? 'isleme_alindi' : 'onay_red';
+    const newStatus = approved ? 'onarimda' : 'onay_red';
 
     await db.update(tickets).set({
       status: newStatus,

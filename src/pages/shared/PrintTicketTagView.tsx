@@ -17,8 +17,13 @@ export default function PrintTicketTagView() {
       .then(async data => {
         setTicket(data);
         if (data && data.ticketNumber) {
-          const queryUrl = `${window.location.origin}/ariza-sorgulama?no=${data.ticketNumber}`;
-          const qr = await QRCode.toDataURL(queryUrl, { margin: 1, width: 140 });
+          // Seri no / IMEI varsa QR cihaza bağlanır (tüm geçmiş servisleri gösterir);
+          // yoksa bu tek fişin durum sorgulamasına düşer (eski davranış).
+          const deviceIdentifier = (data.serialNumber || data.imei || '').trim();
+          const trackingUrl = deviceIdentifier
+            ? `${window.location.origin}/cihaz-gecmisi/${encodeURIComponent(deviceIdentifier)}`
+            : `${window.location.origin}/ariza-sorgulama?no=${data.ticketNumber}`;
+          const qr = await QRCode.toDataURL(trackingUrl, { margin: 0, width: 200 });
           setQrCodeDataUrl(qr);
         }
         setLoading(false);
@@ -50,6 +55,8 @@ export default function PrintTicketTagView() {
     );
   }
 
+  const deviceIdentifier = ticket.serialNumber || ticket.imei || '';
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-6">
       {/* Control Bar (Screen only) */}
@@ -59,75 +66,67 @@ export default function PrintTicketTagView() {
         </button>
         <div className="text-sm font-bold text-gray-800">Cihaz Etiketi — #{ticket.ticketNumber}</div>
         <button onClick={handlePrint} className="px-4 py-1.5 bg-primary text-white rounded-xl text-xs font-bold hover:bg-secondary flex items-center gap-1.5 shadow-sm">
-          <Printer className="w-4 h-4" /> Termal Etiket Bas (58mm/80mm)
+          <Printer className="w-4 h-4" /> Cihaz Etiketi Bas (50x30mm)
         </button>
       </div>
 
-      {/* Printable Tag Container */}
-      <div className="thermal-tag-card bg-white border border-gray-300 shadow-lg p-4 w-[280px] print:w-[76mm] rounded-lg font-sans text-black">
-        <div className="text-center border-b-2 border-black pb-2 mb-2">
-          <p className="font-extrabold text-sm tracking-tight uppercase">KERİM BİLGİSAYAR</p>
-          <p className="text-[11px] font-bold text-gray-800">TEKNİK SERVİS CİHAZ ETİKETİ</p>
+      {!deviceIdentifier && (
+        <div className="print:hidden max-w-[280px] mb-4 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+          Bu kayıtta seri no / IMEI girilmemiş — QR kod bu servis fişinin durum sorgulamasına yönlendirecek (cihaz geçmişi takibi için seri no ekleyin).
         </div>
+      )}
 
-        <div className="text-center my-2">
-          <span className="font-mono text-base font-extrabold bg-black text-white px-3 py-1 rounded inline-block">
-            {ticket.ticketNumber}
-          </span>
-        </div>
-
-        <div className="text-[12px] space-y-1 border-y border-dashed border-gray-800 py-2 my-2">
-          <div className="flex justify-between items-center">
-            <span className="font-bold text-gray-700">Müşteri:</span>
-            <span className="font-extrabold text-black truncate max-w-[170px]">{ticket.customerName || '—'}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="font-bold text-gray-700">Cihaz:</span>
-            <span className="font-extrabold text-black truncate max-w-[170px]">{[ticket.deviceBrand, ticket.deviceModel].filter(Boolean).join(' ') || ticket.deviceType || '—'}</span>
-          </div>
-          {ticket.deviceSerial && (
-            <div className="flex justify-between items-center">
-              <span className="font-bold text-gray-700">Seri No:</span>
-              <span className="font-mono text-[11px] font-bold text-black">{ticket.deviceSerial}</span>
-            </div>
+      {/* Printable Tag Container — 50x30mm yapışkanlı etiket rulosu için tasarlandı.
+          40x30mm rulo kullanılıyorsa hem burada hem @media print bloğunda genişliği 40mm'ye çekmeniz yeterli. */}
+      <div className="device-label-card bg-white border border-gray-300 shadow-lg w-[220px] h-[132px] print:w-[50mm] print:h-[30mm] rounded-md font-sans text-black flex items-stretch gap-2 p-2.5 print:p-[2mm] print:gap-[1.5mm]">
+        {/* Sol: QR Kod */}
+        <div className="shrink-0 flex items-center justify-center">
+          {qrCodeDataUrl && (
+            <img src={qrCodeDataUrl} alt="Cihaz Takip QR" className="w-[88px] h-[88px] print:w-[19mm] print:h-[19mm] object-contain" />
           )}
-          <div className="flex justify-between items-center">
-            <span className="font-bold text-gray-700">Tarih:</span>
-            <span className="text-[11px] font-bold text-black">{new Date(ticket.createdAt).toLocaleDateString('tr-TR')}</span>
-          </div>
         </div>
 
-        {/* QR Code */}
-        {qrCodeDataUrl && (
-          <div className="flex flex-col items-center justify-center pt-1">
-            <img src={qrCodeDataUrl} alt="QR Code" className="w-28 h-28" />
-            <p className="text-[9px] font-extrabold text-gray-800 mt-1">ARIZA SORGULAMA QR KODU</p>
+        {/* Sağ: Metin Sütunu */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+          <div>
+            <p className="font-extrabold text-[9px] print:text-[6.5pt] uppercase tracking-tight leading-tight">KERİM BİLGİSAYAR</p>
+            <p className="text-[7px] print:text-[5pt] text-gray-600 font-semibold leading-tight">TEKNİK SERVİS TAKİP ETİKETİ</p>
           </div>
-        )}
 
-        {/* Thermal Cutter Clearance Gap (Auto-Cutter Margins) */}
-        <div className="mt-8 pt-6 border-t border-dashed border-gray-400 text-center font-mono text-[8pt] text-gray-500">
-          --- KESİM NOKTASI ---
+          <div className="space-y-0.5">
+            <p className="font-mono text-[9px] print:text-[6.5pt] font-extrabold bg-black text-white px-1 py-0.5 rounded inline-block leading-none">
+              {ticket.ticketNumber}
+            </p>
+            {deviceIdentifier && (
+              <p className="font-mono text-[7px] print:text-[5pt] text-gray-700 font-bold leading-tight truncate">
+                S/N: {deviceIdentifier}
+              </p>
+            )}
+          </div>
+
+          <p className="text-[7px] print:text-[5pt] text-gray-500 font-semibold leading-tight">
+            0541 422 61 71
+          </p>
         </div>
       </div>
 
       <style>{`
         @media print {
           @page {
-            size: 80mm auto;
+            size: 50mm 30mm;
             margin: 0;
           }
           body, html {
-            width: 80mm !important;
+            width: 50mm !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
             color: black !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          .thermal-tag-card {
-            width: 76mm !important;
-            margin: 0 auto !important;
-            padding: 4mm 3mm !important;
+          .device-label-card {
+            margin: 0 !important;
             border: none !important;
             box-shadow: none !important;
             border-radius: 0 !important;
