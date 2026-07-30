@@ -532,68 +532,66 @@ export default function AdminPos() {
     >
       {/* Standalone Application Bar */}
       <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-5 py-2.5 flex items-center justify-between shadow-lg border-b border-slate-950/60 shrink-0">
-        <div className="flex items-center gap-3.5 min-w-0 pr-4 mr-1 border-r border-slate-700/60">
-          <div className="w-11 h-11 bg-white rounded-2xl shadow-md flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-slate-950/5">
-            {settings?.logoUrl || settings?.siteLogo ? (
-              <img
-                src={mediaUrl(settings.logoUrl || settings.siteLogo)}
-                alt="Logo"
-                className="w-full h-full object-contain p-1.5"
-              />
-            ) : (
-              <ShoppingCart className="w-5 h-5 text-primary" />
-            )}
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Kompakt Logo */}
+          <div className="flex items-center gap-2 shrink-0 pr-3 mr-1 border-r border-slate-700/60">
+            <div className="w-8 h-8 bg-white rounded-xl shadow-md flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-slate-950/5">
+              {settings?.logoUrl || settings?.siteLogo ? (
+                <img
+                  src={mediaUrl(settings.logoUrl || settings.siteLogo)}
+                  alt="Logo"
+                  className="w-full h-full object-contain p-1"
+                />
+              ) : (
+                <ShoppingCart className="w-4 h-4 text-primary" />
+              )}
+            </div>
+            <span className="text-sm font-extrabold tracking-tight text-white whitespace-nowrap">Kerim Bilgisayar</span>
+            <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0 uppercase tracking-wide">POS</span>
           </div>
-          <div className="min-w-0 leading-tight">
-            <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-2">
-              <span className="truncate">Kerim Bilgisayar</span>
-              <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0 uppercase tracking-wide">POS</span>
-            </h1>
-            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Satış Terminali · v1.5</p>
-          </div>
-        </div>
 
-        {/* Canlı Tarih / Saat */}
-        <div className="hidden md:flex flex-col items-center px-3 py-1 bg-slate-950/40 rounded-xl border border-slate-700/70 shrink-0">
-          <span className="text-sm font-mono font-black text-white leading-none tabular-nums">
-            {now.toLocaleTimeString('tr-TR')}
-          </span>
-          <span className="text-[9px] text-slate-400 font-semibold leading-none mt-0.5">
-            {now.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', weekday: 'long' })}
-          </span>
-        </div>
-
-        {/* Hızlı Gezinme Menüsü — tam ekranda dikkat dağıtmaması için gizlenir */}
-        {!isFullscreen && (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowNavMenu(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-950/40 hover:bg-slate-700/60 border border-slate-700/70 rounded-xl text-[10px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
-            >
-              <Menu className="w-4 h-4" /> Menü
-            </button>
-            {showNavMenu && (
-              <>
-                <div className="fixed inset-0 z-30" onClick={() => setShowNavMenu(false)} />
-                <div className="absolute top-full left-0 mt-1.5 bg-slate-900 border border-slate-700/70 rounded-xl shadow-2xl z-40 min-w-[180px] overflow-hidden">
-                  <Link to="/admin" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
-                    <LayoutDashboard className="w-4 h-4" /> Dashboard
-                  </Link>
-                  <Link to="/admin/servis" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
-                    <Wrench className="w-4 h-4" /> Servis Kayıtları
-                  </Link>
-                  <Link to="/admin/stok" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
-                    <Layers className="w-4 h-4" /> Stok Yönetimi
-                  </Link>
-                  <Link to="/admin/musteriler" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Müşteriler
-                  </Link>
-                </div>
-              </>
-            )}
+          {/* Canlı Tarih / Saat */}
+          <div className="hidden md:flex flex-col items-center px-3 py-1 bg-slate-950/40 rounded-xl border border-slate-700/70 shrink-0">
+            <span className="text-sm font-mono font-black text-white leading-none tabular-nums">
+              {now.toLocaleTimeString('tr-TR')}
+            </span>
+            <span className="text-[9px] text-slate-400 font-semibold leading-none mt-0.5">
+              {now.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', weekday: 'long' })}
+            </span>
           </div>
-        )}
+
+          {/* Hızlı Gezinme Menüsü — tam ekranda dikkat dağıtmaması için gizlenir */}
+          {!isFullscreen && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowNavMenu(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-950/40 hover:bg-slate-700/60 border border-slate-700/70 rounded-xl text-[10px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+              >
+                <Menu className="w-4 h-4" /> Menü
+              </button>
+              {showNavMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowNavMenu(false)} />
+                  <div className="absolute top-full left-0 mt-1.5 bg-slate-900 border border-slate-700/70 rounded-xl shadow-2xl z-40 min-w-[180px] overflow-hidden">
+                    <Link to="/admin" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                      <LayoutDashboard className="w-4 h-4" /> Dashboard
+                    </Link>
+                    <Link to="/admin/servis" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                      <Wrench className="w-4 h-4" /> Servis Kayıtları
+                    </Link>
+                    <Link to="/admin/stok" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                      <Layers className="w-4 h-4" /> Stok Yönetimi
+                    </Link>
+                    <Link to="/admin/musteriler" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                      <Users className="w-4 h-4" /> Müşteriler
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Active Tab, Fullscreen Toggle & Exit Button */}
         <div className="flex items-center gap-2 shrink-0">
