@@ -6,12 +6,14 @@ import {
 import { cn } from '../lib/utils';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { adminRequest, fetchAdminNotifications, markNotificationsAsRead } from '../lib/api';
 
 export default function AdminLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
+  const { settings } = useSettings();
   const [isGoogleBusinessActive, setIsGoogleBusinessActive] = useState(false);
 
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
@@ -110,6 +112,7 @@ export default function AdminLayout() {
           icon: DollarSign,
           subItems: [
             { name: 'POS Hızlı Satış', path: '/admin/satis-pos' },
+            { name: 'Kasa', path: '/admin/kasa' },
             { name: 'Faturalar', path: '/admin/faturalar' },
             { name: 'Gider & Masraflar', path: '/admin/masraflar' },
             { name: 'Stok & Depo', path: '/admin/stok' },
@@ -199,6 +202,37 @@ export default function AdminLayout() {
       ]
     }
   ];
+
+  // Sayfa özel bir başlık atamadıysa (usePageTitle çağırmadıysa) sekme/PWA pencere başlığı
+  // varsayılan olarak boş kalıp Chromium'un uzun manifest adını eklemesine sebep oluyordu.
+  // Menüdeki sayfa adına göre kısa ve tutarlı bir başlık ata.
+  useEffect(() => {
+    const siteTitle = settings?.site_title || 'Kerim Bilgisayar';
+    let pageLabel = '';
+    if (location.pathname === '/admin') {
+      pageLabel = 'Başlangıç';
+    } else {
+      outer: for (const group of menuGroups) {
+        for (const item of group.items) {
+          if (item.path && (location.pathname === item.path || location.pathname.startsWith(item.path + '/'))) {
+            pageLabel = item.name;
+            break outer;
+          }
+          if (item.subItems) {
+            const match = item.subItems.find(sub => location.pathname === sub.path || location.pathname.startsWith(sub.path + '/'));
+            if (match) {
+              pageLabel = match.name;
+              break outer;
+            }
+          }
+        }
+      }
+    }
+    const id = setTimeout(() => {
+      document.title = pageLabel ? `${pageLabel} | ${siteTitle}` : `Yönetim Paneli | ${siteTitle}`;
+    }, 0);
+    return () => clearTimeout(id);
+  }, [location.pathname, settings?.site_title]);
 
   // Auto-open menus that have active paths inside them
   useEffect(() => {

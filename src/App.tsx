@@ -48,6 +48,7 @@ const AdminServices = lazy(() => import('./pages/admin/AdminServices'));
 const AdminServiceCategories = lazy(() => import('./pages/admin/AdminServiceCategories'));
 const AdminShipments = lazy(() => import('./pages/admin/AdminShipments'));
 const AdminExpenses = lazy(() => import('./pages/admin/AdminExpenses'));
+const AdminKasa = lazy(() => import('./pages/admin/AdminKasa'));
 const AdminDealers = lazy(() => import('./pages/admin/AdminDealers'));
 const AdminReceiptBuilder = lazy(() => import('./pages/admin/AdminReceiptBuilder'));
 const DynamicPage = lazy(() => import('./pages/public/DynamicPage'));
@@ -220,6 +221,7 @@ function AppContent() {
             <Route path="hizmetler" element={<AdminServices />} />
             <Route path="kargo" element={<AdminShipments />} />
             <Route path="masraflar" element={<AdminExpenses />} />
+            <Route path="kasa" element={<AdminKasa />} />
             <Route path="bildirimler" element={<AdminNotifications />} />
             <Route path="denetim-loglari" element={<AdminAuditLogs />} />
             <Route path="faturalar" element={<AdminInvoices />} />

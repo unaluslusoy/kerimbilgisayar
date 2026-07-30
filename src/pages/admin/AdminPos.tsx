@@ -656,6 +656,21 @@ export default function AdminPos() {
               </button>
             </div>
 
+            {/* Barkod Okutma / Manuel Giriş — Enter'a basınca veya barkod okutulunca otomatik sepete eklenir */}
+            <form onSubmit={handleBarcodeSubmit} className="mb-3 shrink-0">
+              <div className="relative">
+                <Barcode className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-primary" />
+                <input
+                  ref={barcodeInputRef}
+                  type="text"
+                  placeholder="Barkodu taratın veya yazıp Enter'a basın... (F2)"
+                  value={barcodeInput}
+                  onChange={e => setBarcodeInput(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 bg-primary/5 border-2 border-primary/30 rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                />
+              </div>
+            </form>
+
             {/* Sepeti Beklet / Bekleyen Satışlar */}
             <div className="flex items-center gap-2 mb-3 shrink-0 relative">
               <button
@@ -992,27 +1007,6 @@ export default function AdminPos() {
                 ))}
               </div>
             )}
-
-            {/* Barcode scan box */}
-            <form onSubmit={handleBarcodeSubmit} className="flex gap-3 mb-4 shrink-0">
-              <div className="relative flex-1">
-                <Barcode className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-primary" />
-                <input
-                  ref={barcodeInputRef}
-                  type="text"
-                  placeholder="Barkodu taratın veya manuel girip Enter'a basın... (F2)"
-                  value={barcodeInput}
-                  onChange={e => setBarcodeInput(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none transition-all"
-                />
-              </div>
-              <button
-                type="submit"
-                className="bg-primary hover:bg-secondary text-white px-5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              >
-                Bul ve Ekle
-              </button>
-            </form>
 
             {/* Product search box */}
             <div className="relative mb-2.5 shrink-0">

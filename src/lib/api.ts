@@ -698,6 +698,29 @@ export async function analyzeReceiptOcr(imageUrl: string) {
 }
 
 // ============================================================
+// KASA MODÜLÜ (Cash Register)
+// ============================================================
+export async function fetchKasaSummary(date: string) {
+  return adminRequest(`/api/admin/kasa/summary?date=${date}`);
+}
+
+export async function createKasaTahsilat(data: { customerId: number; amount: string; paymentMethod: string; description?: string }) {
+  return adminRequest('/api/admin/kasa/tahsilat', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function createKasaMasraf(data: { title: string; amount: string; category?: string; paymentMethod: string; description?: string }) {
+  return adminRequest('/api/admin/kasa/masraf', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function closeKasaDay(data: { date: string; openingBalance: string; countedCash: string; notes?: string }) {
+  return adminRequest('/api/admin/kasa/close', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function fetchKasaClosures() {
+  return adminRequest('/api/admin/kasa/closures');
+}
+
+// ============================================================
 // SALES & POS SYSTEM
 // ============================================================
 export async function fetchAdminSales() {

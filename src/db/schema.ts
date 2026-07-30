@@ -1032,6 +1032,7 @@ export const expenses = mysqlTable('expenses', {
   title: varchar('title', { length: 255 }).notNull(),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   category: varchar('category', { length: 100 }), // e.g. 'yol', 'yemek', 'kargo', 'donanim'
+  paymentMethod: mysqlEnum('payment_method', ['nakit', 'kredi_karti', 'havale']).default('nakit'),
   description: text('description'),
   receiptUrl: varchar('receipt_url', { length: 500 }), // photo of the receipt
   expenseDate: timestamp('expense_date').defaultNow(),
@@ -1137,11 +1138,30 @@ export const customerLedger = mysqlTable('customer_ledger', {
   ticketId: int('ticket_id').references(() => tickets.id),
   type: mysqlEnum('type', ['borc', 'alacak']).notNull(), // borc = borçlandırma/servis/satış, alacak = tahsilat/ödeme
   amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+  paymentMethod: mysqlEnum('payment_method', ['nakit', 'kredi_karti', 'havale']).default('nakit'),
   description: varchar('description', { length: 500 }),
   createdByUserId: int('created_by_user_id').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow(),
 }, (t) => ({
   userIdx: index('idx_customer_ledger_user').on(t.userId),
+}));
+
+// ============================================================
+// KASA MODÜLÜ — GÜN SONU KAPANIŞLARI (Cash Register Day-End Closures)
+// ============================================================
+export const cashRegisterClosures = mysqlTable('cash_register_closures', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  closureDate: date('closure_date').notNull(),
+  openingBalance: decimal('opening_balance', { precision: 15, scale: 2 }).notNull().default('0.00'),
+  expectedCash: decimal('expected_cash', { precision: 15, scale: 2 }).notNull().default('0.00'),
+  countedCash: decimal('counted_cash', { precision: 15, scale: 2 }).notNull().default('0.00'),
+  variance: decimal('variance', { precision: 15, scale: 2 }).notNull().default('0.00'),
+  notes: text('notes'),
+  closedByUserId: int('closed_by_user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  closureDateIdx: uniqueIndex('idx_cash_closures_date').on(t.tenantId, t.closureDate),
 }));
 
 
