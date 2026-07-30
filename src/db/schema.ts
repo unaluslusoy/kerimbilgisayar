@@ -447,6 +447,7 @@ export const stockItems = mysqlTable('stock_items', {
   warrantyMonths: int('warranty_months').default(0),
   supplier: varchar('supplier', { length: 150 }),
   isActive: boolean('is_active').default(true),
+  isQuickSale: boolean('is_quick_sale').default(false),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 }, (t) => ({

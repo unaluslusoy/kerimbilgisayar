@@ -2,15 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Barcode, ShoppingCart, User, Plus, X, Trash2,
   CreditCard, Banknote, Landmark, FileText, CheckCircle, Printer, RefreshCw, ChevronRight, Layers, Eye,
-  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon, Clock, AlertTriangle, Maximize2, Minimize2
+  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon, Clock, AlertTriangle, Maximize2, Minimize2, Menu, Star
 } from 'lucide-react';
 import { useFullscreen } from '../../hooks/useFullscreen';
 import { Link } from 'react-router-dom';
 import { mediaUrl } from '../../lib/media';
 import { 
-  fetchAdminStock, fetchAdminCustomers, createAdminCustomer, 
+  fetchAdminStock, fetchAdminCustomers, createAdminCustomer,
   createAdminSale, fetchAdminSales, fetchAdminSaleDetails,
-  fetchSettings, createOdealPaymentLink
+  fetchSettings, createOdealPaymentLink, updateStockItem
 } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
 import { playAddSound, playErrorSound } from '../../lib/sound';
@@ -56,6 +56,7 @@ export default function AdminPos() {
     }
   });
   const [showHeldSales, setShowHeldSales] = useState(false);
+  const [showNavMenu, setShowNavMenu] = useState(false);
 
   // Scanner State
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -364,6 +365,25 @@ export default function AdminPos() {
   }, [activeTab, cart, completingSale, handleCompleteSale]);
 
   const handlePrintThermal = (details: any) => {
+    let template: any = {};
+    try {
+      if (settings?.print_ticket_pos_sale_template) {
+        template = JSON.parse(settings.print_ticket_pos_sale_template);
+      }
+    } catch (e) {
+      console.error('Fiş şablonu ayarları okunamadı', e);
+    }
+    const headerTitle = template.headerTitle || 'KERİM BİLGİSAYAR';
+    const headerSub = template.headerSub || 'Teknik Servis & Bilişim Hizmetleri';
+    const headerInfo = template.headerInfo || 'Tel: 0543 456 78 90';
+    const footerText = template.footerText || 'Bizi Tercih Ettiğiniz İçin Teşekkür Ederiz.';
+    const fontSize = template.fontSize || 12;
+    const fontFamily = template.fontFamily || "'Courier New', Courier, monospace";
+    const marginTop = template.marginTop ?? 5;
+    const marginBottom = template.marginBottom ?? 5;
+    const marginLeft = template.marginLeft ?? 5;
+    const marginRight = template.marginRight ?? 5;
+
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
@@ -372,7 +392,7 @@ export default function AdminPos() {
     iframe.style.height = '0';
     iframe.style.border = '0';
     document.body.appendChild(iframe);
-    
+
     const doc = iframe.contentWindow?.document;
     if (doc) {
       doc.open();
@@ -393,27 +413,26 @@ export default function AdminPos() {
           <head>
             <title>Bilgi Fişi - ${details.sale.receiptNumber}</title>
             <style>
-              body { margin: 0; padding: 5px; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #000; width: 80mm; }
+              @page { size: 80mm auto; margin: 0; }
+              * { box-sizing: border-box; }
+              body { margin: 0; padding: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px; font-family: ${fontFamily}; font-size: ${fontSize}px; color: #000; width: 80mm; }
               .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
-              .title { font-size: 14px; font-weight: bold; margin-bottom: 2px; }
-              .sub-title { font-size: 10px; color: #333; }
-              .meta { font-size: 11px; margin-bottom: 8px; }
+              .title { font-size: 1.15em; font-weight: bold; margin-bottom: 2px; }
+              .sub-title { font-size: 0.85em; color: #333; }
+              .meta { font-size: 0.9em; margin-bottom: 8px; }
               .table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-              .table th { border-bottom: 1px solid #000; text-align: left; padding: 3px 0; font-size: 11px; }
-              .totals { border-top: 1px dashed #000; padding-top: 5px; font-size: 11px; }
+              .table th { border-bottom: 1px solid #000; text-align: left; padding: 3px 0; font-size: 0.9em; }
+              .totals { border-top: 1px dashed #000; padding-top: 5px; font-size: 0.9em; }
               .total-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-              .grand-total { font-size: 13px; font-weight: bold; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; }
-              .footer { text-align: center; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; font-size: 10px; }
-              @media print {
-                body { width: 100%; }
-              }
+              .grand-total { font-size: 1.05em; font-weight: bold; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; }
+              .footer { text-align: center; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; font-size: 0.8em; }
             </style>
           </head>
           <body>
             <div class="header">
-              <div class="title">KERİM BİLGİSAYAR</div>
-              <div class="sub-title">Teknik Servis & Bilişim Hizmetleri</div>
-              <div class="sub-title">Tel: 0543 456 78 90</div>
+              <div class="title">${headerTitle}</div>
+              <div class="sub-title">${headerSub}</div>
+              <div class="sub-title">${headerInfo}</div>
             </div>
             <div class="meta">
               <div><b>Fiş No:</b> ${details.sale.receiptNumber}</div>
@@ -440,8 +459,7 @@ export default function AdminPos() {
             </div>
             <div class="footer">
               <div style="font-weight: bold;">Ödeme: ${details.sale.paymentType.toUpperCase().replace('_', ' ')}</div>
-              <div style="margin-top: 5px;">Bizi Tercih Ettiğiniz İçin Teşekkür Ederiz.</div>
-              <div>Teknik Servis Programı</div>
+              <div style="margin-top: 5px;">${footerText}</div>
             </div>
             <script>
               window.onload = function() {
@@ -453,6 +471,18 @@ export default function AdminPos() {
         </html>
       `);
       doc.close();
+    }
+  };
+
+  const toggleQuickSale = async (item: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextValue = !item.isQuickSale;
+    setStock(prev => prev.map(i => i.id === item.id ? { ...i, isQuickSale: nextValue } : i));
+    try {
+      await updateStockItem(item.id, { isQuickSale: nextValue });
+    } catch (e: any) {
+      setStock(prev => prev.map(i => i.id === item.id ? { ...i, isQuickSale: !nextValue } : i));
+      toast.error('Hızlı satış işaretlemesi güncellenemedi: ' + e.message);
     }
   };
 
@@ -485,6 +515,8 @@ export default function AdminPos() {
     return matchSearch && matchCategory;
   });
 
+  const quickSaleItems = stock.filter(item => item.isQuickSale);
+
   const filteredCustomers = customersList.filter(cust => {
     const fullName = `${cust.firstName || ''} ${cust.lastName || ''}`.toLowerCase();
     return !customerSearch ||
@@ -500,26 +532,24 @@ export default function AdminPos() {
     >
       {/* Standalone Application Bar */}
       <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-5 py-2.5 flex items-center justify-between shadow-lg border-b border-slate-950/60 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          {settings?.logoUrl || settings?.siteLogo ? (
-            <div className="bg-white p-1 rounded-xl border border-slate-700 flex items-center justify-center shrink-0">
+        <div className="flex items-center gap-3.5 min-w-0 pr-4 mr-1 border-r border-slate-700/60">
+          <div className="w-11 h-11 bg-white rounded-2xl shadow-md flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-slate-950/5">
+            {settings?.logoUrl || settings?.siteLogo ? (
               <img
                 src={mediaUrl(settings.logoUrl || settings.siteLogo)}
                 alt="Logo"
-                className="h-7 max-w-[110px] object-contain"
+                className="w-full h-full object-contain p-1.5"
               />
-            </div>
-          ) : (
-            <div className="p-2 bg-primary/20 rounded-xl text-primary-light border border-primary/30 shrink-0">
-              <ShoppingCart className="w-5 h-5 text-white" />
-            </div>
-          )}
-          <div className="min-w-0">
-            <h1 className="text-sm font-black uppercase tracking-wider flex items-center gap-2 text-white">
+            ) : (
+              <ShoppingCart className="w-5 h-5 text-primary" />
+            )}
+          </div>
+          <div className="min-w-0 leading-tight">
+            <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-2">
               <span className="truncate">Kerim Bilgisayar</span>
-              <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-mono font-bold shrink-0">POS v1.5</span>
+              <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0 uppercase tracking-wide">POS</span>
             </h1>
-            <p className="text-[9px] text-slate-400 font-semibold">Hızlı Satış & Kasa İşlemleri</p>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Satış Terminali · v1.5</p>
           </div>
         </div>
 
@@ -533,21 +563,35 @@ export default function AdminPos() {
           </span>
         </div>
 
-        {/* Short-cut Quick Navigation Links — tam ekranda dikkat dağıtmaması için gizlenir */}
+        {/* Hızlı Gezinme Menüsü — tam ekranda dikkat dağıtmaması için gizlenir */}
         {!isFullscreen && (
-          <div className="hidden lg:flex items-center gap-1 bg-slate-950/40 p-1 rounded-xl border border-slate-700/70">
-            <Link to="/admin" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-              <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
-            </Link>
-            <Link to="/admin/servis" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-              <Wrench className="w-3.5 h-3.5" /> Servis Kayıtları
-            </Link>
-            <Link to="/admin/stok" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5" /> Stok Yönetimi
-            </Link>
-            <Link to="/admin/musteriler" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-              <Users className="w-3.5 h-3.5" /> Müşteriler
-            </Link>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowNavMenu(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-950/40 hover:bg-slate-700/60 border border-slate-700/70 rounded-xl text-[10px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+            >
+              <Menu className="w-4 h-4" /> Menü
+            </button>
+            {showNavMenu && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowNavMenu(false)} />
+                <div className="absolute top-full left-0 mt-1.5 bg-slate-900 border border-slate-700/70 rounded-xl shadow-2xl z-40 min-w-[180px] overflow-hidden">
+                  <Link to="/admin" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                    <LayoutDashboard className="w-4 h-4" /> Dashboard
+                  </Link>
+                  <Link to="/admin/servis" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                    <Wrench className="w-4 h-4" /> Servis Kayıtları
+                  </Link>
+                  <Link to="/admin/stok" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                    <Layers className="w-4 h-4" /> Stok Yönetimi
+                  </Link>
+                  <Link to="/admin/musteriler" onClick={() => setShowNavMenu(false)} className="px-3.5 py-2.5 hover:bg-slate-700/60 text-xs font-bold transition-all text-slate-300 hover:text-white flex items-center gap-2">
+                    <Users className="w-4 h-4" /> Müşteriler
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -606,7 +650,7 @@ export default function AdminPos() {
               <button
                 onClick={clearCart}
                 disabled={cart.length === 0}
-                className="text-xs text-red-500 font-semibold hover:text-red-700 disabled:opacity-40 cursor-pointer flex items-center gap-1"
+                className="text-xs text-red-500 font-semibold hover:text-red-700 disabled:opacity-40 cursor-pointer flex items-center gap-1 py-2 px-2 -m-2"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Temizle
               </button>
@@ -655,7 +699,7 @@ export default function AdminPos() {
                         type="button"
                         onClick={() => discardHeldSale(h.id)}
                         title={pendingDiscardId === h.id ? 'Onaylamak için tekrar tıklayın' : 'Sil'}
-                        className={`p-1 rounded-lg cursor-pointer shrink-0 transition-colors ${pendingDiscardId === h.id ? 'bg-red-500 text-white' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                        className={`p-2.5 rounded-lg cursor-pointer shrink-0 transition-colors ${pendingDiscardId === h.id ? 'bg-red-500 text-white' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -681,17 +725,17 @@ export default function AdminPos() {
                       <p className="text-xxs text-gray-400 mt-0.5">₺{parseFloat(c.sellingPrice).toLocaleString('tr-TR')} / {c.unit || 'adet'}</p>
 
                       {/* Quantity adjuster */}
-                      <div className="flex items-center gap-0.5 mt-2 bg-gray-50 border border-gray-200 rounded-full p-0.5 w-fit">
+                      <div className="flex items-center gap-1 mt-2 bg-gray-50 border border-gray-200 rounded-full p-0.5 w-fit">
                         <button
                           onClick={() => updateCartQty(c.id, c.quantity - 1)}
-                          className="w-6 h-6 bg-white hover:bg-primary hover:text-white shadow-sm rounded-full text-sm font-bold flex items-center justify-center cursor-pointer transition-colors"
+                          className="w-10 h-10 bg-white hover:bg-primary hover:text-white shadow-sm rounded-full text-base font-bold flex items-center justify-center cursor-pointer transition-colors"
                         >
                           −
                         </button>
                         <span className="w-8 text-center text-xs font-extrabold text-gray-900">{c.quantity}</span>
                         <button
                           onClick={() => updateCartQty(c.id, c.quantity + 1)}
-                          className="w-6 h-6 bg-white hover:bg-primary hover:text-white shadow-sm rounded-full text-sm font-bold flex items-center justify-center cursor-pointer transition-colors"
+                          className="w-10 h-10 bg-white hover:bg-primary hover:text-white shadow-sm rounded-full text-base font-bold flex items-center justify-center cursor-pointer transition-colors"
                         >
                           +
                         </button>
@@ -700,7 +744,7 @@ export default function AdminPos() {
                     <div className="flex flex-col items-end justify-between">
                       <button
                         onClick={() => removeFromCart(c.id)}
-                        className="text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg p-1 transition-colors cursor-pointer"
+                        className="text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg p-2.5 transition-colors cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -928,6 +972,27 @@ export default function AdminPos() {
 
           {/* RIGHT: PRODUCTS LIST & BARCODE SCANNER */}
           <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-0">
+            {/* Hızlı Satış Butonları */}
+            {quickSaleItems.length > 0 && (
+              <div className="flex gap-2 mb-3 shrink-0 overflow-x-auto pb-1">
+                {quickSaleItems.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => addToCart(item)}
+                    disabled={item.currentStock <= 0}
+                    className="shrink-0 flex flex-col items-start gap-0.5 min-w-[120px] px-3.5 py-3 bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-200 rounded-xl text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1 text-[9px] font-extrabold text-amber-600 uppercase">
+                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" /> Hızlı Satış
+                    </span>
+                    <span className="text-xs font-bold text-gray-900 line-clamp-1">{item.name}</span>
+                    <span className="text-[11px] font-extrabold text-primary">₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Barcode scan box */}
             <form onSubmit={handleBarcodeSubmit} className="flex gap-3 mb-4 shrink-0">
               <div className="relative flex-1">
@@ -967,7 +1032,7 @@ export default function AdminPos() {
                 <button
                   type="button"
                   onClick={() => setCategoryFilter('')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${!categoryFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${!categoryFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >
                   Tümü
                 </button>
@@ -976,7 +1041,7 @@ export default function AdminPos() {
                     key={cat.id}
                     type="button"
                     onClick={() => setCategoryFilter(String(cat.id))}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${categoryFilter === String(cat.id) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${categoryFilter === String(cat.id) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                   >
                     {cat.name}
                   </button>
@@ -1017,6 +1082,14 @@ export default function AdminPos() {
                               <AlertTriangle className="w-2.5 h-2.5" />
                             </span>
                           )}
+                          <button
+                            type="button"
+                            onClick={(e) => toggleQuickSale(item, e)}
+                            title={item.isQuickSale ? 'Hızlı satıştan kaldır' : 'Hızlı satışa ekle'}
+                            className={`absolute top-0.5 left-0.5 rounded-full p-1 transition-colors cursor-pointer ${item.isQuickSale ? 'bg-amber-500 text-white' : 'bg-white/80 text-gray-400 hover:text-amber-500'}`}
+                          >
+                            <Star className={`w-3 h-3 ${item.isQuickSale ? 'fill-white' : ''}`} />
+                          </button>
                         </div>
                         <h3 className="font-bold text-gray-900 text-[10px] line-clamp-2 min-h-[24px] leading-tight">{item.name}</h3>
                       </div>

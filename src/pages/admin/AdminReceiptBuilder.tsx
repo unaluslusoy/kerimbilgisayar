@@ -61,16 +61,36 @@ const defaultPOS: TemplateConfig = {
   signatureText: 'Müşteri İmzası'
 };
 
+const defaultPosSale: TemplateConfig = {
+  fontSize: 12,
+  fontFamily: 'Courier New, monospace',
+  marginTop: 5,
+  marginBottom: 5,
+  marginLeft: 5,
+  marginRight: 5,
+  headerTitle: 'KERİM BİLGİSAYAR',
+  headerSub: 'Teknik Servis & Bilişim Hizmetleri',
+  headerInfo: 'Tel: 0543 456 78 90',
+  footerText: 'Bizi Tercih Ettiğiniz İçin Teşekkür Ederiz.',
+  showLogo: false,
+  logoUrl: '',
+  showQrCode: false,
+  showPatternLock: false,
+  showSignature: false,
+  signatureText: ''
+};
+
 export default function AdminReceiptBuilder() {
   usePageTitle('Şablon Tasarımcısı');
   const { settings, reloadSettings } = useSettings();
-  const [activeTab, setActiveTab] = useState<'a4' | 'pos'>('a4');
+  const [activeTab, setActiveTab] = useState<'a4' | 'pos' | 'posSale'>('a4');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
 
   // States for configs
   const [a4Config, setA4Config] = useState<TemplateConfig>(defaultA4);
   const [posConfig, setPosConfig] = useState<TemplateConfig>(defaultPOS);
+  const [posSaleConfig, setPosSaleConfig] = useState<TemplateConfig>(defaultPosSale);
 
   useEffect(() => {
     if (settings.print_ticket_a4_template) {
@@ -87,15 +107,24 @@ export default function AdminReceiptBuilder() {
         console.error("Error parsing POS print settings", e);
       }
     }
+    if (settings.print_ticket_pos_sale_template) {
+      try {
+        setPosSaleConfig(JSON.parse(settings.print_ticket_pos_sale_template));
+      } catch (e) {
+        console.error("Error parsing POS sale print settings", e);
+      }
+    }
   }, [settings]);
 
-  const currentConfig = activeTab === 'a4' ? a4Config : posConfig;
+  const currentConfig = activeTab === 'a4' ? a4Config : activeTab === 'pos' ? posConfig : posSaleConfig;
 
   const updateConfigField = (field: keyof TemplateConfig, value: any) => {
     if (activeTab === 'a4') {
       setA4Config(prev => ({ ...prev, [field]: value }));
-    } else {
+    } else if (activeTab === 'pos') {
       setPosConfig(prev => ({ ...prev, [field]: value }));
+    } else {
+      setPosSaleConfig(prev => ({ ...prev, [field]: value }));
     }
   };
 
@@ -103,8 +132,10 @@ export default function AdminReceiptBuilder() {
     if (window.confirm('Bu şablonu varsayılan değerlere sıfırlamak istediğinize emin misiniz?')) {
       if (activeTab === 'a4') {
         setA4Config(defaultA4);
-      } else {
+      } else if (activeTab === 'pos') {
         setPosConfig(defaultPOS);
+      } else {
+        setPosSaleConfig(defaultPosSale);
       }
     }
   };
@@ -115,7 +146,8 @@ export default function AdminReceiptBuilder() {
     try {
       const payload = {
         print_ticket_a4_template: JSON.stringify(a4Config),
-        print_ticket_pos_template: JSON.stringify(posConfig)
+        print_ticket_pos_template: JSON.stringify(posConfig),
+        print_ticket_pos_sale_template: JSON.stringify(posSaleConfig)
       };
       await adminRequest('/api/admin/settings', {
         method: 'PUT',
@@ -192,6 +224,17 @@ export default function AdminReceiptBuilder() {
           }`}
         >
           <Compass className="w-4 h-4" /> Termal Giriş/Teslim Fişi (80mm POS)
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('posSale')}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'posSale'
+              ? 'bg-primary text-white shadow-md shadow-primary/10'
+              : 'text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <Printer className="w-4 h-4" /> POS Satış Fişi (80mm)
         </button>
       </div>
 
@@ -322,6 +365,7 @@ export default function AdminReceiptBuilder() {
             </div>
 
             {/* Display / Features Switches */}
+            {activeTab !== 'posSale' && (
             <div className="space-y-4 border-t border-gray-100 pt-5">
               <h4 className="text-xs font-bold text-gray-900 border-l-2 border-primary pl-2 flex items-center gap-1.5">
                 <Layout className="w-3.5 h-3.5 text-gray-450" /> Şablon Özellikleri
@@ -396,6 +440,7 @@ export default function AdminReceiptBuilder() {
                 )}
               </div>
             </div>
+            )}
 
             {/* Footer terms Section */}
             <div className="space-y-4 border-t border-gray-100 pt-5">
@@ -515,7 +560,7 @@ export default function AdminReceiptBuilder() {
                   )}
                 </div>
               </div>
-            ) : (
+            ) : activeTab === 'pos' ? (
               // POS (80mm) Preview
               <div
                 style={{
@@ -569,6 +614,48 @@ export default function AdminReceiptBuilder() {
                     <span className="text-[9px] font-bold">{currentConfig.signatureText}</span>
                   </div>
                 )}
+              </div>
+            ) : (
+              // POS Satış Fişi (80mm) Preview
+              <div
+                style={{
+                  fontFamily: currentConfig.fontFamily,
+                  fontSize: `${currentConfig.fontSize}px`,
+                  paddingTop: `${currentConfig.marginTop}px`,
+                  paddingBottom: `${currentConfig.marginBottom}px`,
+                  paddingLeft: `${currentConfig.marginLeft}px`,
+                  paddingRight: `${currentConfig.marginRight}px`,
+                }}
+                className="bg-white text-black shadow-lg w-[302px] min-h-[500px] relative border border-gray-300 p-4 flex flex-col justify-between"
+              >
+                {/* Header */}
+                <div className="text-center pb-2 border-b border-dashed border-black">
+                  <h2 className="text-xs font-black uppercase">{currentConfig.headerTitle || 'KERİM BİLGİSAYAR'}</h2>
+                  <p className="text-[10px] text-gray-800 font-bold uppercase">{currentConfig.headerSub || 'Satış Fişi'}</p>
+                  <p className="text-[8px] text-gray-600 leading-tight mt-0.5">{currentConfig.headerInfo}</p>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 py-3 space-y-2">
+                  <div className="text-[10px] leading-tight space-y-1">
+                    <p><strong>Fiş No:</strong> POS-00842</p>
+                    <p><strong>Tarih:</strong> 14.07.2026 21:58</p>
+                    <p><strong>Kasa:</strong> Kasa 1</p>
+                  </div>
+
+                  <div className="border-t border-b border-dashed border-gray-400 py-1.5 text-[10px] text-gray-800 space-y-1">
+                    <div className="flex justify-between"><span>USB-C Kablo x1</span><span>150,00₺</span></div>
+                    <div className="flex justify-between"><span>Ekran Koruyucu x2</span><span>200,00₺</span></div>
+                  </div>
+
+                  <div className="text-[10px] font-black flex justify-between pt-1">
+                    <span>TOPLAM</span><span>350,00₺</span>
+                  </div>
+
+                  <div className="text-[8px] text-gray-600 text-center italic leading-tight pt-1">
+                    {currentConfig.footerText}
+                  </div>
+                </div>
               </div>
             )}
           </div>

@@ -42,6 +42,7 @@ stockRouter.get('/api/admin/stock', requireAdmin, async (req, res) => {
       hasSerialTracking: stockItems.hasSerialTracking,
       warrantyMonths: stockItems.warrantyMonths,
       isActive: stockItems.isActive,
+      isQuickSale: stockItems.isQuickSale,
       categoryId: stockItems.categoryId,
       categoryName: inventoryCategories.name,
     }).from(stockItems)
@@ -55,7 +56,7 @@ stockRouter.get('/api/admin/stock', requireAdmin, async (req, res) => {
 
 stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
   try {
-    const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId, hasSerialTracking, warrantyMonths, supplier } = req.body;
+    const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId, hasSerialTracking, warrantyMonths, supplier, isQuickSale } = req.body;
     const finalBarcode = barcode && barcode.trim() !== '' ? barcode.trim() : generateEAN13Backend();
 
     await db.insert(stockItems).values({
@@ -76,6 +77,7 @@ stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
       hasSerialTracking: hasSerialTracking === true || hasSerialTracking === 'true',
       warrantyMonths: parseInt(warrantyMonths) || 0,
       supplier: supplier || null,
+      isQuickSale: isQuickSale === true || isQuickSale === 'true',
       categoryId: categoryId ? parseInt(categoryId) : null,
     });
     res.json({ success: true });
@@ -86,7 +88,7 @@ stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
 
 stockRouter.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
   try {
-    const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive, hasSerialTracking, warrantyMonths, supplier } = req.body;
+    const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive, hasSerialTracking, warrantyMonths, supplier, isQuickSale } = req.body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
@@ -104,6 +106,7 @@ stockRouter.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
     if (hasSerialTracking !== undefined) updateData.hasSerialTracking = hasSerialTracking === true || hasSerialTracking === 'true';
     if (warrantyMonths !== undefined) updateData.warrantyMonths = parseInt(warrantyMonths) || 0;
     if (supplier !== undefined) updateData.supplier = supplier;
+    if (isQuickSale !== undefined) updateData.isQuickSale = isQuickSale === true || isQuickSale === 'true';
 
     if (adjustment !== undefined) {
       const [current] = await db.select({ stock: stockItems.currentStock }).from(stockItems).where(eq(stockItems.id, parseInt(req.params.id)));
