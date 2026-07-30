@@ -205,8 +205,7 @@ export default function AdminCustomers() {
     try {
       const res = await createOdealPaymentLink({
         amount: bal,
-        description: `Cari Borç Ödemesi - ${customer.companyName || customer.firstName}`,
-        customerName: `${customer.firstName} ${customer.lastName}`,
+        description: `Cari Borç Ödemesi - ${customer.companyName || `${customer.firstName} ${customer.lastName}`}`,
         customerPhone: customer.phone,
         customerEmail: customer.email,
       });

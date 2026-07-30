@@ -6,6 +6,9 @@ import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTic
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import PatternLockPicker from '../../components/ui/PatternLockPicker';
+import DamageMarkingCanvas, { DamagePin } from '../../components/ui/DamageMarkingCanvas';
+import SignatureCanvas from '../../components/ui/SignatureCanvas';
+import CameraBarcodeScanner from '../../components/ui/CameraBarcodeScanner';
 import { mediaUrl } from '../../lib/media';
 import { TICKET_STATUS_LABELS } from '../../lib/ticketStatus';
 
@@ -52,6 +55,25 @@ const PHYSICAL_CONDITIONS = [
   'Sıvı teması şüphesi', 'Cihaz açılmıyor', 'Daha önce müdahale görmüş',
 ];
 
+const QUICK_ISSUE_PRESETS = [
+  '📱 Ekran Kırık / Dokunmatik Hatalı',
+  '🔋 Batarya Çabuk Bitiyor / Şişmiş',
+  '💧 Sıvı Teması Var',
+  '⚡ Şarj Almıyor / Soket Temassızlık',
+  '🔥 Cihaz Aşırı Isınıyor / Kapanıyor',
+  '💻 Yavaş Çalışıyor / Format & Temizlik',
+  '🔊 Ses Gelmiyor / Hoparlör Bozuk',
+  '🌐 Wi-Fi / Şebeke Bağlanmıyor',
+];
+
+const SERVICE_STEPS = [
+  { key: 'yeni', label: 'Kabul Edildi', stepNum: 1 },
+  { key: 'isleme_alindi', label: 'Arıza Tespiti', stepNum: 2 },
+  { key: 'musteri_onayi_bekliyor', label: 'Fiyat Onayı', stepNum: 3 },
+  { key: 'cozuldu', label: 'Çözüldü / Hazır', stepNum: 4 },
+  { key: 'teslim_edildi', label: 'Teslim Edildi', stepNum: 5 },
+];
+
 // IMEI Luhn algoritması doğrulaması (GSMA standardı — 15 hane). Server tarafında da tekrar kontrol edilir.
 function isValidImei(imei: string): boolean {
   if (!/^\d{15}$/.test(imei)) return false;
@@ -83,6 +105,20 @@ function getPaginationWindow(current: number, total: number): (number | '...')[]
   if (range[range.length - 1] < total - 1) result.push('...');
   if (total > 1) result.push(total);
   return result;
+}
+
+function getSlaBadge(estimatedDueAt?: string) {
+  if (!estimatedDueAt) return null;
+  const due = new Date(estimatedDueAt).getTime();
+  const now = new Date().getTime();
+  const diffDays = Math.ceil((due - now) / (1000 * 3600 * 24));
+
+  if (diffDays < 0) {
+    return <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">Gecikmede ({Math.abs(diffDays)}d)</span>;
+  } else if (diffDays <= 2) {
+    return <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">Kritik ({diffDays}d)</span>;
+  }
+  return <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">SLA: {diffDays}d</span>;
 }
 
 export default function ServiceManager() {
@@ -200,6 +236,25 @@ export default function ServiceManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
 
+  // Advanced scanner & analytics states
+  const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoadingAnalytics(true);
+      const res = await adminRequest('/api/admin/tickets/analytics');
+      setAnalyticsData(res);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const [newTicketStep, setNewTicketStep] = useState<1 | 2 | 3 | 4>(1);
   const [newTicket, setNewTicket] = useState({
     subject: '',
     description: '',
@@ -230,6 +285,11 @@ export default function ServiceManager() {
     taxId: '',
     taxOffice: '',
     address: '',
+    rackLocation: '',
+    damagePins: [] as DamagePin[],
+    customerSignature: '',
+    estimatedCost: '',
+    estimatedDueAt: '',
     consentKvkk: false,
     consentDataLoss: false,
     consentAccessInfo: false,
@@ -316,7 +376,7 @@ export default function ServiceManager() {
         fetchAdminStock(),
         adminRequest('/api/admin/dealers').catch(() => []),
         fetchAdminDeviceTypes().catch(() => []),
-        fetchAdminCustomers().catch(() => [])
+        adminRequest('/api/admin/customers').catch(() => [])
       ]);
       const staff = users.filter((u: any) => u.roleType === 'superadmin' || u.roleType === 'tenant_admin' || u.roleType === 'staff' || u.roleType === 'technician');
       setStaffUsers(staff);
@@ -1240,12 +1300,26 @@ export default function ServiceManager() {
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Servis Kayıtları</h1>
           <p className="text-sm text-gray-500 mt-1">Teknik servis ve onarım süreçlerini yönetin.</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-primary hover:bg-secondary text-white px-4 py-2 rounded-theme font-medium transition-colors flex items-center shrink-0 shadow-sm"
-        >
-          <Plus className="w-4 h-4 mr-2" /> Yeni Kayıt
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { loadAnalytics(); setShowAnalyticsModal(true); }}
+            className="bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 px-3 py-2 rounded-theme font-medium text-xs transition-colors flex items-center shrink-0 shadow-sm gap-1.5"
+          >
+            <History className="w-4 h-4 text-purple-600" /> Analitik & Ciro
+          </button>
+          <button
+            onClick={() => setIsBarcodeScannerOpen(true)}
+            className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-3 py-2 rounded-theme font-medium text-xs transition-colors flex items-center shrink-0 shadow-sm gap-1.5"
+          >
+            <Camera className="w-4 h-4 text-blue-600" /> Kamera Taraması
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-primary hover:bg-secondary text-white px-4 py-2 rounded-theme font-medium transition-colors flex items-center shrink-0 shadow-sm"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Yeni Kayıt
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -1468,7 +1542,12 @@ export default function ServiceManager() {
                         >
                           {/* Kayıt No */}
                           <td className="py-3.5 px-4 font-mono font-bold text-gray-900 group-hover:text-primary transition-colors">
-                            {ticket.ticketNumber}
+                            <div className="flex items-center gap-1">
+                              <span>{ticket.ticketNumber}</span>
+                              {ticket.isRma && (
+                                <span className="text-[9px] font-black bg-rose-500 text-white px-1.5 py-0.2 rounded shadow-xs" title="Garanti Kapsamında Tekrar Servis">RMA</span>
+                              )}
+                            </div>
                           </td>
                           {/* Kayıt Tarihi */}
                           <td className="py-3.5 px-4 text-gray-500 whitespace-nowrap">
@@ -1481,7 +1560,12 @@ export default function ServiceManager() {
                           </td>
                           {/* Cihaz / Marka Model */}
                           <td className="py-3.5 px-4">
-                            <div className="font-semibold text-gray-800 leading-normal">{ticket.deviceBrand} {ticket.deviceModel}</div>
+                            <div className="font-semibold text-gray-800 leading-normal flex items-center gap-1.5">
+                              <span>{ticket.deviceBrand} {ticket.deviceModel}</span>
+                              {ticket.rackLocation && (
+                                <span className="text-[9px] bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.2 rounded font-bold">🏷️ {ticket.rackLocation}</span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-gray-400 font-mono font-medium">{ticket.deviceType || 'Cihaz'} {ticket.deviceSerial ? `• ${ticket.deviceSerial}` : ''}</div>
                           </td>
                           {/* Şikayet / Konu */}
@@ -1518,10 +1602,11 @@ export default function ServiceManager() {
                             )}
                           </td>
                           {/* Durum */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-2xs border border-black/5", STATUS_COLORS[ticket.status || 'yeni'])}>
+                          <td className="py-3.5 px-4 whitespace-nowrap space-y-1">
+                            <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-2xs border border-black/5 block text-center", STATUS_COLORS[ticket.status || 'yeni'])}>
                               {STATUS_LABELS[ticket.status || 'yeni']}
                             </span>
+                            {getSlaBadge(ticket.estimatedDueAt)}
                           </td>
                           {/* İşlemler */}
                           <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
@@ -1660,6 +1745,48 @@ export default function ServiceManager() {
               <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
                 {/* Left Area: Detail & Actions */}
                 <div className="w-full lg:w-3/5 overflow-y-auto p-6 space-y-6">
+                  
+                  {/* Servis Süreç Yolculuğu (Process Timeline Stepper) */}
+                  <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-md border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Cihaz Süreç Yolculuğu</span>
+                      {getSlaBadge(detailTicket.estimatedDueAt)}
+                    </div>
+                    <div className="grid grid-cols-5 gap-1 text-center relative pt-1">
+                      {SERVICE_STEPS.map((step, idx) => {
+                        const activeIndex = SERVICE_STEPS.findIndex(s => s.key === detailTicket.status);
+                        const isCurrent = detailTicket.status === step.key;
+                        const isPassed = activeIndex >= idx;
+
+                        return (
+                          <button
+                            key={step.key}
+                            type="button"
+                            onClick={() => handleStatusChange(detailTicket.id, step.key)}
+                            className="group flex flex-col items-center gap-1 focus:outline-none"
+                            title={`Durumu ${step.label} olarak değiştir`}
+                          >
+                            <div className={cn(
+                              'w-7 h-7 rounded-full flex items-center justify-center font-black text-xs transition-all ring-2',
+                              isCurrent
+                                ? 'bg-blue-500 text-white ring-blue-300 scale-110 shadow-lg shadow-blue-500/50'
+                                : isPassed
+                                ? 'bg-emerald-500 text-white ring-emerald-400'
+                                : 'bg-slate-800 text-slate-400 ring-slate-700 group-hover:bg-slate-700'
+                            )}>
+                              {isPassed && !isCurrent ? '✓' : step.stepNum}
+                            </div>
+                            <span className={cn(
+                              'text-[10px] font-semibold tracking-tight transition-colors line-clamp-1',
+                              isCurrent ? 'text-blue-400 font-bold' : isPassed ? 'text-emerald-300' : 'text-slate-500 group-hover:text-slate-300'
+                            )}>
+                              {step.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   
                   {/* Action Controls for Edits and Deletions */}
                   <div className="flex items-center justify-between bg-slate-50 border border-slate-200/60 p-4 rounded-2xl shadow-sm">
@@ -1854,6 +1981,21 @@ export default function ServiceManager() {
                               className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold transition-colors"
                             >
                               <Send className="w-3 h-3 text-blue-600" /> API ile Gönder
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (!detailTicket.publicApprovalToken) {
+                                  alert('Bu servis kaydı için onay token\'ı bulunamadı. Kaydı yeniden açıp deneyin.');
+                                  return;
+                                }
+                                const link = `${window.location.origin}/onay/${detailTicket.ticketNumber}?token=${detailTicket.publicApprovalToken}`;
+                                navigator.clipboard.writeText(link);
+                                alert('Dijital Müşteri Onay Linki kopyalandı:\n' + link);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-lg text-[10px] font-bold transition-colors"
+                              title="Müşteriye teklif onay linki gönderin"
+                            >
+                              <FileText className="w-3 h-3 text-purple-600" /> Dijital Onay Linki
                             </button>
                           </div>
                         )}
@@ -3211,7 +3353,27 @@ export default function ServiceManager() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-gray-800 mb-2">Müşteri Şikayeti / Detaylı Açıklama</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-sm font-bold text-gray-800">Müşteri Şikayeti / Detaylı Açıklama</label>
+                      <span className="text-[11px] text-gray-400 font-medium">Hızlı Arıza Seçimi:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mb-2.5">
+                      {QUICK_ISSUE_PRESETS.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            const cleanPreset = preset.replace(/^[^\s]+\s/, '');
+                            const current = newTicket.description || '';
+                            const updated = current ? `${current}<p>${cleanPreset}</p>` : `<p>${cleanPreset}</p>`;
+                            setNewTicket({ ...newTicket, description: updated });
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-primary hover:text-white text-gray-700 rounded-lg transition-all border border-gray-200"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
                     <RichTextEditor
                       value={newTicket.description}
                       onChange={val => setNewTicket({ ...newTicket, description: val })}
@@ -3227,6 +3389,44 @@ export default function ServiceManager() {
                       onChange={val => setNewTicket({ ...newTicket, technicianNotes: val })}
                       placeholder="Teknik ön tespit, olası sorunlar..."
                       className="bg-white rounded-xl shadow-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Raf / Lokasyon No</label>
+                      <input
+                        type="text"
+                        value={newTicket.rackLocation}
+                        onChange={e => setNewTicket({ ...newTicket, rackLocation: e.target.value })}
+                        placeholder="Örn: A-2, Masa-1"
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Tahmini Teslim Tarihi (SLA)</label>
+                      <input
+                        type="date"
+                        value={newTicket.estimatedDueAt}
+                        onChange={e => setNewTicket({ ...newTicket, estimatedDueAt: e.target.value })}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-gray-800">Fiziksel Hasar & Çizik Haritası (İğneleme)</label>
+                    <DamageMarkingCanvas
+                      deviceType={newTicket.deviceType}
+                      value={newTicket.damagePins}
+                      onChange={pins => setNewTicket({ ...newTicket, damagePins: pins })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <SignatureCanvas
+                      value={newTicket.customerSignature}
+                      onChange={sig => setNewTicket({ ...newTicket, customerSignature: sig })}
+                      label="Müşteri Dijital İmzası (Teslim Alınırken)"
                     />
                   </div>
 
@@ -3323,17 +3523,48 @@ export default function ServiceManager() {
             </div>
 
             {/* Footer */}
-            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-slate-50/50">
+            <div className="flex flex-col sm:flex-row gap-3 px-6 py-4 border-t border-gray-100 bg-slate-50/50 justify-between items-center">
               <button type="button" onClick={() => { setShowModal(false); setModalTab('musteri'); }}
-                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition-colors">
-                İptal
+                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-100 transition-colors text-xs">
+                Vazgeç
               </button>
-              <button type="button" onClick={handleCreate}
-                disabled={saving || !newTicket.customerName}
-                className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-bold transition-colors disabled:opacity-50 flex items-center justify-center shadow-md shadow-primary/20">
-                {saving ? (<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />) : null}
-                Kayıt ve Giriş Fişi Oluştur
-              </button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {modalTab !== 'musteri' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (modalTab === 'cihaz') setModalTab('musteri');
+                      else if (modalTab === 'servis') setModalTab('cihaz');
+                      else if (modalTab === 'medya') setModalTab('servis');
+                    }}
+                    className="px-4 py-2.5 border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 rounded-xl font-bold text-xs transition-colors"
+                  >
+                    ← Önceki Adım
+                  </button>
+                )}
+
+                {modalTab !== 'medya' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (modalTab === 'musteri') setModalTab('cihaz');
+                      else if (modalTab === 'cihaz') setModalTab('servis');
+                      else if (modalTab === 'servis') setModalTab('medya');
+                    }}
+                    className="px-4 py-2.5 bg-gray-900 text-white hover:bg-gray-800 rounded-xl font-bold text-xs transition-colors flex-1 sm:flex-initial"
+                  >
+                    Sonraki Adım →
+                  </button>
+                ) : null}
+
+                <button type="button" onClick={handleCreate}
+                  disabled={saving || !newTicket.customerName}
+                  className="px-5 py-2.5 bg-primary hover:bg-secondary text-white rounded-xl font-bold text-xs transition-colors disabled:opacity-50 flex items-center justify-center shadow-md shadow-primary/20 flex-1 sm:flex-initial">
+                  {saving ? (<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />) : null}
+                  Servis Kaydını Tamamla & Fiş Bastır
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3482,6 +3713,86 @@ export default function ServiceManager() {
                 <Camera className="w-4 h-4" /> Fotoğraf Çek & Ekle
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Camera Barcode Scanner Component */}
+      <CameraBarcodeScanner
+        isOpen={isBarcodeScannerOpen}
+        onClose={() => setIsBarcodeScannerOpen(false)}
+        onScan={(scannedCode) => {
+          setSearch(scannedCode);
+          alert(`Barkod / QR tarandı: ${scannedCode}`);
+        }}
+      />
+
+      {/* Analytics & Performance Modal */}
+      {showAnalyticsModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
+          <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <History className="w-6 h-6 text-purple-400" />
+                <h2 className="text-xl font-bold tracking-tight">Servis Ciro & Performans Analitiği</h2>
+              </div>
+              <button onClick={() => setShowAnalyticsModal(false)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            {loadingAnalytics || !analyticsData ? (
+              <div className="py-12 text-center text-slate-400">Analitik verileri yükleniyor...</div>
+            ) : (
+              <div className="space-y-6">
+                {/* Metric Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                    <div className="text-xs text-slate-400">Toplam Servis Kaydı</div>
+                    <div className="text-2xl font-black text-white mt-1">{analyticsData.totalTickets}</div>
+                  </div>
+                  <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                    <div className="text-xs text-slate-400">Ortalama Tamir Süresi</div>
+                    <div className="text-2xl font-black text-blue-400 mt-1">{analyticsData.avgRepairDays} gün</div>
+                  </div>
+                  <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                    <div className="text-xs text-slate-400">Toplam İşçilik Kazancı</div>
+                    <div className="text-2xl font-black text-emerald-400 mt-1">₺{Number(analyticsData.totalLaborRevenue).toLocaleString('tr-TR')}</div>
+                  </div>
+                  <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                    <div className="text-xs text-slate-400">Garanti / RMA Sayısı</div>
+                    <div className="text-2xl font-black text-amber-400 mt-1">{analyticsData.rmaCount}</div>
+                  </div>
+                </div>
+
+                {/* Markalar & Türler Kırılımı */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-slate-800/60 border border-slate-800 p-5 rounded-2xl space-y-3">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400">En Çok Tamir Edilen Markalar</div>
+                    <div className="space-y-2">
+                      {analyticsData.topBrands.map((b: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-slate-300 font-semibold">{b.brand}</span>
+                          <span className="bg-slate-700 text-slate-200 text-xs px-2.5 py-0.5 rounded-full font-bold">{b.count} cihaz</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-800/60 border border-slate-800 p-5 rounded-2xl space-y-3">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Cihaz Türü Dağılımı</div>
+                    <div className="space-y-2">
+                      {analyticsData.topDeviceTypes.map((t: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-slate-300 font-semibold">{t.type}</span>
+                          <span className="bg-slate-700 text-slate-200 text-xs px-2.5 py-0.5 rounded-full font-bold">{t.count} cihaz</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

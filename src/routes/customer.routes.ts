@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { eq, desc } from 'drizzle-orm';
 import { db } from '../db/index';
 import { users, customers, tickets, devices } from '../db/schema';
@@ -153,7 +154,8 @@ customerRouter.post('/api/customer/tickets', requireCustomer, async (req, res) =
     const ticketNumber = `SRV-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
     await db.insert(tickets).values({
       tenantId: 1, ticketNumber, userId, deviceId,
-      type: 'ariza', subject, description, priority: 'normal', status: 'yeni', cost: '0.00'
+      type: 'ariza', subject, description, priority: 'normal', status: 'yeni', cost: '0.00',
+      publicApprovalToken: crypto.randomBytes(24).toString('hex'),
     });
 
     res.json({ success: true, ticketNumber });

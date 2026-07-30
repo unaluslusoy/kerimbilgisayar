@@ -455,6 +455,120 @@ publicRouter.post('/api/tickets/:ticketNumber/decline', ticketActionLimiter, asy
   }
 });
 
+publicRouter.get('/api/public/ticket-approval-info/:ticketNumber', ticketQueryLimiter, async (req, res) => {
+  try {
+    const ticketNumber = req.params.ticketNumber;
+    const token = (req.query.token as string || '').trim();
+    if (!token) {
+      return res.status(403).json({ error: 'Geçersiz veya eksik onay linki' });
+    }
+
+    const rows = await db.select({
+      id: tickets.id,
+      ticketNumber: tickets.ticketNumber,
+      subject: tickets.subject,
+      description: tickets.description,
+      status: tickets.status,
+      cost: tickets.cost,
+      laborCost: tickets.laborCost,
+      estimatedCost: tickets.estimatedCost,
+      technicianNotes: tickets.technicianNotes,
+      publicApprovalToken: tickets.publicApprovalToken,
+      brand: devices.brand,
+      model: devices.model,
+      deviceName: devices.name,
+      customerName: users.firstName,
+    })
+    .from(tickets)
+    .leftJoin(devices, eq(tickets.deviceId, devices.id))
+    .leftJoin(users, eq(tickets.userId, users.id))
+    .where(or(eq(tickets.ticketNumber, ticketNumber), eq(tickets.ticketNumber, ticketNumber.toUpperCase())))
+    .limit(1);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+    }
+
+    const ticket = rows[0];
+    if (!ticket.publicApprovalToken || ticket.publicApprovalToken !== token) {
+      return res.status(403).json({ error: 'Geçersiz veya eksik onay linki' });
+    }
+    const parts = await db.select({
+      name: stockItems.name,
+      quantity: ticketParts.quantity,
+      unitPrice: ticketParts.unitPrice,
+    })
+    .from(ticketParts)
+    .leftJoin(stockItems, eq(ticketParts.stockItemId, stockItems.id))
+    .where(eq(ticketParts.ticketId, ticket.id));
+
+    let approvalStatus: 'pending' | 'approved' | 'rejected' = 'pending';
+    if (ticket.status === 'isleme_alindi' || ticket.status === 'cozuldu' || ticket.status === 'teslim_edildi') {
+      approvalStatus = 'approved';
+    } else if (ticket.status === 'onay_red' || ticket.status === 'iptal') {
+      approvalStatus = 'rejected';
+    }
+
+    const { publicApprovalToken, ...ticketSafe } = ticket;
+    res.json({
+      ticket: {
+        ...ticketSafe,
+        approvalStatus,
+        parts: parts.map(p => ({
+          name: p.name || 'Yedek Parça / Hizmet',
+          quantity: p.quantity || 1,
+          unitPrice: p.unitPrice || '0',
+        })),
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Sunucu hatası' });
+  }
+});
+
+publicRouter.post('/api/public/ticket-approval-submit', ticketActionLimiter, async (req, res) => {
+  try {
+    const { ticketId, ticketNumber, approved, token } = req.body;
+    if (!ticketId && !ticketNumber) return res.status(400).json({ error: 'Eksik parametre' });
+    if (!token || typeof token !== 'string') return res.status(403).json({ error: 'Geçersiz veya eksik onay linki' });
+
+    const condition = ticketId ? eq(tickets.id, Number(ticketId)) : eq(tickets.ticketNumber, String(ticketNumber));
+    const rows = await db.select().from(tickets).where(condition).limit(1);
+    if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
+
+    const ticket = rows[0];
+    if (!ticket.publicApprovalToken || ticket.publicApprovalToken !== token) {
+      return res.status(403).json({ error: 'Geçersiz veya eksik onay linki' });
+    }
+    const newStatus = approved ? 'isleme_alindi' : 'onay_red';
+
+    await db.update(tickets).set({
+      status: newStatus,
+      updatedAt: new Date(),
+    }).where(eq(tickets.id, ticket.id));
+
+    await db.insert(serviceStatusLogs).values({
+      tenantId: ticket.tenantId,
+      ticketId: ticket.id,
+      fromStatus: ticket.status,
+      toStatus: newStatus,
+      notes: `Müşteri onay portalı üzerinden (${getClientIp(req)}) onarımı ${approved ? 'ONAYLADI' : 'REDDETTİ'}.`,
+    }).catch((e) => console.error('serviceStatusLogs insert error:', e));
+
+    await markLatestApprovalRequest(ticket.id, approved ? 'approved' : 'rejected', getClientIp(req));
+
+    await notifyStaff({
+      type: approved ? 'success' : 'warning',
+      title: `Müşteri Onay Portalı: #${ticket.ticketNumber}`,
+      message: `Müşteri #${ticket.ticketNumber} servis kaydı için teklifi ${approved ? 'ONAYLADI' : 'REDDETTİ'}.`,
+    });
+
+    res.json({ success: true, newStatus });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'İşlem gerçekleştirilemedi' });
+  }
+});
+
 publicRouter.post('/api/tickets/:ticketNumber/pay', ticketActionLimiter, async (req, res) => {
   try {
     const rawCode = (req.params.ticketNumber || '').trim();

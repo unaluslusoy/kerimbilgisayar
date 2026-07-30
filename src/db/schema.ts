@@ -70,6 +70,7 @@ export const companies = mysqlTable('companies', {
   type: mysqlEnum('type', ['lead', 'customer', 'partner', 'vendor']).default('lead'),
   // --- FAZ 1B: Bayi (Dealer) Genişletmesi ---
   dealerType: mysqlEnum('dealer_type', ['none', 'dealer']).default('none'),
+  dealerTier: mysqlEnum('dealer_tier', ['standard', 'silver', 'gold', 'platinum']).default('standard'),
   dealerRiskLimit: decimal('dealer_risk_limit', { precision: 15, scale: 2 }),
   dealerDueDays: int('dealer_due_days').default(0),
   dealerDiscountRate: decimal('dealer_discount_rate', { precision: 5, scale: 2 }).default('0.00'),
@@ -374,6 +375,14 @@ export const tickets = mysqlTable('tickets', {
   // --- FAZ 1B: Bayi Entegrasyonu ---
   dealerId: int('dealer_id').references(() => companies.id),
   source: mysqlEnum('source', ['walk_in', 'dealer', 'online', 'phone']).default('walk_in'),
+  // --- Servis Takip Genişletmeleri ---
+  rackLocation: varchar('rack_location', { length: 60 }),
+  damageMapJson: text('damage_map_json'),
+  publicApprovalToken: varchar('public_approval_token', { length: 100 }),
+  isRma: boolean('is_rma').default(false),
+  previousTicketId: int('previous_ticket_id'),
+  warrantyPeriodDays: int('warranty_period_days').default(90),
+  warrantyExpiresAt: timestamp('warranty_expires_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
   resolvedAt: timestamp('resolved_at'),

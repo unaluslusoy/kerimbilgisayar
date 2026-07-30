@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { eq, and, or, sql, desc, asc } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import { db } from '../db/index';
@@ -32,6 +33,10 @@ import { encryptField, decryptField } from '../lib/fieldCrypto';
 import { isValidImei } from '../server/helpers';
 
 export const ticketsRouter = express.Router();
+
+function generateApprovalToken(): string {
+  return crypto.randomBytes(24).toString('hex');
+}
 
 // WHATSAPP API DISPATCHER
 async function sendWhatsAppMessage(phone: string, text: string) {
@@ -213,6 +218,80 @@ export async function checkPickupReminders() {
     console.error('checkPickupReminders error:', err);
   }
 }
+
+// ADMIN API — ANALİTİK VE CİRO RAPORLARI
+ticketsRouter.get('/api/admin/tickets/analytics', requireAdmin, async (req, res) => {
+  try {
+    const allTickets = await db.select({
+      id: tickets.id,
+      status: tickets.status,
+      cost: tickets.cost,
+      laborCost: tickets.laborCost,
+      createdAt: tickets.createdAt,
+      completedAt: tickets.completedAt,
+      isRma: tickets.isRma,
+      brand: devices.brand,
+      deviceType: devices.deviceType,
+    })
+    .from(tickets)
+    .leftJoin(devices, eq(tickets.deviceId, devices.id));
+
+    const totalTickets = allTickets.length;
+    const activeTickets = allTickets.filter(t => !['cozuldu', 'teslim_edildi', 'iptal', 'onay_red', 'kapatildi'].includes(t.status)).length;
+    const completedTickets = allTickets.filter(t => t.status === 'cozuldu' || t.status === 'teslim_edildi').length;
+    const rmaCount = allTickets.filter(t => t.isRma).length;
+
+    let totalLabor = 0;
+    let totalCost = 0;
+    let totalDaysSum = 0;
+    let completedWithDurationCount = 0;
+
+    const brandCounts: Record<string, number> = {};
+    const deviceTypeCounts: Record<string, number> = {};
+
+    allTickets.forEach(t => {
+      totalLabor += parseFloat(t.laborCost || '0');
+      totalCost += parseFloat(t.cost || '0');
+
+      if (t.brand) brandCounts[t.brand] = (brandCounts[t.brand] || 0) + 1;
+      if (t.deviceType) deviceTypeCounts[t.deviceType] = (deviceTypeCounts[t.deviceType] || 0) + 1;
+
+      if (t.completedAt && t.createdAt) {
+        const diffMs = new Date(t.completedAt).getTime() - new Date(t.createdAt).getTime();
+        const diffDays = Math.max(0.5, diffMs / (1000 * 3600 * 24));
+        totalDaysSum += diffDays;
+        completedWithDurationCount++;
+      }
+    });
+
+    const avgRepairDays = completedWithDurationCount > 0 ? (totalDaysSum / completedWithDurationCount).toFixed(1) : '1.5';
+
+    const sortedBrands = Object.entries(brandCounts)
+      .map(([brand, count]) => ({ brand, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+
+    const sortedDeviceTypes = Object.entries(deviceTypeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+
+    res.json({
+      totalTickets,
+      activeTickets,
+      completedTickets,
+      rmaCount,
+      totalLaborRevenue: totalLabor,
+      totalPartsRevenue: Math.max(0, totalCost - totalLabor),
+      grandTotalRevenue: totalCost,
+      avgRepairDays,
+      topBrands: sortedBrands,
+      topDeviceTypes: sortedDeviceTypes,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ADMIN API — CİHAZ PROFİLLERİ
 ticketsRouter.get('/api/admin/device-types', requireAdmin, async (req, res) => {
@@ -531,6 +610,15 @@ ticketsRouter.get('/api/admin/tickets', requireAdmin, async (req, res) => {
       externalSentAt: tickets.externalSentAt,
       externalCost: tickets.externalCost,
       externalReturnedAt: tickets.externalReturnedAt,
+      rackLocation: tickets.rackLocation,
+      damageMapJson: tickets.damageMapJson,
+      customerSignature: tickets.customerSignature,
+      deliverySignature: tickets.deliverySignature,
+      estimatedCost: tickets.estimatedCost,
+      estimatedDueAt: tickets.estimatedDueAt,
+      isRma: tickets.isRma,
+      previousTicketId: tickets.previousTicketId,
+      publicApprovalToken: tickets.publicApprovalToken,
     }).from(tickets)
       .leftJoin(users, eq(tickets.userId, users.id))
       .leftJoin(devices, eq(tickets.deviceId, devices.id))
@@ -557,6 +645,7 @@ ticketsRouter.post('/api/admin/tickets', requireAdmin, async (req, res) => {
       deviceSerial, imei, patternLock, pinPassword, deviceEmail, deviceEmailPassword, deviceTypeId, color, variant,
       customerType, companyName, taxId, taxOffice, address,
       consentKvkk, consentDataLoss, consentAccessInfo, consentExpertiseFee,
+      rackLocation, damagePins, damageMapJson, customerSignature, estimatedCost, estimatedDueAt,
     } = req.body;
 
     if (imei && !isValidImei(imei)) {
@@ -681,6 +770,34 @@ ticketsRouter.post('/api/admin/tickets', requireAdmin, async (req, res) => {
 
       const autoSubject = subject || `${deviceBrand || ''} ${deviceModel || ''} ${type === 'ariza' ? 'Arıza' : type === 'bakim' ? 'Bakım' : type === 'kurulum' ? 'Kurulum' : 'Destek'}`.trim() || 'Teknik Servis Talebi';
 
+      let isRma = false;
+      let previousTicketId: number | null = null;
+      if (imei || deviceSerial) {
+        const matchingDevices = await tx.select({ id: devices.id }).from(devices)
+          .where(or(
+            imei ? eq(devices.imei, imei) : sql`1=0`,
+            deviceSerial ? eq(devices.serialNumber, deviceSerial) : sql`1=0`
+          ));
+
+        if (matchingDevices.length > 0) {
+          const deviceIds = matchingDevices.map(d => d.id);
+          const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000);
+          const prevTickets = await tx.select({ id: tickets.id, createdAt: tickets.createdAt })
+            .from(tickets)
+            .where(and(
+              sql`${tickets.deviceId} IN (${sql.join(deviceIds, sql`, `)})`,
+              sql`${tickets.createdAt} >= ${ninetyDaysAgo}`
+            ))
+            .orderBy(desc(tickets.createdAt))
+            .limit(1);
+
+          if (prevTickets.length > 0) {
+            isRma = true;
+            previousTicketId = prevTickets[0].id;
+          }
+        }
+      }
+
       const newTicketRecord = await tx.insert(tickets).values({
         tenantId: 1,
         ticketNumber,
@@ -692,11 +809,19 @@ ticketsRouter.post('/api/admin/tickets', requireAdmin, async (req, res) => {
         priority: priority || 'normal',
         status: 'yeni',
         cost: cost || '0.00',
+        isRma,
+        previousTicketId,
         dealerId: dealerId ? parseInt(dealerId as string) : null,
         source: source || 'walk_in',
         assignedTo: assignedTo ? parseInt(assignedTo as string) : null,
         accessories: accessories || '',
         technicianNotes: technicianNotes || '',
+        rackLocation: rackLocation || null,
+        damageMapJson: damageMapJson || (damagePins ? JSON.stringify(damagePins) : null),
+        customerSignature: customerSignature || null,
+        estimatedCost: estimatedCost || null,
+        estimatedDueAt: estimatedDueAt ? new Date(estimatedDueAt) : null,
+        publicApprovalToken: generateApprovalToken(),
         kvkkConsentAt: consentKvkk ? new Date() : null,
         dataLossConsentAt: consentDataLoss ? new Date() : null,
         accessInfoConsentAt: consentAccessInfo ? new Date() : null,
@@ -725,6 +850,7 @@ ticketsRouter.patch('/api/admin/tickets/:id', requireAdmin, async (req, res) => 
       deviceType, deviceBrand, deviceModel, imei, deviceSerial, patternLock, pinPassword, deviceEmail, deviceEmailPassword, deviceTypeId, color, variant,
       deliverySignature, customerSignature,
       externalServiceName, externalCost, externalSentAction, externalReturnedAction,
+      rackLocation, damageMapJson, damagePins, estimatedCost, estimatedDueAt,
     } = req.body;
 
     if (imei && !isValidImei(imei)) {
@@ -765,6 +891,11 @@ ticketsRouter.patch('/api/admin/tickets/:id', requireAdmin, async (req, res) => 
     if (externalCost !== undefined) updateData.externalCost = externalCost;
     if (externalSentAction) updateData.externalSentAt = new Date();
     if (externalReturnedAction) updateData.externalReturnedAt = new Date();
+    if (rackLocation !== undefined) updateData.rackLocation = rackLocation;
+    if (damageMapJson !== undefined) updateData.damageMapJson = damageMapJson;
+    else if (damagePins !== undefined) updateData.damageMapJson = JSON.stringify(damagePins);
+    if (estimatedCost !== undefined) updateData.estimatedCost = estimatedCost;
+    if (estimatedDueAt !== undefined) updateData.estimatedDueAt = estimatedDueAt ? new Date(estimatedDueAt) : null;
 
     const ticketId = parseInt(req.params.id);
 
@@ -1258,6 +1389,7 @@ ticketsRouter.post('/api/admin/leads/:id/convert', requireAdmin, async (req, res
       priority: 'normal',
       status: 'yeni',
       cost: '0.00',
+      publicApprovalToken: generateApprovalToken(),
     });
 
     await db.update(leads).set({ status: 'converted' }).where(eq(leads.id, parseInt(req.params.id)));
