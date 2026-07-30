@@ -12,6 +12,7 @@ import {
   fetchSettings, createOdealPaymentLink
 } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
+import { playAddSound, playErrorSound } from '../../lib/sound';
 
 export default function AdminPos() {
   const toast = useToast();
@@ -23,6 +24,7 @@ export default function AdminPos() {
 
   // Search & Filters
   const [productSearch, setProductSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustDropdown, setShowCustDropdown] = useState(false);
 
@@ -89,6 +91,7 @@ export default function AdminPos() {
     if (item) {
       addToCart(item);
     } else {
+      playErrorSound();
       toast.warning(`Barkod/SKU bulunamadı: ${barcode}`);
     }
     setBarcodeInput('');
@@ -99,6 +102,7 @@ export default function AdminPos() {
     const existing = cart.find(c => c.id === item.id);
     if (existing) {
       if (existing.quantity >= item.currentStock) {
+        playErrorSound();
         toast.warning(`Mevcut stok sınırına ulaşıldı: ${item.currentStock} adet.`);
         return;
       }
@@ -106,6 +110,7 @@ export default function AdminPos() {
     } else {
       setCart([...cart, { ...item, quantity: 1 }]);
     }
+    playAddSound();
   };
 
   const updateCartQty = (itemId: number, qty: number) => {
@@ -117,6 +122,7 @@ export default function AdminPos() {
       return;
     }
     if (qty > item.currentStock) {
+      playErrorSound();
       toast.warning(`Mevcut stok sınırına ulaşıldı: ${item.currentStock} adet.`);
       return;
     }
@@ -335,12 +341,20 @@ export default function AdminPos() {
     }
   };
 
+  const productCategories = Array.from(
+    new Map<number, string>(
+      stock.filter(i => i.categoryId && i.categoryName).map((i): [number, string] => [i.categoryId, i.categoryName])
+    ).entries()
+  ).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+
   const filteredStock = stock.filter(item => {
-    return !productSearch ||
+    const matchSearch = !productSearch ||
       item.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
       item.sku?.toLowerCase().includes(productSearch.toLowerCase()) ||
       item.barcode?.toLowerCase().includes(productSearch.toLowerCase()) ||
       item.brand?.toLowerCase().includes(productSearch.toLowerCase());
+    const matchCategory = !categoryFilter || String(item.categoryId) === categoryFilter;
+    return matchSearch && matchCategory;
   });
 
   const filteredCustomers = customersList.filter(cust => {
@@ -445,7 +459,7 @@ export default function AdminPos() {
             </form>
 
             {/* Product search box */}
-            <div className="relative mb-4 shrink-0">
+            <div className="relative mb-2.5 shrink-0">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
@@ -455,6 +469,29 @@ export default function AdminPos() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary outline-none"
               />
             </div>
+
+            {/* Category filter chips */}
+            {productCategories.length > 0 && (
+              <div className="flex gap-1.5 mb-3 shrink-0 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${!categoryFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  Tümü
+                </button>
+                {productCategories.map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategoryFilter(String(cat.id))}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${categoryFilter === String(cat.id) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Grid of stock items */}
             <div className="flex-1 overflow-y-auto min-h-0 pr-1">
@@ -468,32 +505,28 @@ export default function AdminPos() {
                   Satışa uygun ürün bulunamadı.
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2">
                   {filteredStock.map(item => (
-                    <div 
+                    <div
                       key={item.id}
                       onClick={() => addToCart(item)}
-                      className="border border-gray-200 hover:border-primary rounded-xl p-3 bg-white flex flex-col justify-between gap-2.5 cursor-pointer hover:shadow-md transition-all text-left hover:scale-[1.01]"
+                      className="border border-gray-200 hover:border-primary rounded-lg p-1.5 bg-white flex flex-col justify-between gap-1 cursor-pointer hover:shadow-md active:scale-95 transition-all duration-100 text-left hover:scale-[1.02]"
                     >
-                      <div className="space-y-1.5">
-                        <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
+                      <div className="space-y-1">
+                        <div className="relative aspect-square w-full rounded-md overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
                           {item.imageUrl ? (
                             <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
                           ) : (
-                            <ImageIcon className="w-6 h-6 text-gray-300" />
+                            <ImageIcon className="w-5 h-5 text-gray-300" />
                           )}
                         </div>
-                        <div className="text-xxs font-mono text-gray-400 flex items-center gap-0.5">
-                          <Barcode className="w-3 h-3" /> {item.barcode || '—'}
-                        </div>
-                        <h3 className="font-bold text-gray-900 text-xs line-clamp-2 min-h-[32px] leading-tight">{item.name}</h3>
-                        <p className="text-xxs text-gray-500">{item.brand || 'Markasız'} {item.model}</p>
+                        <h3 className="font-bold text-gray-900 text-[10px] line-clamp-2 min-h-[24px] leading-tight">{item.name}</h3>
                       </div>
-                      <div className="flex justify-between items-center border-t border-gray-100 pt-2">
-                        <span className="text-[10px] text-gray-500 font-semibold bg-gray-100 px-2 py-0.5 rounded">
-                          Stok: {item.currentStock}
+                      <div className="flex justify-between items-center border-t border-gray-100 pt-1">
+                        <span className="text-[9px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">
+                          {item.currentStock}
                         </span>
-                        <span className="text-sm font-extrabold text-primary">
+                        <span className="text-[11px] font-extrabold text-primary">
                           ₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}
                         </span>
                       </div>
@@ -507,16 +540,24 @@ export default function AdminPos() {
           {/* RIGHT: SHOPPING CART & BILLING */}
           <div className="w-full lg:w-[420px] bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-0 shrink-0">
             {/* Cart Title */}
-            <div className="flex items-center justify-between border-b pb-3 mb-4 shrink-0">
-              <span className="font-bold text-gray-900 flex items-center gap-1.5">
-                <ShoppingCart className="w-5 h-5 text-primary" /> Alışveriş Sepeti ({cart.reduce((s,c)=>s+c.quantity, 0)})
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4 shrink-0">
+              <span className="font-bold text-gray-900 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <ShoppingCart className="w-4 h-4" />
+                </span>
+                Alışveriş Sepeti
+                {cart.length > 0 && (
+                  <span className="bg-primary text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                    {cart.reduce((s, c) => s + c.quantity, 0)}
+                  </span>
+                )}
               </span>
-              <button 
+              <button
                 onClick={clearCart}
                 disabled={cart.length === 0}
-                className="text-xs text-red-500 font-semibold hover:text-red-700 disabled:opacity-40 cursor-pointer"
+                className="text-xs text-red-500 font-semibold hover:text-red-700 disabled:opacity-40 cursor-pointer flex items-center gap-1"
               >
-                Temizle
+                <Trash2 className="w-3.5 h-3.5" /> Temizle
               </button>
             </div>
 
@@ -534,28 +575,28 @@ export default function AdminPos() {
                     <div className="flex-1 min-w-0">
                       <h4 className="font-bold text-xs text-gray-800 truncate" title={c.name}>{c.name}</h4>
                       <p className="text-xxs text-gray-400 mt-0.5">₺{parseFloat(c.sellingPrice).toLocaleString('tr-TR')} / {c.unit || 'adet'}</p>
-                      
+
                       {/* Quantity adjuster */}
-                      <div className="flex items-center gap-1.5 mt-2">
-                        <button 
+                      <div className="flex items-center gap-0.5 mt-2 bg-gray-50 border border-gray-200 rounded-full p-0.5 w-fit">
+                        <button
                           onClick={() => updateCartQty(c.id, c.quantity - 1)}
-                          className="w-5 h-5 bg-gray-100 hover:bg-gray-200 rounded text-xs font-bold flex items-center justify-center cursor-pointer"
+                          className="w-6 h-6 bg-white hover:bg-primary hover:text-white shadow-sm rounded-full text-sm font-bold flex items-center justify-center cursor-pointer transition-colors"
                         >
-                          -
+                          −
                         </button>
-                        <span className="w-8 text-center text-xs font-bold text-gray-800">{c.quantity}</span>
-                        <button 
+                        <span className="w-8 text-center text-xs font-extrabold text-gray-900">{c.quantity}</span>
+                        <button
                           onClick={() => updateCartQty(c.id, c.quantity + 1)}
-                          className="w-5 h-5 bg-gray-100 hover:bg-gray-200 rounded text-xs font-bold flex items-center justify-center cursor-pointer"
+                          className="w-6 h-6 bg-white hover:bg-primary hover:text-white shadow-sm rounded-full text-sm font-bold flex items-center justify-center cursor-pointer transition-colors"
                         >
                           +
                         </button>
                       </div>
                     </div>
                     <div className="flex flex-col items-end justify-between">
-                      <button 
+                      <button
                         onClick={() => removeFromCart(c.id)}
-                        className="text-gray-400 hover:text-red-500 rounded p-1 transition-colors cursor-pointer"
+                        className="text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg p-1 transition-colors cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -665,10 +706,15 @@ export default function AdminPos() {
                       <button
                         key={p.type}
                         onClick={() => setPaymentType(p.type as any)}
-                        className={`border p-2 rounded-xl flex flex-col items-center gap-1 cursor-pointer transition-all ${
-                          isSelected ? `${p.color} ring-2 ring-offset-1 ring-primary` : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                        className={`relative border p-2 rounded-xl flex flex-col items-center gap-1 cursor-pointer transition-all ${
+                          isSelected ? `${p.color} ring-2 ring-offset-1 ring-primary shadow-sm` : 'border-gray-200 hover:bg-gray-50 text-gray-500'
                         }`}
                       >
+                        {isSelected && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary text-white rounded-full flex items-center justify-center shadow-sm">
+                            <CheckCircle className="w-3 h-3" />
+                          </span>
+                        )}
                         <Icon className="w-4 h-4" />
                         <span className="text-[10px] font-bold">{p.label}</span>
                       </button>
@@ -734,14 +780,14 @@ export default function AdminPos() {
               </div>
 
               {/* Totals Summary */}
-              <div className="bg-gray-50 p-3 rounded-xl border space-y-2">
+              <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200 space-y-1.5">
                 <div className="flex justify-between text-xs text-gray-500 font-semibold">
                   <span>Ara Toplam</span>
                   <span>₺{subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-500 font-semibold">
-                  <span>KDV Dahil</span>
-                  <span>KDV Payı: ₺{vat.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                  <span>KDV Payı</span>
+                  <span>₺{vat.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-xs text-red-600 font-semibold">
@@ -749,9 +795,9 @@ export default function AdminPos() {
                     <span>-₺{discount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center border-t border-gray-200 pt-2 font-extrabold text-gray-900">
+                <div className="flex justify-between items-center border-t border-dashed border-gray-300 pt-2 mt-1.5 font-extrabold text-gray-900">
                   <span className="text-sm">Ödenecek Tutar</span>
-                  <span className="text-xl text-primary">₺{total.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-2xl text-primary">₺{total.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
@@ -759,7 +805,7 @@ export default function AdminPos() {
               <button
                 onClick={handleCompleteSale}
                 disabled={cart.length === 0 || completingSale}
-                className="w-full py-3 bg-primary hover:bg-secondary text-white font-extrabold text-sm rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                className="w-full py-3.5 bg-primary hover:bg-secondary active:scale-[0.98] text-white font-extrabold text-sm rounded-xl disabled:opacity-40 disabled:active:scale-100 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/20"
               >
                 {completingSale ? (
                   <>
