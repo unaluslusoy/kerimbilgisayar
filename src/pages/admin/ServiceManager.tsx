@@ -194,6 +194,7 @@ export default function ServiceManager() {
 
   // Edit Details Mode State
   const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [detailTab, setDetailTab] = useState<'genel' | 'fiziksel' | 'parca' | 'durum' | 'ekler'>('genel');
   const [editCustomerName, setEditCustomerName] = useState('');
   const [editCustomerPhone, setEditCustomerPhone] = useState('');
   const [editCustomerEmail, setEditCustomerEmail] = useState('');
@@ -226,7 +227,7 @@ export default function ServiceManager() {
   const [newTicketPhotos, setNewTicketPhotos] = useState<any[]>([]);
   const [newTicketPhotoUploading, setNewTicketPhotoUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [modalTab, setModalTab] = useState<'musteri'|'cihaz'|'servis'|'medya'>('musteri');
+  const [modalTab, setModalTab] = useState<'musteri'|'cihaz'|'servis'|'fiziksel'|'medya'>('musteri');
   
   // Advanced filters and pagination
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -287,7 +288,6 @@ export default function ServiceManager() {
     address: '',
     rackLocation: '',
     damagePins: [] as DamagePin[],
-    customerSignature: '',
     estimatedCost: '',
     estimatedDueAt: '',
     consentKvkk: false,
@@ -889,6 +889,7 @@ export default function ServiceManager() {
 
   const openDetail = async (ticket: any) => {
     setDetailTicket(ticket);
+    setDetailTab('genel');
     setCostValue(ticket.cost || '');
     setLaborCostValue(ticket.laborCost || '');
     setEditingCost(false);
@@ -1744,8 +1745,36 @@ export default function ServiceManager() {
               {/* Modal Body */}
               <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
                 {/* Left Area: Detail & Actions */}
-                <div className="w-full lg:w-3/5 overflow-y-auto p-6 space-y-6">
-                  
+                <div className="w-full lg:w-3/5 flex flex-col min-h-0">
+                  {/* Detail Tabs */}
+                  <div className="flex gap-1 border-b border-gray-200 px-4 pt-2 bg-white shrink-0 overflow-x-auto">
+                    {([
+                      { key: 'genel', label: 'Genel Bilgiler', icon: Users },
+                      { key: 'fiziksel', label: 'Fiziksel Durum', icon: ClipboardCheck },
+                      { key: 'parca', label: 'Parça & Ödeme', icon: Wallet },
+                      { key: 'durum', label: 'Durum & Onay', icon: CheckCircle2 },
+                      { key: 'ekler', label: 'Ekler & Kargo', icon: ImageIcon },
+                    ] as const).map(tab => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setDetailTab(tab.key)}
+                        className={cn(
+                          'px-3.5 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap',
+                          detailTab === tab.key
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-gray-500 hover:text-gray-800'
+                        )}
+                      >
+                        <tab.icon className="w-3.5 h-3.5" />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {detailTab === 'genel' && (
+                  <>
                   {/* Servis Süreç Yolculuğu (Process Timeline Stepper) */}
                   <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-md border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between">
@@ -2194,6 +2223,11 @@ export default function ServiceManager() {
                     )}
                   </div>
 
+                  </>
+                  )}
+
+                  {detailTab === 'fiziksel' && (
+                  <>
                   {/* Ekspertiz: Fiziksel Durum & Fonksiyon Testi */}
                   <div className="border border-gray-200 rounded-2xl p-4 bg-white shadow-sm space-y-4">
                     <p className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5 border-b border-gray-100 pb-2">
@@ -2277,6 +2311,30 @@ export default function ServiceManager() {
                     </div>
                   </div>
 
+                  {/* Hasar Haritası & Teslim İmzası (Kabul Sırasında Alınan) */}
+                  {(detailTicket.damageMapJson || detailTicket.deliverySignature) && (
+                    <div className="border border-gray-200 rounded-2xl p-4 bg-white shadow-sm space-y-4">
+                      <p className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5 border-b pb-2">
+                        <AlertCircle className="w-4 h-4 text-amber-500" /> Hasar Haritası & Teslim İmzası
+                      </p>
+                      {detailTicket.damageMapJson && (
+                        <DamageMarkingCanvas
+                          deviceType={detailTicket.deviceType}
+                          value={JSON.parse(detailTicket.damageMapJson)}
+                          readOnly
+                        />
+                      )}
+                      {detailTicket.deliverySignature && (
+                        <SignatureCanvas value={detailTicket.deliverySignature} label="Teslim İmzası" readOnly />
+                      )}
+                    </div>
+                  )}
+
+                  </>
+                  )}
+
+                  {detailTab === 'parca' && (
+                  <>
                   {/* İşlem ve Maliyetler (Parça & İşçilik) */}
                   <div className="border border-gray-200 rounded-2xl p-4 bg-slate-50/30">
                     <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1 mb-4">
@@ -2595,6 +2653,11 @@ export default function ServiceManager() {
                     );
                   })()}
 
+                  </>
+                  )}
+
+                  {detailTab === 'durum' && (
+                  <>
                   {/* Durum Değiştir */}
                   <div className="border border-gray-200 rounded-2xl p-4">
                     <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Durum Değiştir</p>
@@ -2718,6 +2781,11 @@ export default function ServiceManager() {
                     </div>
                   )}
 
+                  </>
+                  )}
+
+                  {detailTab === 'ekler' && (
+                  <>
                   {/* Ekli Görseller (Cihaz Fotoğrafları) */}
                   <div className="border border-gray-200 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -2845,6 +2913,9 @@ export default function ServiceManager() {
                         </div>
                       </div>
                     )}
+                  </div>
+                  </>
+                  )}
                   </div>
                 </div>
 
@@ -2974,7 +3045,8 @@ export default function ServiceManager() {
               {([
                 { key: 'musteri', label: 'Müşteri & Cari Bilgileri' },
                 { key: 'cihaz', label: 'Cihaz & Erişim Bilgileri' },
-                { key: 'servis', label: 'Servis Kabul & Detayları' },
+                { key: 'servis', label: 'Servis Detayları' },
+                { key: 'fiziksel', label: 'Fiziksel Durum & Onaylar' },
                 { key: 'medya', label: 'Teslim Fotoğrafları & Ekler' },
               ] as const).map(tab => (
                 <button
@@ -2991,6 +3063,7 @@ export default function ServiceManager() {
                   {tab.key === 'musteri' && <Users className="w-4 h-4" />}
                   {tab.key === 'cihaz' && <Shield className="w-4 h-4" />}
                   {tab.key === 'servis' && <Wrench className="w-4 h-4" />}
+                  {tab.key === 'fiziksel' && <ClipboardCheck className="w-4 h-4" />}
                   {tab.key === 'medya' && <ImageIcon className="w-4 h-4" />}
                   {tab.label}
                   {tab.key === 'medya' && newTicketPhotos.length > 0 && (
@@ -3391,7 +3464,7 @@ export default function ServiceManager() {
                       className="bg-white rounded-xl shadow-sm"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Raf / Lokasyon No</label>
                       <input
@@ -3411,6 +3484,27 @@ export default function ServiceManager() {
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Tahmini Ücret (₺)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={newTicket.estimatedCost}
+                        onChange={e => setNewTicket({ ...newTicket, estimatedCost: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── TAB 4: FİZİKSEL DURUM & ONAYLAR ── */}
+              {modalTab === 'fiziksel' && (
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 mb-2 border-b border-gray-100 pb-3">
+                    <ClipboardCheck className="w-5 h-5 text-primary" />
+                    <h3 className="text-sm font-bold text-gray-800">Fiziksel Durum, İmza & Onaylar</h3>
                   </div>
 
                   <div className="space-y-2">
@@ -3419,14 +3513,6 @@ export default function ServiceManager() {
                       deviceType={newTicket.deviceType}
                       value={newTicket.damagePins}
                       onChange={pins => setNewTicket({ ...newTicket, damagePins: pins })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <SignatureCanvas
-                      value={newTicket.customerSignature}
-                      onChange={sig => setNewTicket({ ...newTicket, customerSignature: sig })}
-                      label="Müşteri Dijital İmzası (Teslim Alınırken)"
                     />
                   </div>
 
@@ -3454,7 +3540,7 @@ export default function ServiceManager() {
                 </div>
               )}
 
-              {/* ── TAB 4: MEDYA / DOSYALAR ── */}
+              {/* ── TAB 5: MEDYA / DOSYALAR ── */}
               {modalTab === 'medya' && (
                 <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-200">
                   <div className="flex items-center gap-2 mb-2 border-b border-gray-100 pb-3">
@@ -3536,7 +3622,8 @@ export default function ServiceManager() {
                     onClick={() => {
                       if (modalTab === 'cihaz') setModalTab('musteri');
                       else if (modalTab === 'servis') setModalTab('cihaz');
-                      else if (modalTab === 'medya') setModalTab('servis');
+                      else if (modalTab === 'fiziksel') setModalTab('servis');
+                      else if (modalTab === 'medya') setModalTab('fiziksel');
                     }}
                     className="px-4 py-2.5 border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 rounded-xl font-bold text-xs transition-colors"
                   >
@@ -3550,7 +3637,8 @@ export default function ServiceManager() {
                     onClick={() => {
                       if (modalTab === 'musteri') setModalTab('cihaz');
                       else if (modalTab === 'cihaz') setModalTab('servis');
-                      else if (modalTab === 'servis') setModalTab('medya');
+                      else if (modalTab === 'servis') setModalTab('fiziksel');
+                      else if (modalTab === 'fiziksel') setModalTab('medya');
                     }}
                     className="px-4 py-2.5 bg-gray-900 text-white hover:bg-gray-800 rounded-xl font-bold text-xs transition-colors flex-1 sm:flex-initial"
                   >

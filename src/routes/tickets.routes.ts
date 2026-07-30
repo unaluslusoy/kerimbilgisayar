@@ -562,6 +562,7 @@ ticketsRouter.get('/api/admin/tickets', requireAdmin, async (req, res) => {
   try {
     const { status } = req.query;
     const dealerAlias = alias(companies, 'dealer');
+    const assignedUserAlias = alias(users, 'assignedUser');
     const whereClause = and(
       eq(tickets.tenantId, 1),
       status && status !== 'all' ? eq(tickets.status, status as any) : undefined
@@ -597,6 +598,8 @@ ticketsRouter.get('/api/admin/tickets', requireAdmin, async (req, res) => {
       customerEmail: users.email,
       address: users.address,
       assignedTo: tickets.assignedTo,
+      assignedFirstName: assignedUserAlias.firstName,
+      assignedLastName: assignedUserAlias.lastName,
       laborCost: tickets.laborCost,
       dealerId: tickets.dealerId,
       dealerName: dealerAlias.name,
@@ -623,12 +626,14 @@ ticketsRouter.get('/api/admin/tickets', requireAdmin, async (req, res) => {
       .leftJoin(users, eq(tickets.userId, users.id))
       .leftJoin(devices, eq(tickets.deviceId, devices.id))
       .leftJoin(dealerAlias, eq(tickets.dealerId, dealerAlias.id))
+      .leftJoin(assignedUserAlias, eq(tickets.assignedTo, assignedUserAlias.id))
       .where(whereClause)
       .orderBy(desc(tickets.createdAt));
 
     res.json(results.map(t => ({
       ...t,
       customerName: `${t.customerName || ''} ${t.customerLastName || ''}`.trim() || 'Müşteri',
+      assignedName: `${t.assignedFirstName || ''} ${t.assignedLastName || ''}`.trim() || null,
       patternLock: decryptField(t.patternLock),
       pinPassword: decryptField(t.pinPassword),
       deviceEmailPassword: decryptField(t.deviceEmailPassword),
