@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Search, Barcode, ShoppingCart, User, Plus, X, Trash2, 
+import {
+  Search, Barcode, ShoppingCart, User, Plus, X, Trash2,
   CreditCard, Banknote, Landmark, FileText, CheckCircle, Printer, RefreshCw, ChevronRight, Layers, Eye,
-  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon
+  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon, Clock, AlertTriangle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { mediaUrl } from '../../lib/media';
@@ -43,6 +43,17 @@ export default function AdminPos() {
 
   const [completingSale, setCompletingSale] = useState(false);
   const [completedSaleDetails, setCompletedSaleDetails] = useState<any | null>(null);
+
+  // Bekletilen Satışlar (Park Sale) — aynı anda birden fazla müşteriye hizmet verebilmek için
+  const [heldSales, setHeldSales] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('pos_held_sales');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showHeldSales, setShowHeldSales] = useState(false);
 
   // Scanner State
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -140,6 +151,64 @@ export default function AdminPos() {
     setNotes('');
   };
 
+  const persistHeldSales = (list: any[]) => {
+    setHeldSales(list);
+    try { localStorage.setItem('pos_held_sales', JSON.stringify(list)); } catch {}
+  };
+
+  const holdCurrentSale = () => {
+    if (cart.length === 0) return;
+    const held = {
+      id: Date.now(),
+      heldAt: new Date().toISOString(),
+      cart,
+      selectedCustomer,
+      discountAmount,
+      notes,
+      paymentType,
+      label: selectedCustomer ? getCustomerDisplayName(selectedCustomer) : `${cart.length} kalem`,
+    };
+    persistHeldSales([held, ...heldSales]);
+    clearCart();
+    playAddSound();
+    toast.success('Sepet bekletildi. Yeni müşteriye devam edebilirsiniz.');
+  };
+
+  const resumeHeldSale = (id: number) => {
+    const held = heldSales.find(h => h.id === id);
+    if (!held) return;
+    let remaining = heldSales.filter(h => h.id !== id);
+    // Sepette zaten ürün varsa veri kaybetmemek için onu da otomatik bekletmeye alıyoruz
+    if (cart.length > 0) {
+      const currentHeld = {
+        id: Date.now(),
+        heldAt: new Date().toISOString(),
+        cart, selectedCustomer, discountAmount, notes, paymentType,
+        label: selectedCustomer ? getCustomerDisplayName(selectedCustomer) : `${cart.length} kalem`,
+      };
+      remaining = [currentHeld, ...remaining];
+      toast.info('Mevcut sepetiniz otomatik olarak bekletildi.');
+    }
+    setCart(held.cart);
+    setSelectedCustomer(held.selectedCustomer);
+    setDiscountAmount(held.discountAmount);
+    setNotes(held.notes);
+    setPaymentType(held.paymentType);
+    persistHeldSales(remaining);
+    setShowHeldSales(false);
+  };
+
+  const [pendingDiscardId, setPendingDiscardId] = useState<number | null>(null);
+  const discardHeldSale = (id: number) => {
+    if (pendingDiscardId !== id) {
+      setPendingDiscardId(id);
+      setTimeout(() => setPendingDiscardId(prev => prev === id ? null : prev), 3000);
+      return;
+    }
+    persistHeldSales(heldSales.filter(h => h.id !== id));
+    setPendingDiscardId(null);
+  };
+
   // Calculations
   const subtotal = cart.reduce((s, c) => s + (parseFloat(c.sellingPrice || '0') * c.quantity), 0);
   const discount = parseFloat(discountAmount) || 0;
@@ -206,6 +275,36 @@ export default function AdminPos() {
 
     setCompletingSale(true);
     try {
+      if (paymentType === 'odeal') {
+        try {
+          const odealRes = await createOdealPaymentLink({
+            amount: total,
+            title: 'Kerim Bilgisayar POS Satışı',
+            description: `${cart.length} kalem, ${cart.reduce((s, c) => s + c.quantity, 0)} adet`,
+            customerPhone: selectedCustomer?.phone,
+            customerEmail: selectedCustomer?.email,
+          });
+          if (odealRes.paymentUrl) {
+            if (selectedCustomer?.phone) {
+              const waPhone = selectedCustomer.phone.replace(/\D/g, '').startsWith('0')
+                ? '90' + selectedCustomer.phone.replace(/\D/g, '').substring(1)
+                : selectedCustomer.phone.replace(/\D/g, '').startsWith('90')
+                ? selectedCustomer.phone.replace(/\D/g, '')
+                : '90' + selectedCustomer.phone.replace(/\D/g, '');
+              const waMsg = encodeURIComponent(`Sayın Müşterimiz, ₺${total.toLocaleString('tr-TR')} tutarındaki ödemeniz için Ödeal güvenli ödeme bağlantınız: ${odealRes.paymentUrl}`);
+              window.open(`https://wa.me/${waPhone}?text=${waMsg}`, '_blank');
+            } else {
+              await navigator.clipboard.writeText(odealRes.paymentUrl);
+              toast.success('Ödeal ödeme linki panoya kopyalandı.');
+            }
+          }
+        } catch (odealErr: any) {
+          toast.error('Ödeal linki oluşturulamadı: ' + odealErr.message);
+          setCompletingSale(false);
+          return;
+        }
+      }
+
       const saleData = {
         customerId: selectedCustomer?.id || null,
         paymentType,
@@ -234,6 +333,22 @@ export default function AdminPos() {
       setCompletingSale(false);
     }
   };
+
+  // Klavye kısayolları: F2 barkod alanına odaklan, F9 satışı tamamla
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (activeTab !== 'pos') return;
+      if (e.key === 'F2') {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+      } else if (e.key === 'F9') {
+        e.preventDefault();
+        if (cart.length > 0 && !completingSale) handleCompleteSale();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeTab, cart, completingSale, handleCompleteSale]);
 
   const handlePrintThermal = (details: any) => {
     const iframe = document.createElement('iframe');
@@ -444,7 +559,7 @@ export default function AdminPos() {
                 <input
                   ref={barcodeInputRef}
                   type="text"
-                  placeholder="Barkodu taratın veya manuel girip Enter'a basın..."
+                  placeholder="Barkodu taratın veya manuel girip Enter'a basın... (F2)"
                   value={barcodeInput}
                   onChange={e => setBarcodeInput(e.target.value)}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none transition-all"
@@ -506,11 +621,13 @@ export default function AdminPos() {
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2">
-                  {filteredStock.map(item => (
+                  {filteredStock.map(item => {
+                    const isLowStock = item.currentStock <= (item.minStockLevel || 0);
+                    return (
                     <div
                       key={item.id}
                       onClick={() => addToCart(item)}
-                      className="border border-gray-200 hover:border-primary rounded-lg p-1.5 bg-white flex flex-col justify-between gap-1 cursor-pointer hover:shadow-md active:scale-95 transition-all duration-100 text-left hover:scale-[1.02]"
+                      className={`border rounded-lg p-1.5 bg-white flex flex-col justify-between gap-1 cursor-pointer hover:shadow-md active:scale-95 transition-all duration-100 text-left hover:scale-[1.02] ${isLowStock ? 'border-amber-300 hover:border-amber-500' : 'border-gray-200 hover:border-primary'}`}
                     >
                       <div className="space-y-1">
                         <div className="relative aspect-square w-full rounded-md overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
@@ -519,11 +636,16 @@ export default function AdminPos() {
                           ) : (
                             <ImageIcon className="w-5 h-5 text-gray-300" />
                           )}
+                          {isLowStock && (
+                            <span className="absolute top-0.5 right-0.5 bg-amber-500 text-white rounded-full p-0.5" title="Kritik stok">
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                            </span>
+                          )}
                         </div>
                         <h3 className="font-bold text-gray-900 text-[10px] line-clamp-2 min-h-[24px] leading-tight">{item.name}</h3>
                       </div>
                       <div className="flex justify-between items-center border-t border-gray-100 pt-1">
-                        <span className="text-[9px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isLowStock ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
                           {item.currentStock}
                         </span>
                         <span className="text-[11px] font-extrabold text-primary">
@@ -531,7 +653,8 @@ export default function AdminPos() {
                         </span>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -540,7 +663,7 @@ export default function AdminPos() {
           {/* RIGHT: SHOPPING CART & BILLING */}
           <div className="w-full lg:w-[420px] bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-0 shrink-0">
             {/* Cart Title */}
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4 shrink-0">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-3 shrink-0">
               <span className="font-bold text-gray-900 flex items-center gap-2">
                 <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
                   <ShoppingCart className="w-4 h-4" />
@@ -559,6 +682,59 @@ export default function AdminPos() {
               >
                 <Trash2 className="w-3.5 h-3.5" /> Temizle
               </button>
+            </div>
+
+            {/* Sepeti Beklet / Bekleyen Satışlar */}
+            <div className="flex items-center gap-2 mb-3 shrink-0 relative">
+              <button
+                type="button"
+                onClick={holdCurrentSale}
+                disabled={cart.length === 0}
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                <Clock className="w-3.5 h-3.5" /> Sepeti Beklet
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowHeldSales(v => !v)}
+                disabled={heldSales.length === 0}
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer relative"
+              >
+                <Layers className="w-3.5 h-3.5" /> Bekleyenler
+                {heldSales.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-600 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">
+                    {heldSales.length}
+                  </span>
+                )}
+              </button>
+
+              {showHeldSales && heldSales.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-xl shadow-2xl z-20 max-h-64 overflow-y-auto">
+                  {heldSales.map(h => (
+                    <div key={h.id} className="flex items-center justify-between gap-2 p-2.5 border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-gray-800 truncate">{h.label}</p>
+                        <p className="text-[10px] text-gray-400">{new Date(h.heldAt).toLocaleTimeString('tr-TR')} · {h.cart.length} kalem</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => resumeHeldSale(h.id)}
+                        className="text-[10px] font-bold text-white bg-primary hover:bg-secondary px-2 py-1 rounded-lg cursor-pointer shrink-0"
+                      >
+                        Devam Et
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => discardHeldSale(h.id)}
+                        title={pendingDiscardId === h.id ? 'Onaylamak için tekrar tıklayın' : 'Sil'}
+                        className={`p-1 rounded-lg cursor-pointer shrink-0 transition-colors ${pendingDiscardId === h.id ? 'bg-red-500 text-white' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Cart items list */}
@@ -815,7 +991,7 @@ export default function AdminPos() {
                 ) : (
                   <>
                     <CheckCircle className="w-5 h-5" />
-                    Satışı Tamamla & Yazdır
+                    Satışı Tamamla & Yazdır <span className="text-[10px] font-normal opacity-70">(F9)</span>
                   </>
                 )}
               </button>
