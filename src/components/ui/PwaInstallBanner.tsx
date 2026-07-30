@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Download, X, Smartphone } from 'lucide-react';
 
 export default function PwaInstallBanner() {
+  const location = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showBanner, setShowBanner] = useState(false);
 
@@ -35,7 +37,8 @@ export default function PwaInstallBanner() {
     localStorage.setItem('pwa_banner_dismissed', 'true');
   };
 
-  if (!showBanner) return null;
+  // POS kiosk ekranında dikkat dağıtıcı olmasın
+  if (!showBanner || location.pathname.startsWith('/admin/satis-pos')) return null;
 
   return (
     <div className="fixed bottom-5 right-5 z-[9999] max-w-sm w-full bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md animate-in slide-in-from-bottom-5 duration-300">

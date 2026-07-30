@@ -46,7 +46,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       
       {/* Toast Container */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 max-w-sm w-full pointer-events-none px-4">
         {toasts.map((t) => {
           let bgClass = 'bg-white text-gray-800 border-gray-100';
           let Icon = Info;
@@ -69,7 +69,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`flex items-start gap-3 p-4 rounded-xl border shadow-xl transition-all duration-300 pointer-events-auto animate-in slide-in-from-right-5 ${bgClass}`}
+              className={`flex items-start gap-3 p-4 rounded-xl border shadow-xl transition-all duration-300 pointer-events-auto animate-in slide-in-from-bottom-5 w-full ${bgClass}`}
             >
               <Icon className={`w-5 h-5 shrink-0 ${iconColor}`} />
               <div className="flex-1 text-sm font-semibold">{t.message}</div>

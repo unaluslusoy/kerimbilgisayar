@@ -42,14 +42,14 @@
       "name": "POS Kasa Satış",
       "short_name": "POS Satış",
       "description": "Hızlı barkodlu POS perakende satış ekranı",
-      "url": "/admin/pos",
+      "url": "/admin/satis-pos",
       "icons": [{ "src": "/assets/images/favicon.svg", "sizes": "any" }]
     },
     {
       "name": "Yeni Fatura Oluştur",
       "short_name": "Fatura Ekle",
       "description": "Müşteriye fatura oluşturun ve Ödeal link yollayın",
-      "url": "/admin/invoices?action=new",
+      "url": "/admin/faturalar?action=new",
       "icons": [{ "src": "/assets/images/favicon.svg", "sizes": "any" }]
     },
     {

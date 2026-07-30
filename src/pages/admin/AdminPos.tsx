@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Barcode, ShoppingCart, User, Plus, X, Trash2,
   CreditCard, Banknote, Landmark, FileText, CheckCircle, Printer, RefreshCw, ChevronRight, Layers, Eye,
-  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon, Clock, AlertTriangle
+  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon, Clock, AlertTriangle, Maximize2, Minimize2
 } from 'lucide-react';
+import { useFullscreen } from '../../hooks/useFullscreen';
 import { Link } from 'react-router-dom';
 import { mediaUrl } from '../../lib/media';
 import { 
@@ -16,6 +17,7 @@ import { playAddSound, playErrorSound } from '../../lib/sound';
 
 export default function AdminPos() {
   const toast = useToast();
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
   const [activeTab, setActiveTab] = useState<'pos' | 'history'>('pos');
   const [stock, setStock] = useState<any[]>([]);
   const [customersList, setCustomersList] = useState<any[]>([]);
@@ -64,6 +66,7 @@ export default function AdminPos() {
   const detailPrintRef = useRef<HTMLDivElement>(null);
 
   const [settings, setSettings] = useState<any | null>(null);
+  const [now, setNow] = useState(new Date());
 
   const loadData = async () => {
     try {
@@ -90,6 +93,16 @@ export default function AdminPos() {
     loadData();
     // Auto-focus barcode input
     if (barcodeInputRef.current) barcodeInputRef.current.focus();
+    // POS sayfasından çıkıldığında tam ekran modunda kalınmasın
+    return () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
+  // Header'daki canlı tarih/saat göstergesi
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   const handleBarcodeSubmit = (e: React.FormEvent) => {
@@ -481,57 +494,73 @@ export default function AdminPos() {
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col select-none overflow-hidden animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 bg-slate-100 flex flex-col select-none overflow-hidden animate-in fade-in duration-200"
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
       {/* Standalone Application Bar */}
-      <div className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between shadow-md border-b border-slate-950 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-5 py-2.5 flex items-center justify-between shadow-lg border-b border-slate-950/60 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
           {settings?.logoUrl || settings?.siteLogo ? (
-            <div className="bg-white p-1 rounded-xl border border-slate-750 flex items-center justify-center">
-              <img 
-                src={mediaUrl(settings.logoUrl || settings.siteLogo)} 
-                alt="Logo" 
-                className="h-8 max-w-[120px] object-contain" 
+            <div className="bg-white p-1 rounded-xl border border-slate-700 flex items-center justify-center shrink-0">
+              <img
+                src={mediaUrl(settings.logoUrl || settings.siteLogo)}
+                alt="Logo"
+                className="h-7 max-w-[110px] object-contain"
               />
             </div>
           ) : (
-            <div className="p-2 bg-primary/20 rounded-xl text-primary-light border border-primary/30">
+            <div className="p-2 bg-primary/20 rounded-xl text-primary-light border border-primary/30 shrink-0">
               <ShoppingCart className="w-5 h-5 text-white" />
             </div>
           )}
-          <div>
+          <div className="min-w-0">
             <h1 className="text-sm font-black uppercase tracking-wider flex items-center gap-2 text-white">
-              Kerim Bilgisayar <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-mono font-bold">POS v1.4</span>
+              <span className="truncate">Kerim Bilgisayar</span>
+              <span className="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-mono font-bold shrink-0">POS v1.5</span>
             </h1>
             <p className="text-[9px] text-slate-400 font-semibold">Hızlı Satış & Kasa İşlemleri</p>
           </div>
         </div>
 
-        {/* Short-cut Quick Navigation Links */}
-        <div className="hidden lg:flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
-          <Link to="/admin" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-            <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
-          </Link>
-          <Link to="/admin/servis" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-            <Wrench className="w-3.5 h-3.5" /> Servis Kayıtları
-          </Link>
-          <Link to="/admin/stok" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5" /> Stok Yönetimi
-          </Link>
-          <Link to="/admin/musteriler" className="px-3 py-1.5 hover:bg-slate-750 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
-            <Users className="w-3.5 h-3.5" /> Müşteriler
-          </Link>
+        {/* Canlı Tarih / Saat */}
+        <div className="hidden md:flex flex-col items-center px-3 py-1 bg-slate-950/40 rounded-xl border border-slate-700/70 shrink-0">
+          <span className="text-sm font-mono font-black text-white leading-none tabular-nums">
+            {now.toLocaleTimeString('tr-TR')}
+          </span>
+          <span className="text-[9px] text-slate-400 font-semibold leading-none mt-0.5">
+            {now.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', weekday: 'long' })}
+          </span>
         </div>
 
-        {/* Active Tab and Exit Button */}
-        <div className="flex items-center gap-3">
-          <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
-            <button 
+        {/* Short-cut Quick Navigation Links — tam ekranda dikkat dağıtmaması için gizlenir */}
+        {!isFullscreen && (
+          <div className="hidden lg:flex items-center gap-1 bg-slate-950/40 p-1 rounded-xl border border-slate-700/70">
+            <Link to="/admin" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+              <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
+            </Link>
+            <Link to="/admin/servis" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+              <Wrench className="w-3.5 h-3.5" /> Servis Kayıtları
+            </Link>
+            <Link to="/admin/stok" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5" /> Stok Yönetimi
+            </Link>
+            <Link to="/admin/musteriler" className="px-3 py-1.5 hover:bg-slate-700/60 rounded-lg text-[10px] font-bold transition-all text-slate-300 hover:text-white flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" /> Müşteriler
+            </Link>
+          </div>
+        )}
+
+        {/* Active Tab, Fullscreen Toggle & Exit Button */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex bg-slate-950/40 p-1 rounded-xl border border-slate-700/70">
+            <button
               onClick={() => { setActiveTab('pos'); loadData(); }}
               className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${activeTab === 'pos' ? 'bg-primary text-white shadow' : 'text-slate-300 hover:text-white'}`}
             >
               Satış Ekranı
             </button>
-            <button 
+            <button
               onClick={() => { setActiveTab('history'); loadData(); }}
               className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${activeTab === 'history' ? 'bg-primary text-white shadow' : 'text-slate-300 hover:text-white'}`}
             >
@@ -539,9 +568,18 @@ export default function AdminPos() {
             </button>
           </div>
 
-          <Link 
-            to="/admin" 
-            className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-750 text-white rounded-xl text-[10px] font-extrabold transition-all shadow-md shadow-red-900/30 cursor-pointer"
+          <button
+            type="button"
+            onClick={() => toggleFullscreen()}
+            title={isFullscreen ? 'Tam Ekrandan Çık' : 'Tam Ekran'}
+            className="p-2 bg-slate-950/40 hover:bg-slate-700/60 border border-slate-700/70 rounded-xl text-slate-300 hover:text-white transition-all cursor-pointer"
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+
+          <Link
+            to="/admin"
+            className="flex items-center gap-1 px-3 py-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-xl text-[10px] font-extrabold transition-all shadow-md shadow-red-900/30 cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" /> Kapat / Çıkış
           </Link>
@@ -550,117 +588,7 @@ export default function AdminPos() {
 
       {activeTab === 'pos' ? (
         <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
-          {/* LEFT: PRODUCTS LIST & BARCODE SCANNER */}
-          <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-0">
-            {/* Barcode scan box */}
-            <form onSubmit={handleBarcodeSubmit} className="flex gap-3 mb-4 shrink-0">
-              <div className="relative flex-1">
-                <Barcode className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-primary" />
-                <input
-                  ref={barcodeInputRef}
-                  type="text"
-                  placeholder="Barkodu taratın veya manuel girip Enter'a basın... (F2)"
-                  value={barcodeInput}
-                  onChange={e => setBarcodeInput(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none transition-all"
-                />
-              </div>
-              <button 
-                type="submit"
-                className="bg-primary hover:bg-secondary text-white px-5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              >
-                Bul ve Ekle
-              </button>
-            </form>
-
-            {/* Product search box */}
-            <div className="relative mb-2.5 shrink-0">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Ürün adı, SKU veya marka ile ara..."
-                value={productSearch}
-                onChange={e => setProductSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary outline-none"
-              />
-            </div>
-
-            {/* Category filter chips */}
-            {productCategories.length > 0 && (
-              <div className="flex gap-1.5 mb-3 shrink-0 overflow-x-auto pb-1">
-                <button
-                  type="button"
-                  onClick={() => setCategoryFilter('')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${!categoryFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                >
-                  Tümü
-                </button>
-                {productCategories.map(cat => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setCategoryFilter(String(cat.id))}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${categoryFilter === String(cat.id) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                  >
-                    {cat.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Grid of stock items */}
-            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center h-48 gap-2">
-                  <RefreshCw className="w-8 h-8 text-primary animate-spin" />
-                  <span className="text-xs text-gray-500 font-medium">Stoklar yükleniyor...</span>
-                </div>
-              ) : filteredStock.length === 0 ? (
-                <div className="text-center py-20 text-gray-400 text-xs font-semibold">
-                  Satışa uygun ürün bulunamadı.
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2">
-                  {filteredStock.map(item => {
-                    const isLowStock = item.currentStock <= (item.minStockLevel || 0);
-                    return (
-                    <div
-                      key={item.id}
-                      onClick={() => addToCart(item)}
-                      className={`border rounded-lg p-1.5 bg-white flex flex-col justify-between gap-1 cursor-pointer hover:shadow-md active:scale-95 transition-all duration-100 text-left hover:scale-[1.02] ${isLowStock ? 'border-amber-300 hover:border-amber-500' : 'border-gray-200 hover:border-primary'}`}
-                    >
-                      <div className="space-y-1">
-                        <div className="relative aspect-square w-full rounded-md overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
-                          {item.imageUrl ? (
-                            <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <ImageIcon className="w-5 h-5 text-gray-300" />
-                          )}
-                          {isLowStock && (
-                            <span className="absolute top-0.5 right-0.5 bg-amber-500 text-white rounded-full p-0.5" title="Kritik stok">
-                              <AlertTriangle className="w-2.5 h-2.5" />
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="font-bold text-gray-900 text-[10px] line-clamp-2 min-h-[24px] leading-tight">{item.name}</h3>
-                      </div>
-                      <div className="flex justify-between items-center border-t border-gray-100 pt-1">
-                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isLowStock ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {item.currentStock}
-                        </span>
-                        <span className="text-[11px] font-extrabold text-primary">
-                          ₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}
-                        </span>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT: SHOPPING CART & BILLING */}
+          {/* LEFT: SHOPPING CART & BILLING */}
           <div className="w-full lg:w-[420px] bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-0 shrink-0">
             {/* Cart Title */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-3 shrink-0">
@@ -995,6 +923,116 @@ export default function AdminPos() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+
+          {/* RIGHT: PRODUCTS LIST & BARCODE SCANNER */}
+          <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-0">
+            {/* Barcode scan box */}
+            <form onSubmit={handleBarcodeSubmit} className="flex gap-3 mb-4 shrink-0">
+              <div className="relative flex-1">
+                <Barcode className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-primary" />
+                <input
+                  ref={barcodeInputRef}
+                  type="text"
+                  placeholder="Barkodu taratın veya manuel girip Enter'a basın... (F2)"
+                  value={barcodeInput}
+                  onChange={e => setBarcodeInput(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:bg-white focus:ring-2 focus:ring-primary outline-none transition-all"
+                />
+              </div>
+              <button
+                type="submit"
+                className="bg-primary hover:bg-secondary text-white px-5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              >
+                Bul ve Ekle
+              </button>
+            </form>
+
+            {/* Product search box */}
+            <div className="relative mb-2.5 shrink-0">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Ürün adı, SKU veya marka ile ara..."
+                value={productSearch}
+                onChange={e => setProductSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary outline-none"
+              />
+            </div>
+
+            {/* Category filter chips */}
+            {productCategories.length > 0 && (
+              <div className="flex gap-1.5 mb-3 shrink-0 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${!categoryFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  Tümü
+                </button>
+                {productCategories.map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategoryFilter(String(cat.id))}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${categoryFilter === String(cat.id) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Grid of stock items */}
+            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+              {loading ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-2">
+                  <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                  <span className="text-xs text-gray-500 font-medium">Stoklar yükleniyor...</span>
+                </div>
+              ) : filteredStock.length === 0 ? (
+                <div className="text-center py-20 text-gray-400 text-xs font-semibold">
+                  Satışa uygun ürün bulunamadı.
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2">
+                  {filteredStock.map(item => {
+                    const isLowStock = item.currentStock <= (item.minStockLevel || 0);
+                    return (
+                    <div
+                      key={item.id}
+                      onClick={() => addToCart(item)}
+                      className={`border rounded-lg p-1.5 bg-white flex flex-col justify-between gap-1 cursor-pointer hover:shadow-md active:scale-95 transition-all duration-100 text-left hover:scale-[1.02] ${isLowStock ? 'border-amber-300 hover:border-amber-500' : 'border-gray-200 hover:border-primary'}`}
+                    >
+                      <div className="space-y-1">
+                        <div className="relative aspect-square w-full rounded-md overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
+                          {item.imageUrl ? (
+                            <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon className="w-5 h-5 text-gray-300" />
+                          )}
+                          {isLowStock && (
+                            <span className="absolute top-0.5 right-0.5 bg-amber-500 text-white rounded-full p-0.5" title="Kritik stok">
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-bold text-gray-900 text-[10px] line-clamp-2 min-h-[24px] leading-tight">{item.name}</h3>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-gray-100 pt-1">
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isLowStock ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {item.currentStock}
+                        </span>
+                        <span className="text-[11px] font-extrabold text-primary">
+                          ₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}
+                        </span>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
