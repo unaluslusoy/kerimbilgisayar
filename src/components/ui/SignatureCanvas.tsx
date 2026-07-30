@@ -92,9 +92,9 @@ export default function SignatureCanvas({
   };
 
   return (
-    <div className="space-y-2 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+    <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+        <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
           <PenTool className="w-3.5 h-3.5 text-blue-500" />
           {label}
         </label>
@@ -109,7 +109,7 @@ export default function SignatureCanvas({
         )}
       </div>
 
-      <div className="relative rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-white shadow-inner">
+      <div className="relative rounded-lg overflow-hidden border border-slate-300 bg-white shadow-inner">
         <canvas
           ref={canvasRef}
           width={400}

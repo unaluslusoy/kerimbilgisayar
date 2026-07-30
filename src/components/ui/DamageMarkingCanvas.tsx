@@ -69,11 +69,11 @@ export default function DamageMarkingCanvas({
   };
 
   return (
-    <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+    <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-500" />
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+          <span className="text-xs font-semibold text-slate-700">
             Fiziksel Hasar Haritası ({value.length} Nokta)
           </span>
         </div>
@@ -98,8 +98,8 @@ export default function DamageMarkingCanvas({
               onClick={() => setSelectedType(pt.type)}
               className={`px-2.5 py-1 text-xs rounded-lg font-medium transition flex items-center gap-1.5 ${
                 selectedType === pt.type
-                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-sm'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${pt.bg}`} />
@@ -112,41 +112,41 @@ export default function DamageMarkingCanvas({
       {/* Cihaz Vektör Şeması */}
       <div
         onClick={handleCanvasClick}
-        className={`relative w-full max-w-md mx-auto aspect-[4/3] rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 flex items-center justify-center select-none overflow-hidden ${
+        className={`relative w-full max-w-md mx-auto aspect-[4/3] rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center select-none overflow-hidden ${
           !readOnly ? 'cursor-crosshair hover:border-blue-400' : ''
         }`}
       >
         {!isLaptop ? (
           /* Telefon Ön / Arka Vektör Şeması */
-          <svg viewBox="0 0 400 300" className="w-full h-full p-4 text-slate-300 dark:text-slate-700 fill-none stroke-current stroke-2">
+          <svg viewBox="0 0 400 300" className="w-full h-full p-4 text-slate-300 fill-none stroke-current stroke-2">
             {/* Telefon 1: Ön Yüz */}
             <g transform="translate(40, 20)">
-              <rect x="0" y="0" width="130" height="250" rx="20" className="fill-slate-50 dark:fill-slate-900" />
+              <rect x="0" y="0" width="130" height="250" rx="20" className="fill-slate-50" />
               <rect x="8" y="15" width="114" height="220" rx="10" strokeDasharray="3 3" />
               <circle cx="65" cy="8" r="3" className="fill-current" />
               <rect x="50" y="240" width="30" height="4" rx="2" className="fill-current" />
-              <text x="65" y="130" textAnchor="middle" stroke="none" className="fill-slate-400 dark:fill-slate-600 text-xs font-semibold">ÖN EKRAN</text>
+              <text x="65" y="130" textAnchor="middle" stroke="none" className="fill-slate-400 text-xs font-semibold">ÖN EKRAN</text>
             </g>
             {/* Telefon 2: Arka Yüz */}
             <g transform="translate(230, 20)">
-              <rect x="0" y="0" width="130" height="250" rx="20" className="fill-slate-50 dark:fill-slate-900" />
+              <rect x="0" y="0" width="130" height="250" rx="20" className="fill-slate-50" />
               {/* Kamera Adası */}
               <rect x="15" y="15" width="40" height="45" rx="10" />
               <circle cx="35" cy="28" r="8" />
               <circle cx="35" cy="48" r="5" />
-              <text x="65" y="140" textAnchor="middle" stroke="none" className="fill-slate-400 dark:fill-slate-600 text-xs font-semibold">ARKA KASA</text>
+              <text x="65" y="140" textAnchor="middle" stroke="none" className="fill-slate-400 text-xs font-semibold">ARKA KASA</text>
             </g>
           </svg>
         ) : (
           /* Laptop Vektör Şeması */
-          <svg viewBox="0 0 400 300" className="w-full h-full p-4 text-slate-300 dark:text-slate-700 fill-none stroke-current stroke-2">
+          <svg viewBox="0 0 400 300" className="w-full h-full p-4 text-slate-300 fill-none stroke-current stroke-2">
             {/* Ekran */}
-            <rect x="50" y="20" width="300" height="170" rx="10" className="fill-slate-50 dark:fill-slate-900" />
+            <rect x="50" y="20" width="300" height="170" rx="10" className="fill-slate-50" />
             <rect x="65" y="32" width="270" height="146" rx="4" strokeDasharray="3 3" />
             <circle cx="200" cy="26" r="2.5" className="fill-current" />
-            <text x="200" y="110" textAnchor="middle" stroke="none" className="fill-slate-400 dark:fill-slate-600 text-xs font-semibold">LAPTOP EKRAN & KASA</text>
+            <text x="200" y="110" textAnchor="middle" stroke="none" className="fill-slate-400 text-xs font-semibold">LAPTOP EKRAN & KASA</text>
             {/* Alt Klavye Gövdesi */}
-            <polygon points="30,200 370,200 390,260 10,260" className="fill-slate-100 dark:fill-slate-800" />
+            <polygon points="30,200 370,200 390,260 10,260" className="fill-slate-100" />
             <rect x="150" y="245" width="100" height="4" rx="2" className="fill-current" />
             {/* Touchpad */}
             <rect x="165" y="225" width="70" height="28" rx="4" />
@@ -168,7 +168,7 @@ export default function DamageMarkingCanvas({
             >
               <div
                 style={{ backgroundColor: config.color }}
-                className="w-6 h-6 rounded-full text-white font-bold text-[11px] flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-slate-900 transform transition hover:scale-125"
+                className="w-6 h-6 rounded-full text-white font-bold text-[11px] flex items-center justify-center shadow-lg ring-2 ring-white transform transition hover:scale-125"
               >
                 {idx + 1}
               </div>
@@ -193,13 +193,13 @@ export default function DamageMarkingCanvas({
 
       {/* Eklenen İğne Açıklama Listesi */}
       {value.length > 0 && (
-        <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+        <div className="space-y-1.5 pt-2 border-t border-slate-200">
           {value.map((pin, idx) => {
             const config = PIN_TYPES.find(t => t.type === pin.type) || PIN_TYPES[0];
             return (
               <div
                 key={pin.id}
-                className="flex items-center justify-between text-xs p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                className="flex items-center justify-between text-xs p-2 rounded-lg bg-white border border-slate-200"
               >
                 <div className="flex items-center gap-2">
                   <span
@@ -208,7 +208,7 @@ export default function DamageMarkingCanvas({
                   >
                     {idx + 1}
                   </span>
-                  <span className="font-medium text-slate-800 dark:text-slate-200">{config.label}</span>
+                  <span className="font-medium text-slate-800">{config.label}</span>
                   <span className="text-slate-400 text-[10px]">(Konum: %{pin.x}, %{pin.y})</span>
                 </div>
 

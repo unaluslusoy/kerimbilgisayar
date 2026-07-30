@@ -26,7 +26,14 @@ async function handleResponse(res: Response) {
   if (!res.ok) {
     const text = await res.text();
     console.error('API Error:', res.status, text);
-    throw new Error('API Error: ' + text);
+    let message = text;
+    try {
+      const parsed = JSON.parse(text);
+      message = parsed?.error || parsed?.message || text;
+    } catch {
+      // JSON değilse ham metni kullan
+    }
+    throw new Error(message);
   }
   // JSON olmayan yanıtları güvenli işle
   const contentType = res.headers.get('content-type');

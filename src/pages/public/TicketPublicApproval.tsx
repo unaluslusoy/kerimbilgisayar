@@ -81,7 +81,7 @@ export default function TicketPublicApproval() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent" />
       </div>
     );
@@ -89,11 +89,11 @@ export default function TicketPublicApproval() {
 
   if (error || !ticket) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-        <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center space-y-4 shadow-2xl">
+      <div className="min-h-screen bg-gray-50 text-gray-800 flex items-center justify-center p-4">
+        <div className="bg-white border border-gray-200 p-8 rounded-2xl max-w-md w-full text-center space-y-4 shadow-lg">
           <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
-          <h2 className="text-xl font-bold">Servis Kaydı Bulunamadı</h2>
-          <p className="text-slate-400 text-sm">{error || 'Belirtilen servis numarasına ait onay kaydı bulunamadı.'}</p>
+          <h2 className="text-xl font-bold text-gray-900">Servis Kaydı Bulunamadı</h2>
+          <p className="text-gray-500 text-sm">{error || 'Belirtilen servis numarasına ait onay kaydı bulunamadı.'}</p>
         </div>
       </div>
     );
@@ -102,42 +102,42 @@ export default function TicketPublicApproval() {
   const totalCost = Number(ticket.estimatedCost || ticket.cost || 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-10 px-4 font-sans flex justify-center">
+    <div className="min-h-screen bg-gray-50 text-gray-900 py-10 px-4 font-sans flex justify-center">
       <div className="max-w-xl w-full space-y-6">
         {/* Başlık / Marka */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full text-xs font-semibold">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-100 text-blue-700 rounded-full text-xs font-semibold">
             <ShieldCheck className="w-4 h-4" /> Kerim Bilgisayar Teknik Servisi
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Servis Onay Portalı</h1>
-          <p className="text-slate-400 text-xs">Takip No: <span className="font-mono text-white font-bold">{ticket.ticketNumber}</span></p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Servis Onay Portalı</h1>
+          <p className="text-gray-500 text-xs">Takip No: <span className="font-mono text-gray-900 font-bold">{ticket.ticketNumber}</span></p>
         </div>
 
         {/* Cihaz & Müşteri Kartı */}
-        <div className="bg-slate-900/90 backdrop-blur border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div>
-              <div className="text-xs text-slate-400">Cihaz Bilgisi</div>
-              <div className="text-lg font-semibold text-white">{ticket.brand || ''} {ticket.model || ticket.deviceName || 'Cihaz'}</div>
+              <div className="text-xs text-gray-500">Cihaz Bilgisi</div>
+              <div className="text-lg font-semibold text-gray-900">{ticket.brand || ''} {ticket.model || ticket.deviceName || 'Cihaz'}</div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center">
               <Wrench className="w-5 h-5" />
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-medium text-slate-400">Şikayet / Arıza Beyanı</div>
-            <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 text-sm text-slate-200">
+            <div className="text-xs font-medium text-gray-500">Şikayet / Arıza Beyanı</div>
+            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-sm text-gray-800">
               {ticket.description || ticket.subject}
             </div>
           </div>
 
           {ticket.technicianNotes && (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-amber-400 flex items-center gap-1">
+              <div className="text-xs font-medium text-amber-700 flex items-center gap-1">
                 <FileText className="w-3.5 h-3.5" /> Teknisyen Arıza Tespiti & Notu
               </div>
-              <div className="bg-amber-950/20 border border-amber-500/20 p-3 rounded-xl text-sm text-amber-200">
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-sm text-amber-800">
                 {ticket.technicianNotes}
               </div>
             </div>
@@ -146,13 +146,13 @@ export default function TicketPublicApproval() {
 
         {/* Değişecek Parçalar & İşçilik Özeti */}
         {ticket.parts && ticket.parts.length > 0 && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-3 shadow-xl">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Değişecek Parçalar / İşlemler</div>
-            <div className="divide-y divide-slate-800">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-3 shadow-sm">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Değişecek Parçalar / İşlemler</div>
+            <div className="divide-y divide-gray-100">
               {ticket.parts.map((p, i) => (
                 <div key={i} className="py-2.5 flex items-center justify-between text-sm">
-                  <span className="text-slate-200">{p.quantity}x {p.name}</span>
-                  <span className="font-semibold text-white">{Number(p.unitPrice) * p.quantity} ₺</span>
+                  <span className="text-gray-800">{p.quantity}x {p.name}</span>
+                  <span className="font-semibold text-gray-900">{Number(p.unitPrice) * p.quantity} ₺</span>
                 </div>
               ))}
             </div>
@@ -160,28 +160,28 @@ export default function TicketPublicApproval() {
         )}
 
         {/* Fiyat & Onay Aksiyon Kartı */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs text-slate-400">Toplam Tahmini Ücret</div>
-              <div className="text-3xl font-extrabold text-blue-400">{totalCost.toLocaleString('tr-TR')} ₺</div>
+              <div className="text-xs text-gray-500">Toplam Tahmini Ücret</div>
+              <div className="text-3xl font-extrabold text-blue-600">{totalCost.toLocaleString('tr-TR')} ₺</div>
             </div>
-            <div className="text-right text-[11px] text-slate-400">
+            <div className="text-right text-[11px] text-gray-500">
               KDV Dahil Net Fiyat
             </div>
           </div>
 
           {actionDone === 'approved' ? (
-            <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl text-emerald-400 text-center space-y-2">
+            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-700 text-center space-y-2">
               <CheckCircle2 className="w-10 h-10 mx-auto" />
               <div className="font-bold text-base">Teklifi Onayladınız</div>
-              <div className="text-xs text-emerald-300">Teknisyenimiz işlemlere başlamıştır. Teşekkür ederiz.</div>
+              <div className="text-xs text-emerald-600">Teknisyenimiz işlemlere başlamıştır. Teşekkür ederiz.</div>
             </div>
           ) : actionDone === 'rejected' ? (
-            <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl text-rose-400 text-center space-y-2">
+            <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-700 text-center space-y-2">
               <XCircle className="w-10 h-10 mx-auto" />
               <div className="font-bold text-base">Teklif Reddedildi</div>
-              <div className="text-xs text-rose-300">Cihazınız işleme alınmadan iade sürecine kaydırılmıştır.</div>
+              <div className="text-xs text-rose-600">Cihazınız işleme alınmadan iade sürecine kaydırılmıştır.</div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -189,7 +189,7 @@ export default function TicketPublicApproval() {
                 type="button"
                 disabled={submitting}
                 onClick={() => handleDecision(false)}
-                className="py-3.5 px-4 rounded-xl border border-rose-500/40 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 font-semibold text-sm transition flex items-center justify-center gap-2"
+                className="py-3.5 px-4 rounded-xl border border-rose-300 text-rose-600 bg-rose-50 hover:bg-rose-100 font-semibold text-sm transition flex items-center justify-center gap-2"
               >
                 <X className="w-4 h-4" /> Reddet
               </button>
@@ -197,7 +197,7 @@ export default function TicketPublicApproval() {
                 type="button"
                 disabled={submitting}
                 onClick={() => handleDecision(true)}
-                className="py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-teal-500 text-white font-semibold text-sm hover:opacity-90 shadow-lg shadow-blue-500/20 transition flex items-center justify-center gap-2"
+                className="py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-teal-500 text-white font-semibold text-sm hover:opacity-90 shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2"
               >
                 <Check className="w-4 h-4" /> Onayla ve Başlat
               </button>
@@ -205,7 +205,7 @@ export default function TicketPublicApproval() {
           )}
         </div>
 
-        <div className="text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+        <div className="text-center text-xs text-gray-500 flex items-center justify-center gap-2">
           <Phone className="w-3.5 h-3.5" /> Detaylı bilgi için bizi arayabilirsiniz: 0541 422 61 71
         </div>
       </div>

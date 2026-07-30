@@ -1727,20 +1727,22 @@ export default function ServiceManager() {
               
               {/* Modal Header */}
               <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-slate-50 flex-wrap gap-3">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="font-mono text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-xl shadow-sm">
-                    {detailTicket.ticketNumber}
-                  </span>
+                <div className="space-y-1.5">
                   <h2 className="font-black text-gray-900 text-base leading-none">{detailTicket.subject}</h2>
-                  <span className={cn('px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/80 border border-gray-200', PRIORITY_COLORS[detailTicket.priority || 'normal'])}>
-                    ● {PRIORITY_LABELS[detailTicket.priority || 'normal']}
-                  </span>
-                  <span className={cn(
-                    'px-2.5 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1',
-                    detailTicket.assignedName ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-gray-100 text-gray-400 border-gray-200'
-                  )}>
-                    <Users className="w-3 h-3" /> {detailTicket.assignedName || 'Atanmamış'}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-xl shadow-sm">
+                      {detailTicket.ticketNumber}
+                    </span>
+                    <span className={cn('px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/80 border border-gray-200', PRIORITY_COLORS[detailTicket.priority || 'normal'])}>
+                      ● {PRIORITY_LABELS[detailTicket.priority || 'normal']}
+                    </span>
+                    <span className={cn(
+                      'px-2.5 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1',
+                      detailTicket.assignedName ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-gray-100 text-gray-400 border-gray-200'
+                    )}>
+                      <Users className="w-3 h-3" /> {detailTicket.assignedName || 'Atanmamış'}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2.5">
                   {/* Ödeme Grubu */}
