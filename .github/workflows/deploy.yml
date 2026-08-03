@@ -120,9 +120,56 @@ jobs:
             pm2 save
 
             # PM2 ve Node path'lerini bulup crontab @reboot olarak ekleyelim (sudo gerektirmeden otomatik baslatma icin)
+            # NOT: sadece eksikse EKLE, mevcut crontab'i asla toptan degistirme (eski mantik grep eslesince
+            # crontab'i sadece eslesen satira indirip diger tum girdileri -orn. watchdog- siliyordu).
             PM2_BIN=$(which pm2 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.13.1/bin/pm2")
             NODE_BIN_DIR=$(dirname $(which node 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.13.1/bin/node"))
-            (crontab -l 2>/dev/null | grep -F "pm2 resurrect" || (crontab -l 2>/dev/null; echo "@reboot env PATH=\"$NODE_BIN_DIR:\$PATH\" $PM2_BIN resurrect")) | crontab -
+            if ! crontab -l 2>/dev/null | grep -qF "pm2 resurrect"; then
+              (crontab -l 2>/dev/null; echo "@reboot env PATH=\"$NODE_BIN_DIR:\$PATH\" $PM2_BIN resurrect") | crontab -
+            fi
+
+            # Watchdog: SSH oturumu kapaninca sistemin (systemd-logind) kullaniciya ait arka plan
+            # process'lerini oldurmesi gibi durumlarda (lingering kapaliyken gorulen bilinen bir sorun)
+            # siteyi birkac dakika icinde kendiliginden toparlayan bekci script + cron.
+            cat > "$HOME/watchdog.sh" <<'WDEOF'
+            #!/bin/bash
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            export PATH="$HOME/.local/bin:$PATH"
+            cd "${{ secrets.SERVER_PATH }}" || exit 1
+
+            if curl -sf -o /dev/null --max-time 5 "http://127.0.0.1:${PORT:-3000}/api/health"; then
+              exit 0
+            fi
+
+            echo "[$(date -Iseconds)] Health check FAILED, attempting recovery..."
+
+            if ! pm2 pid kerimbilgisayar >/dev/null 2>&1; then
+              echo "[$(date -Iseconds)] pm2 daemon/process missing, running resurrect..."
+              pm2 resurrect >/dev/null 2>&1
+              sleep 5
+            fi
+
+            if ! curl -sf -o /dev/null --max-time 5 "http://127.0.0.1:${PORT:-3000}/api/health"; then
+              echo "[$(date -Iseconds)] Still down, forcing startOrRestart..."
+              pm2 startOrRestart ecosystem.config.cjs --update-env >/dev/null 2>&1
+              sleep 5
+            fi
+
+            if curl -sf -o /dev/null --max-time 5 "http://127.0.0.1:${PORT:-3000}/api/health"; then
+              echo "[$(date -Iseconds)] Recovery SUCCESS"
+            else
+              echo "[$(date -Iseconds)] Recovery FAILED, manual intervention needed"
+            fi
+            WDEOF
+            chmod +x "$HOME/watchdog.sh"
+
+            if ! crontab -l 2>/dev/null | grep -qF "watchdog.sh"; then
+              (crontab -l 2>/dev/null; echo "*/3 * * * * $HOME/watchdog.sh >> $HOME/watchdog.log 2>&1") | crontab -
+            fi
+            if ! crontab -l 2>/dev/null | grep -qF "watchdog.log.tmp"; then
+              (crontab -l 2>/dev/null; echo "0 3 * * * tail -n 500 $HOME/watchdog.log > $HOME/watchdog.log.tmp 2>/dev/null && mv $HOME/watchdog.log.tmp $HOME/watchdog.log") | crontab -
+            fi
 
             for attempt in 1 2 3 4 5; do
               if curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health"; then
