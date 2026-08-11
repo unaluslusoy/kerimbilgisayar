@@ -102,7 +102,8 @@ customersRouter.get('/api/admin/customers', requireAdmin, async (req, res) => {
       .leftJoin(companies, eq(customers.companyId, companies.id))
       .leftJoin(customerSubscriptions, eq(customerSubscriptions.userId, customers.userId))
       .leftJoin(plans, eq(customerSubscriptions.planId, plans.id))
-      .orderBy(desc(customers.createdAt));
+      .orderBy(desc(customers.createdAt))
+      .limit(Math.min(parseInt(req.query.limit as string) || 500, 1000));
     res.json(allCustomers);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

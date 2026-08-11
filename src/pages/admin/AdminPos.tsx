@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useFullscreen } from '../../hooks/useFullscreen';
 import { Link } from 'react-router-dom';
+import { openWhatsApp } from '../../lib/utils';
 import { mediaUrl } from '../../lib/media';
 import { 
   fetchAdminStock, fetchAdminCustomers, createAdminCustomer,
@@ -293,24 +294,18 @@ export default function AdminPos() {
         try {
           const odealRes = await createOdealPaymentLink({
             amount: total,
-            title: 'Kerim Bilgisayar POS Satışı',
-            description: `${cart.length} kalem, ${cart.reduce((s, c) => s + c.quantity, 0)} adet`,
-            customerPhone: selectedCustomer?.phone,
-            customerEmail: selectedCustomer?.email,
+            buyerName: selectedCustomer ? getCustomerDisplayName(selectedCustomer) : undefined,
+            buyerPhone: selectedCustomer?.phone,
+            buyerEmail: selectedCustomer?.email,
+            relatedType: 'sale',
           });
-          if (odealRes.paymentUrl) {
+          const link = odealRes.paymentLink || (odealRes as any).paymentUrl;
+          if (link) {
             if (selectedCustomer?.phone) {
-              const waPhone = selectedCustomer.phone.replace(/\D/g, '').startsWith('0')
-                ? '90' + selectedCustomer.phone.replace(/\D/g, '').substring(1)
-                : selectedCustomer.phone.replace(/\D/g, '').startsWith('90')
-                ? selectedCustomer.phone.replace(/\D/g, '')
-                : '90' + selectedCustomer.phone.replace(/\D/g, '');
-              const waMsg = encodeURIComponent(`Sayın Müşterimiz, ₺${total.toLocaleString('tr-TR')} tutarındaki ödemeniz için Ödeal güvenli ödeme bağlantınız: ${odealRes.paymentUrl}`);
-              window.open(`https://wa.me/${waPhone}?text=${waMsg}`, '_blank');
-            } else {
-              await navigator.clipboard.writeText(odealRes.paymentUrl);
-              toast.success('Ödeal ödeme linki panoya kopyalandı.');
+              openWhatsApp(selectedCustomer.phone, `Sayın Müşterimiz, ₺${total.toLocaleString('tr-TR')} tutarındaki ödemeniz için Ödeal güvenli ödeme bağlantınız: ${link}`);
             }
+            await navigator.clipboard.writeText(link);
+            toast.success('Ödeal ödeme linki panoya kopyalandı:\n' + link);
           }
         } catch (odealErr: any) {
           toast.error('Ödeal linki oluşturulamadı: ' + odealErr.message);

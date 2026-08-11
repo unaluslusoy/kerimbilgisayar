@@ -856,12 +856,86 @@ export async function reverseAdminPayment(paymentId: number) {
 }
 
 // ============================================================
-// ÖDEAL PAYMENT API HELPERS
+// ÖDEAL SANAL POS API HELPERS
 // ============================================================
-export async function createOdealPaymentLink(data: { amount: number | string; title?: string; description?: string; customerPhone?: string; customerEmail?: string; ticketId?: number; invoiceId?: number }) {
-  return adminRequest('/api/payments/odeal/init-link', { method: 'POST', body: JSON.stringify(data) });
+
+export async function getOdealSettings() {
+  return adminRequest('/api/admin/odeal/settings');
 }
 
-export async function initOdeal3DSecurePayment(data: any) {
-  return adminRequest('/api/payments/odeal/init-3d', { method: 'POST', body: JSON.stringify(data) });
+export async function updateOdealSettings(data: Record<string, any>) {
+  return adminRequest('/api/admin/odeal/settings', { method: 'PUT', body: JSON.stringify(data) });
 }
+
+export async function testOdealConnection() {
+  return adminRequest('/api/admin/odeal/test-connection', { method: 'POST' });
+}
+
+export async function createOdealPaymentLink(data: {
+  amount: number | string;
+  installment?: number;
+  buyerName?: string;
+  buyerPhone?: string;
+  buyerEmail?: string;
+  buyerCity?: string;
+  buyerAddress?: string;
+  relatedType?: 'ticket' | 'sale' | 'manual';
+  relatedId?: number;
+  title?: string;
+  description?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  ticketId?: number;
+  invoiceId?: number;
+}) {
+  const payload = {
+    amount: data.amount,
+    installment: data.installment,
+    buyerName: data.buyerName,
+    buyerPhone: data.buyerPhone || data.customerPhone,
+    buyerEmail: data.buyerEmail || data.customerEmail,
+    buyerCity: data.buyerCity,
+    buyerAddress: data.buyerAddress,
+    relatedType: data.relatedType || (data.ticketId ? 'ticket' : 'manual'),
+    relatedId: data.relatedId || data.ticketId || data.invoiceId,
+  };
+  return adminRequest('/api/admin/odeal/pay-link', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function checkOdealPaymentStatus(id: number) {
+  return adminRequest(`/api/admin/odeal/status/${id}`);
+}
+
+export async function cancelOdealPayment(id: number) {
+  return adminRequest(`/api/admin/odeal/cancel/${id}`, { method: 'POST' });
+}
+
+export async function refundOdealPayment(id: number, amount: number, reason: string) {
+  return adminRequest(`/api/admin/odeal/refund/${id}`, { method: 'POST', body: JSON.stringify({ amount, reason }) });
+}
+
+export async function fetchOdealPayments(filters?: { status?: string; relatedType?: string; relatedId?: number }) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.relatedType) params.set('relatedType', filters.relatedType);
+  if (filters?.relatedId) params.set('relatedId', String(filters.relatedId));
+  const q = params.toString() ? `?${params.toString()}` : '';
+  return adminRequest(`/api/admin/odeal/payments${q}`);
+}
+
+export async function fetchOdealPaymentDetail(id: number) {
+  return adminRequest(`/api/admin/odeal/payments/${id}`);
+}
+
+// ============================================================
+// DÖVİZ KURU API HELPERS
+// ============================================================
+
+export async function syncExchangeRates() {
+  return adminRequest('/api/admin/exchange-rates/sync', { method: 'POST' });
+}
+
+export async function getExchangeRates() {
+  return adminRequest('/api/admin/exchange-rates');
+}
+

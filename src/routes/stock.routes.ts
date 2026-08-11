@@ -591,3 +591,53 @@ stockRouter.delete('/api/admin/stock/channel-mappings/:id', requireAdmin, async 
     res.status(500).json({ error: e.message });
   }
 });
+
+// ─── Depo Transferi ve Stok Hareketleri ─────────────────────────────────────
+
+stockRouter.get('/api/admin/stock/movements', requireAdmin, async (_req, res) => {
+  try {
+    const rows = await db.select({
+      id: stockMovements.id,
+      stockItemId: stockMovements.stockItemId,
+      stockItemName: stockItems.name,
+      quantity: stockMovements.quantity,
+      type: stockMovements.type,
+      reason: stockMovements.reason,
+      createdAt: stockMovements.createdAt,
+    })
+    .from(stockMovements)
+    .leftJoin(stockItems, eq(stockMovements.stockItemId, stockItems.id))
+    .orderBy(desc(stockMovements.createdAt))
+    .limit(100);
+
+    res.json(rows);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.post('/api/admin/stock/transfer', requireAdmin, async (req, res) => {
+  try {
+    const { stockItemId, fromWarehouse, toWarehouse, quantity, reason } = req.body;
+    if (!stockItemId || !quantity || parseInt(quantity) <= 0) {
+      return res.status(400).json({ error: 'Geçersiz ürün veya miktar' });
+    }
+
+    const adminUser = (req as any).adminUser;
+    const qty = parseInt(quantity);
+
+    await db.insert(stockMovements).values({
+      tenantId: 1,
+      stockItemId: parseInt(stockItemId),
+      quantity: qty,
+      type: 'transfer',
+      reason: `${fromWarehouse} -> ${toWarehouse}: ${reason || 'Depo Transferi'}`,
+      createdById: adminUser?.userId || null,
+    });
+
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+

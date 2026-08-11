@@ -51,6 +51,7 @@ const AdminExpenses = lazy(() => import('./pages/admin/AdminExpenses'));
 const AdminKasa = lazy(() => import('./pages/admin/AdminKasa'));
 const AdminDealers = lazy(() => import('./pages/admin/AdminDealers'));
 const AdminReceiptBuilder = lazy(() => import('./pages/admin/AdminReceiptBuilder'));
+const AdminWarehouseTransfer = lazy(() => import('./pages/admin/stock/AdminWarehouseTransfer'));
 const DynamicPage = lazy(() => import('./pages/public/DynamicPage'));
 const LegalPage = lazy(() => import('./pages/public/LegalPage'));
 const About = lazy(() => import('./pages/public/About'));
@@ -87,6 +88,7 @@ const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
 const AdminInvoices = lazy(() => import('./pages/admin/AdminInvoices'));
 const AdminContracts = lazy(() => import('./pages/admin/AdminContracts'));
 const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
+const AdminOdealSettings = lazy(() => import('./pages/admin/AdminOdealSettings'));
 
 
 function AppContent() {
@@ -190,6 +192,7 @@ function AppContent() {
             <Route path="musteriler" element={<AdminCustomers />} />
             <Route path="abonelik-paketleri" element={<AdminSubscriptionPlans />} />
             <Route path="stok" element={<AdminStock />} />
+            <Route path="stok-transfer" element={<AdminWarehouseTransfer />} />
             <Route path="satis-pos" element={<AdminPos />} />
             <Route path="bayiler" element={<AdminDealers />} />
             <Route path="sablon-tasarimci" element={<AdminReceiptBuilder />} />
@@ -227,6 +230,7 @@ function AppContent() {
             <Route path="faturalar" element={<AdminInvoices />} />
             <Route path="sozlesmeler" element={<AdminContracts />} />
             <Route path="raporlar" element={<AdminReports />} />
+            <Route path="odeal" element={<AdminOdealSettings />} />
             
             {/* Google Business Routes */}
             <Route path="google" element={<AdminGoogleDashboard />} />

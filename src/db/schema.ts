@@ -1164,5 +1164,78 @@ export const cashRegisterClosures = mysqlTable('cash_register_closures', {
   closureDateIdx: uniqueIndex('idx_cash_closures_date').on(t.tenantId, t.closureDate),
 }));
 
+// ============================================================
+// ÖDEAL SANAL POS ENTEGRASYONU
+// ============================================================
 
+// Her Ödeal ödeme işleminin yerel kaydı
+export const odealPayments = mysqlTable('odeal_payments', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  externalId: varchar('external_id', { length: 128 }).notNull().unique(), // bizim benzersiz sipariş ID'miz
+  odealTransactionId: varchar('odeal_transaction_id', { length: 128 }), // Ödeal'in döndürdüğü ID
+  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  currency: varchar('currency', { length: 10 }).default('TRY'),
+  installment: int('installment').default(1),
+  buyerName: varchar('buyer_name', { length: 255 }),
+  buyerPhone: varchar('buyer_phone', { length: 30 }),
+  buyerEmail: varchar('buyer_email', { length: 255 }),
+  buyerCity: varchar('buyer_city', { length: 100 }),
+  buyerAddress: text('buyer_address'),
+  paymentLink: varchar('payment_link', { length: 500 }), // Pay by Link URL
+  status: mysqlEnum('status', ['created', 'pending', 'processing', 'succeeded', 'failed', 'cancelled', 'unknown']).default('created'),
+  refundStatus: mysqlEnum('refund_status', ['none', 'partial', 'full']).default('none'),
+  totalRefunded: decimal('total_refunded', { precision: 12, scale: 2 }).default('0.00'),
+  relatedType: mysqlEnum('related_type', ['ticket', 'sale', 'manual']).default('manual'), // ne için ödeme
+  relatedId: int('related_id'), // ilişkili ticket veya sale ID'si
+  providerResponse: json('provider_response'), // Ödeal'den gelen ham yanıt
+  returnUrl: varchar('return_url', { length: 500 }),
+  callbackReceivedAt: timestamp('callback_received_at'),
+  attemptCount: int('attempt_count').default(0),
+  createdByUserId: int('created_by_user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+}, (t) => ({
+  externalIdIdx: uniqueIndex('idx_odeal_payments_external_id').on(t.externalId),
+  statusIdx: index('idx_odeal_payments_status').on(t.status),
+  relatedIdx: index('idx_odeal_payments_related').on(t.relatedType, t.relatedId),
+}));
+
+// Ödeal iade kayıtları
+export const odealRefunds = mysqlTable('odeal_refunds', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  odealPaymentId: int('odeal_payment_id').references(() => odealPayments.id).notNull(),
+  externalRefundId: varchar('external_refund_id', { length: 128 }).notNull(),
+  providerRefundId: varchar('provider_refund_id', { length: 128 }),
+  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  reason: varchar('reason', { length: 512 }),
+  status: mysqlEnum('status', ['pending', 'succeeded', 'failed']).default('pending'),
+  providerResponse: json('provider_response'),
+  createdByUserId: int('created_by_user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+}, (t) => ({
+  paymentIdx: index('idx_odeal_refunds_payment').on(t.odealPaymentId),
+  externalRefundIdx: uniqueIndex('idx_odeal_refunds_external').on(t.odealPaymentId, t.externalRefundId),
+}));
+
+// Ödeal webhook/callback inbox — idempotent callback işleme
+export const odealWebhookInbox = mysqlTable('odeal_webhook_inbox', {
+  id: int('id').autoincrement().primaryKey(),
+  provider: varchar('provider', { length: 32 }).notNull().default('ODEAL'),
+  eventId: varchar('event_id', { length: 128 }),
+  eventType: varchar('event_type', { length: 64 }),
+  externalId: varchar('external_id', { length: 128 }),
+  payloadHash: varchar('payload_hash', { length: 64 }).notNull(),
+  rawPayload: json('raw_payload'),
+  signatureValid: boolean('signature_valid').default(true),
+  processingState: mysqlEnum('processing_state', ['received', 'processing', 'processed', 'failed']).default('received'),
+  receivedAt: timestamp('received_at').defaultNow(),
+  processedAt: timestamp('processed_at'),
+}, (t) => ({
+  eventIdIdx: index('idx_odeal_webhook_event').on(t.eventId),
+  payloadHashIdx: index('idx_odeal_webhook_hash').on(t.payloadHash),
+  externalIdIdx: index('idx_odeal_webhook_external').on(t.externalId),
+}));
 

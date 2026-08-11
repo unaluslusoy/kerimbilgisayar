@@ -124,6 +124,15 @@ async function startServer() {
   setTimeout(() => { checkPickupReminders().catch(console.error); }, 60_000).unref();
   setInterval(() => { checkPickupReminders().catch(console.error); }, 6 * 60 * 60 * 1000).unref();
 
+  // Ödeal Recovery Job: Belirsiz durumdaki ödemeleri 2 dk'da bir sorgula
+  const { runRecoveryJob } = await import('./src/server/odeal.service');
+  setInterval(() => { runRecoveryJob().catch(err => console.error('[Ödeal Recovery] Hata:', err.message)); }, 2 * 60 * 1000).unref();
+
+  // TCMB Günlük Kur Senkronizasyonu: Boot'ta ve her 6 saatte bir
+  const { fetchTcmbRates } = await import('./src/server/exchangeRate.service');
+  setTimeout(() => { fetchTcmbRates().catch(err => console.error('[TCMB Rates] Hata:', err.message)); }, 30_000).unref();
+  setInterval(() => { fetchTcmbRates().catch(err => console.error('[TCMB Rates] Hata:', err.message)); }, 6 * 60 * 60 * 1000).unref();
+
   app.use(express.json({ limit: '2mb' }));
 
   // ─── HEALTH ENDPOINTS

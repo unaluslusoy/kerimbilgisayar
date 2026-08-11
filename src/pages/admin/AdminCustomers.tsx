@@ -33,6 +33,7 @@ import {
   FileSignature,
   Award,
 } from 'lucide-react';
+import { openWhatsApp, formatWaPhone } from '../../lib/utils';
 import {
   assignCustomerSubscription,
   createAdminCustomer,
@@ -206,14 +207,20 @@ export default function AdminCustomers() {
     try {
       const res = await createOdealPaymentLink({
         amount: bal,
-        description: `Cari Borç Ödemesi - ${customer.companyName || `${customer.firstName} ${customer.lastName}`}`,
-        customerPhone: customer.phone,
-        customerEmail: customer.email,
+        buyerName: customer.companyName || `${customer.firstName || ''} ${customer.lastName || ''}`.trim(),
+        buyerPhone: customer.phone,
+        buyerEmail: customer.email,
+        relatedType: 'manual',
       });
-      if (res?.paymentUrl) {
-        window.prompt('Kredi Kartı Tahsilat Bağlantısı Oluşturuldu:', res.paymentUrl);
+      const url = res.paymentLink || (res as any).paymentUrl;
+      if (url) {
+        if (customer.phone) {
+          openWhatsApp(customer.phone, `Sayın Müşterimiz, ₺${bal.toLocaleString('tr-TR')} tutarındaki cari bakiye borcunuz için Ödeal ile kredi kartıyla güvenli ödeme bağlantınız: ${url}`);
+        }
+        navigator.clipboard.writeText(url);
+        alert(`Ödeal Ödeme Linki (₺${bal.toLocaleString('tr-TR')}) panoya kopyalandı:\n${url}`);
       } else {
-        alert('Ödeme linki oluşturulamadı.');
+        alert('Ödeal ödeme linki alınamadı.');
       }
     } catch (e: any) {
       alert('Ödeme linki hatası: ' + e.message);
@@ -1126,13 +1133,7 @@ export default function AdminCustomers() {
                   {/* Action bar: WhatsApp Reminder */}
                   {statementCustomer.phone && (
                     <a
-                      href={`https://wa.me/${
-                        statementCustomer.phone.replace(/\D/g, '').startsWith('0')
-                          ? '90' + statementCustomer.phone.replace(/\D/g, '').substring(1)
-                          : statementCustomer.phone.replace(/\D/g, '').startsWith('90')
-                          ? statementCustomer.phone.replace(/\D/g, '')
-                          : '90' + statementCustomer.phone.replace(/\D/g, '')
-                      }?text=${encodeURIComponent(
+                      href={`https://wa.me/${formatWaPhone(statementCustomer.phone)}?text=${encodeURIComponent(
                         `Sayın ${statementCustomer.companyName || statementCustomer.firstName}, güncel cari hesap bakiyeniz: ${Number(
                           ledgerData?.summary?.balance || statementCustomer.balance || 0
                         ).toLocaleString('tr-TR')} TL'dir.`

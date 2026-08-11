@@ -183,6 +183,11 @@ export const markLatestApprovalRequest = async (
 };
 
 // ─── MULTER UPLOAD ───────────────────────────────────────────────────────────
+const ALLOWED_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt', '.csv', '.zip', '.rar'
+]);
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     const uploadPath = path.join(rootDir, 'uploads');
@@ -190,11 +195,23 @@ const storage = multer.diskStorage({
     cb(null, uploadPath);
   },
   filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeExt = ALLOWED_EXTENSIONS.has(ext) ? ext : '.bin';
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    cb(null, uniqueSuffix + safeExt);
   },
 });
-export const upload = multer({ storage });
+export const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB Max
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error(`Güvenlik nedeniyle '${ext}' uzantılı dosyaların yüklenmesine izin verilmiyor.`));
+    }
+    cb(null, true);
+  },
+});
 
 // ─── MOVE USER FILE ──────────────────────────────────────────────────────────
 export const moveUserFile = (fileUrl: string, userId: number): string => {

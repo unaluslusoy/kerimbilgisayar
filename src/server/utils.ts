@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import dns from 'dns';
 import sharp from 'sharp';
 import { db } from '../db/index';
 import { mediaLibrary } from '../db/schema';
@@ -41,7 +42,24 @@ export function generateSlug(text: string): string {
     .replace(/-+$/, '');
 }
 
-export function assertSafeRemoteUrl(rawUrl: string): URL {
+export function isPrivateIp(ip: string): boolean {
+  if (ip === '::1' || ip === '0.0.0.0' || ip === 'localhost') return true;
+  const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [parseInt(m[1], 10), parseInt(m[2], 10)];
+    return (
+      a === 10 ||
+      a === 127 ||
+      a === 0 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+    );
+  }
+  return false;
+}
+
+export async function assertSafeRemoteUrl(rawUrl: string): Promise<URL> {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -53,18 +71,20 @@ export function assertSafeRemoteUrl(rawUrl: string): URL {
   }
   const host = parsed.hostname.toLowerCase();
   const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'metadata.google.internal'];
-  if (blockedHosts.includes(host)) throw new Error('Bu adrese erişim engellendi');
-  
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const [a, b] = [parseInt(m[1]), parseInt(m[2])];
-    const isPrivate =
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168);
-    if (isPrivate) throw new Error('Özel ağ adreslerine erişim engellendi');
+  if (blockedHosts.includes(host) || isPrivateIp(host)) {
+    throw new Error('Bu adrese erişim engellendi');
+  }
+
+  try {
+    const lookupResult = await dns.promises.lookup(host, { all: true });
+    for (const entry of lookupResult) {
+      if (isPrivateIp(entry.address)) {
+        throw new Error('Özel ağ adreslerine erişim engellendi');
+      }
+    }
+  } catch (err: any) {
+    if (err.message?.includes('Özel ağ') || err.message?.includes('erişim engellendi')) throw err;
+    throw new Error('Alan adı DNS ile çözümlenemedi');
   }
   return parsed;
 }
@@ -72,7 +92,7 @@ export function assertSafeRemoteUrl(rawUrl: string): URL {
 export async function saveRemoteImageToMedia(sourceUrl: string, uploaderId?: number | null): Promise<string> {
   if (!/^https?:\/\//i.test(sourceUrl)) return sourceUrl;
 
-  assertSafeRemoteUrl(sourceUrl);
+  await assertSafeRemoteUrl(sourceUrl);
 
   const existing = await db.select().from(mediaLibrary).where(eq(mediaLibrary.description, `remote:${sourceUrl}`)).limit(1);
   if (existing.length > 0) return existing[0].fileUrl;

@@ -32,6 +32,10 @@ authRouter.post('/api/admin/login', loginLimiter, async (req, res) => {
 
     const u = adminUser[0];
 
+    if (!u.isActive) {
+      return res.status(403).json({ error: 'Hesabınız pasif durumdadır. Lütfen yönetici ile iletişime geçin.' });
+    }
+
     if (!['superadmin', 'tenant_admin', 'staff', 'technician'].includes(u.roleType || '')) {
       return res.status(403).json({ error: 'Bu hesabın panel erişimi yok' });
     }
@@ -80,7 +84,6 @@ authRouter.get('/api/admin/system/health', requireAdmin, async (req, res) => {
       db: 'up',
       pid: process.pid,
       node: process.version,
-      logs: logBuffer,
     });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

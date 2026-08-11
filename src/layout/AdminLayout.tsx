@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Wrench, Users, Box, MessageSquare, Settings, LogOut,
-  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid, Shield, Bell, Truck, DollarSign
+  Menu, BookOpen, Tag, HelpCircle, Inbox, ExternalLink, UserCircle, Image as ImageIcon, MessageSquareQuote, Palette, Puzzle, Key, Webhook, Layout, Megaphone, Store, BarChart3, LayoutGrid, Shield, Bell, Truck, DollarSign, CreditCard
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState, useEffect, useRef } from 'react';
@@ -112,10 +112,12 @@ export default function AdminLayout() {
           icon: DollarSign,
           subItems: [
             { name: 'POS Hızlı Satış', path: '/admin/satis-pos' },
+            { name: 'Ödeal Sanal POS', path: '/admin/odeal' },
             { name: 'Kasa', path: '/admin/kasa' },
             { name: 'Faturalar', path: '/admin/faturalar' },
             { name: 'Gider & Masraflar', path: '/admin/masraflar' },
             { name: 'Stok & Depo', path: '/admin/stok' },
+            { name: 'Depo Transferi', path: '/admin/stok-transfer' },
             { name: 'Bakım Sözleşmeleri', path: '/admin/sozlesmeler' }
           ]
         }
@@ -189,6 +191,7 @@ export default function AdminLayout() {
           icon: Settings,
           subItems: [
             { name: 'Genel Ayarlar', path: '/admin/ayarlar' },
+            { name: 'Ödeal Entegrasyonu', path: '/admin/odeal' },
             { name: 'Şablon Tasarımcısı', path: '/admin/sablon-tasarimci' },
             { name: 'Dil Yönetimi', path: '/admin/diller' },
             { name: 'Eklentiler', path: '/admin/eklentiler' },

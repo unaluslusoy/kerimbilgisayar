@@ -22,6 +22,8 @@ import { webhooksRouter } from './webhooks.routes';
 import { invoicesRouter } from './invoices.routes';
 import { reportsRouter } from './reports.routes';
 import { kasaRouter } from './kasa.routes';
+import { odealRouter } from './odeal.routes';
+import { ratesRouter } from './rates.routes';
 
 export const routes = express.Router();
 
@@ -48,3 +50,5 @@ routes.use(webhooksRouter);
 routes.use(invoicesRouter);
 routes.use(reportsRouter);
 routes.use(kasaRouter);
+routes.use(odealRouter);
+routes.use(ratesRouter);

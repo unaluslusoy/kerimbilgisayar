@@ -14,7 +14,8 @@ export const mediaRouter = express.Router();
 // ADMIN PAGES
 mediaRouter.get('/api/admin/pages', requireAdmin, async (req, res) => {
   try {
-    const allPages = await db.select().from(pages).orderBy(desc(pages.createdAt));
+    const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
+    const allPages = await db.select().from(pages).orderBy(desc(pages.createdAt)).limit(limit);
     res.json(allPages);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -122,7 +123,8 @@ mediaRouter.get('/api/admin/media', requireAdmin, async (req, res) => {
        }
     }
     
-    const mediaFiles = await query.orderBy(desc(mediaLibrary.createdAt));
+    const limit = Math.min(parseInt(req.query.limit as string) || 500, 1000);
+    const mediaFiles = await query.orderBy(desc(mediaLibrary.createdAt)).limit(limit);
     res.json(mediaFiles);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

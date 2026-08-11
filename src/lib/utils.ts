@@ -26,3 +26,27 @@ export function generateSlug(text: string): string {
     .replace(/-+$/, '');
 }
 
+export function formatWaPhone(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('0')) {
+    return '90' + digits.substring(1);
+  }
+  if (digits.startsWith('90')) {
+    return digits;
+  }
+  return '90' + digits;
+}
+
+export function openWhatsApp(phone: string, message: string): void {
+  const formatted = formatWaPhone(phone);
+  if (!formatted) return;
+  const url = `https://wa.me/${formatted}?text=${encodeURIComponent(message)}`;
+  window.open(url, '_blank');
+}
+
+export function formatCurrency(val: number | string): string {
+  const num = typeof val === 'string' ? parseFloat(val) || 0 : val || 0;
+  return num.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+}
+

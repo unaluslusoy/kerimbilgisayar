@@ -339,8 +339,6 @@ publicRouter.get(['/api/tickets/:ticketNumber', '/api/public/ticket/query'], tic
       deviceType,
       serialNumber,
       imei: deviceInfo?.imei || '',
-      patternLock: decryptField(deviceInfo?.patternLock) || '',
-      pinPassword: decryptField(deviceInfo?.pinPassword) || '',
       issueDescription,
       accessories,
       customerName: maskName(rawName),
@@ -431,6 +429,11 @@ publicRouter.post('/api/tickets/:ticketNumber/approve', ticketActionLimiter, asy
     if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
     const ticket = rows[0];
 
+    const token = (req.query.token as string || req.body?.token as string || '').trim();
+    if (!token || !ticket.publicApprovalToken || ticket.publicApprovalToken !== token) {
+      return res.status(403).json({ error: 'Geçersiz veya eksik onay tokenı' });
+    }
+
     if (TICKET_TERMINAL_STATUSES.includes(ticket.status)) {
       return res.status(400).json({ error: 'Bu servis kaydı tamamlanmış veya kapatılmış durumdadır.' });
     }
@@ -479,6 +482,11 @@ publicRouter.post('/api/tickets/:ticketNumber/decline', ticketActionLimiter, asy
 
     if (rows.length === 0) return res.status(404).json({ error: 'Servis kaydı bulunamadı' });
     const ticket = rows[0];
+
+    const token = (req.query.token as string || req.body?.token as string || '').trim();
+    if (!token || !ticket.publicApprovalToken || ticket.publicApprovalToken !== token) {
+      return res.status(403).json({ error: 'Geçersiz veya eksik onay tokenı' });
+    }
 
     if (TICKET_TERMINAL_STATUSES.includes(ticket.status)) {
       return res.status(400).json({ error: 'Bu servis kaydı halihazırda sonuçlandırılmıştır.' });

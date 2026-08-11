@@ -1,7 +1,7 @@
 import { Search, Plus, X, Printer, MessageSquare, Send, ChevronRight, Calendar, DollarSign, Phone, Mail, Clock, AlertCircle, AlertTriangle, Image as ImageIcon, Trash2, Truck, Camera, LayoutList, Columns, Building2, Shield, Users, Wrench, FileText, CreditCard, Wallet, RotateCcw, History, Settings2, ClipboardCheck, CheckCircle2, XCircle, MinusCircle, Save } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { cn } from '../../lib/utils';
+import { cn, openWhatsApp, formatWaPhone } from '../../lib/utils';
 import { fetchAdminTickets, createAdminTicket, updateAdminTicket, deleteAdminTicket, createTicketMessage, fetchTicketAttachments, createTicketAttachment, deleteTicketAttachment, triggerTicketWhatsApp, fetchAdminShipments, createAdminShipment, adminRequest, fetchTicketParts, addTicketPart, deleteTicketPart, fetchAdminUsers, fetchAdminStock, searchAdminCustomers, createInvoiceFromTicket, createOdealPaymentLink, fetchAdminDeviceTypes, fetchTicketPayments, createAdminPayment, reverseAdminPayment, fetchTicketActivity, fetchTicketExpertise, saveTicketExpertise, fetchTicketApprovalRequests, recordManualApproval, sendApprovalRequest, fetchTicketSupplyRequests, createSupplyRequest, markSupplyRequestArrived } from '../../lib/api';
 import MediaPicker from '../../components/ui/MediaPicker';
 import RichTextEditor from '../../components/ui/RichTextEditor';
@@ -168,6 +168,12 @@ export default function ServiceManager() {
   const [manualPartBrand, setManualPartBrand] = useState('');
   const [laborCostValue, setLaborCostValue] = useState('');
   const [isSavingLabor, setIsSavingLabor] = useState(false);
+
+  // Toplu İşlemler State
+  const [selectedTicketIds, setSelectedTicketIds] = useState<number[]>([]);
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkTechnician, setBulkTechnician] = useState('');
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [activityFilter, setActivityFilter] = useState<'all' | 'note' | 'status' | 'audit'>('all');
@@ -606,6 +612,31 @@ export default function ServiceManager() {
     }
   };
 
+  const handleBulkUpdate = async () => {
+    if (selectedTicketIds.length === 0) return;
+    if (!bulkStatus && !bulkTechnician) return;
+    setIsBulkUpdating(true);
+    try {
+      const updateData: any = {};
+      if (bulkStatus) updateData.status = bulkStatus;
+      if (bulkTechnician) updateData.assignedTo = parseInt(bulkTechnician);
+
+      await Promise.all(
+        selectedTicketIds.map(id => updateAdminTicket(id, updateData))
+      );
+
+      showAlert(`${selectedTicketIds.length} servis kaydı topluca güncellendi.`, 'success');
+      setSelectedTicketIds([]);
+      setBulkStatus('');
+      setBulkTechnician('');
+      await loadTickets();
+    } catch (e: any) {
+      showAlert('Toplu güncelleme hatası: ' + e.message, 'error');
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
 
   const handleCostSave = async () => {
     if (!detailTicket) return;
@@ -806,28 +837,35 @@ export default function ServiceManager() {
 
   const handleSendOdealPaymentLink = async () => {
     if (!detailTicket) return;
-    const amount = detailTicket.cost || '0';
-    if (parseFloat(amount) <= 0) {
-      showAlert('Lütfen önce servis tutarını belirleyin!', 'warning');
-      return;
-    }
+    const grandTotal = (parseFloat(detailTicket.laborCost) || 0) + ticketParts.reduce((sum: any, p: any) => sum + parseFloat(p.totalPrice || 0), 0);
+    const collected = ticketPayments.filter((p: any) => p.status === 'basarili').reduce((s: any, p: any) => s + parseFloat(p.amount || 0), 0);
+    const refunded = ticketPayments.filter((p: any) => p.status === 'iade').reduce((s: any, p: any) => s + parseFloat(p.amount || 0), 0);
+    const balance = grandTotal - collected + refunded;
+    const defaultAmount = balance > 0 ? balance.toFixed(2) : (parseFloat(detailTicket.cost) || grandTotal || 0).toFixed(2);
+
+    const inputAmt = prompt(`Servis #${detailTicket.ticketNumber} için Ödeal Ödeme Linki Tutarı (TL):`, defaultAmount);
+    if (!inputAmt || parseFloat(inputAmt) <= 0) return;
+
     try {
       const res = await createOdealPaymentLink({
-        amount,
-        title: `Servis #${detailTicket.ticketNumber} Ödemesi`,
-        customerPhone: detailTicket.customerPhone,
-        customerEmail: detailTicket.customerEmail,
-        ticketId: detailTicket.id,
+        amount: parseFloat(inputAmt),
+        buyerName: detailTicket.customerName || `${detailTicket.userFirstName || ''} ${detailTicket.userLastName || ''}`.trim() || undefined,
+        buyerPhone: detailTicket.customerPhone || detailTicket.userPhone || undefined,
+        buyerEmail: detailTicket.customerEmail || detailTicket.userEmail || undefined,
+        relatedType: 'ticket',
+        relatedId: detailTicket.id,
       });
-      if (res.paymentUrl) {
-        if (detailTicket.customerPhone) {
-          const waPhone = detailTicket.customerPhone.replace(/\D/g, '').startsWith('0') ? '90' + detailTicket.customerPhone.replace(/\D/g, '').substring(1) : detailTicket.customerPhone.replace(/\D/g, '').startsWith('90') ? detailTicket.customerPhone.replace(/\D/g, '') : '90' + detailTicket.customerPhone.replace(/\D/g, '');
-          const waMsg = encodeURIComponent(`Sayın Müşterimiz, ${detailTicket.ticketNumber} servis kaydınız için Ödeal ile kredi kartıyla güvenli ödeme bağlantınız: ${res.paymentUrl}`);
-          window.open(`https://wa.me/${waPhone}?text=${waMsg}`, '_blank');
-        } else {
-          navigator.clipboard.writeText(res.paymentUrl);
-          showAlert('Ödeal Ödeme Linki panoya kopyalandı:\n' + res.paymentUrl, 'success');
+
+      const url = res.paymentLink || (res as any).paymentUrl;
+      if (url) {
+        const phone = detailTicket.customerPhone || detailTicket.userPhone;
+        if (phone) {
+          openWhatsApp(phone, `Sayın Müşterimiz, ${detailTicket.ticketNumber} numaralı servis kaydınız için Ödeal ile kredi kartıyla güvenli ödeme bağlantınız: ${url}`);
         }
+        navigator.clipboard.writeText(url);
+        showAlert(`Ödeal Ödeme Linki (₺${inputAmt}) panoya kopyalandı:\n${url}`, 'success');
+      } else {
+        showAlert('Ödeal yanıtında ödeme linki alınamadı.', 'error');
       }
     } catch (e: any) {
       showAlert('Ödeal linki oluşturulamadı: ' + e.message, 'error');
@@ -1544,13 +1582,71 @@ export default function ServiceManager() {
               })}
             </div>
           ) : (
-            /* LİSTE GÖRÜNÜMÜ — UZMAN DATATABLE TASARIMI */
             <div className="space-y-4">
+              {/* LİSTE GÖRÜNÜMÜ — UZMAN DATATABLE TASARIMI */}
+              {selectedTicketIds.length > 0 && (
+                <div className="bg-slate-900 text-white p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>{selectedTicketIds.length} servis kaydı seçildi</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={bulkStatus}
+                      onChange={e => setBulkStatus(e.target.value)}
+                      className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="">-- Durum Güncelle --</option>
+                      {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={bulkTechnician}
+                      onChange={e => setBulkTechnician(e.target.value)}
+                      className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="">-- Personel Ata --</option>
+                      {staffUsers.map(u => (
+                        <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleBulkUpdate}
+                      disabled={isBulkUpdating || (!bulkStatus && !bulkTechnician)}
+                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg disabled:opacity-50 transition-colors shadow-sm"
+                    >
+                      {isBulkUpdating ? 'Uygulanıyor...' : 'Toplu Uygula'}
+                    </button>
+                    <button
+                      onClick={() => setSelectedTicketIds([])}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg"
+                    >
+                      Vazgeç
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        <th className="py-3.5 px-3 text-center w-10">
+                          <input
+                            type="checkbox"
+                            checked={paginatedFiltered.length > 0 && paginatedFiltered.every(t => selectedTicketIds.includes(t.id))}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setSelectedTicketIds(paginatedFiltered.map(t => t.id));
+                              } else {
+                                setSelectedTicketIds([]);
+                              }
+                            }}
+                            className="rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                          />
+                        </th>
                         <th className="py-3.5 px-4 font-mono">Kayıt No</th>
                         <th className="py-3.5 px-4">Kayıt Tarihi</th>
                         <th className="py-3.5 px-4">Müşteri & İletişim</th>
@@ -1574,6 +1670,21 @@ export default function ServiceManager() {
                             ticket.status === 'musteri_onayi_bekliyor' ? "bg-amber-50/10" : ""
                           )}
                         >
+                          {/* Checkbox */}
+                          <td className="py-3.5 px-3 text-center" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedTicketIds.includes(ticket.id)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedTicketIds(prev => [...prev, ticket.id]);
+                                } else {
+                                  setSelectedTicketIds(prev => prev.filter(id => id !== ticket.id));
+                                }
+                              }}
+                              className="rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                            />
+                          </td>
                           {/* Kayıt No */}
                           <td className="py-3.5 px-4 font-mono font-bold text-gray-900 group-hover:text-primary transition-colors">
                             <div className="flex items-center gap-1">
@@ -2043,7 +2154,7 @@ export default function ServiceManager() {
                         {detailTicket.customerPhone && (
                           <div className="mt-2 flex items-center gap-2">
                             <a
-                              href={`https://wa.me/${detailTicket.customerPhone.replace(/\D/g, '').startsWith('0') ? '90' + detailTicket.customerPhone.replace(/\D/g, '').substring(1) : detailTicket.customerPhone.replace(/\D/g, '').startsWith('90') ? detailTicket.customerPhone.replace(/\D/g, '') : '90' + detailTicket.customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Merhaba Sayın Müşterimiz, ${detailTicket.ticketNumber} numaralı cihazınızın servis işlemlerini takip etmek için: https://kerimbilgisayar.com/ariza-sorgulama?no=${detailTicket.ticketNumber}`)}`}
+                              href={`https://wa.me/${formatWaPhone(detailTicket.customerPhone)}?text=${encodeURIComponent(`Merhaba Sayın Müşterimiz, ${detailTicket.ticketNumber} numaralı cihazınızın servis işlemlerini takip etmek için: https://kerimbilgisayar.com/ariza-sorgulama?no=${detailTicket.ticketNumber}`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-[10px] font-bold transition-colors"
@@ -2661,6 +2772,17 @@ export default function ServiceManager() {
                             <p className="text-[9px] text-gray-400 font-bold uppercase">Kalan Bakiye</p>
                             <p className={cn('text-sm font-black', balance > 0 ? 'text-red-600' : 'text-gray-900')}>₺{balance.toLocaleString('tr-TR')}</p>
                           </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <button
+                            type="button"
+                            onClick={handleSendOdealPaymentLink}
+                            className="w-full px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all"
+                          >
+                            <CreditCard className="w-4 h-4 text-emerald-200" />
+                            Ödeal Sanal POS ile Link Gönder (WhatsApp / SMS)
+                          </button>
                         </div>
 
                         <div className="bg-white p-3 rounded-xl border border-gray-200 mb-3 shadow-sm flex flex-col md:flex-row gap-2 items-stretch md:items-center">

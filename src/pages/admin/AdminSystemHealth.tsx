@@ -144,6 +144,16 @@ export default function AdminSystemHealth() {
             Otomatik Yenile (5sn)
           </label>
           <button 
+            onClick={() => {
+              const token = localStorage.getItem('admin_token');
+              window.open(`/api/admin/system/backup?token=${token}`, '_blank');
+            }} 
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm font-medium"
+          >
+            <Database className="w-4 h-4 text-emerald-200" />
+            DB Yedeği İndir (.sql)
+          </button>
+          <button 
             onClick={() => fetchHealth(true)} 
             disabled={loading}
             className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"

@@ -12,9 +12,9 @@ export interface SessionPayload { userId: number; email: string; name: string; r
 
 const JWT_SECRET: string = process.env.JWT_SECRET || '';
 if (!JWT_SECRET) {
-  console.warn('⚠ JWT_SECRET tanımlı değil! .env dosyasına güçlü bir JWT_SECRET ekleyin.');
+  console.warn('⚠ JWT_SECRET tanımlı değil! Güvenlik için rastgele oluşturulmuş geçici secret kullanılıyor. .env dosyasına kalıcı JWT_SECRET ekleyin.');
 }
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || crypto.createHash('sha256').update('kerimbilgisayar-fallback-' + (process.env.DATABASE_NAME || 'db')).digest('hex');
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || crypto.randomBytes(32).toString('hex');
 export const ADMIN_TOKEN_TTL = '8h';
 export const CUSTOMER_TOKEN_TTL = '30d';
 
@@ -43,7 +43,7 @@ export function isBcryptHash(value?: string | null): boolean {
 export async function verifyPassword(raw: string, stored?: string | null): Promise<boolean> {
   if (!stored) return false;
   if (isBcryptHash(stored)) return bcrypt.compare(raw, stored);
-  return raw === stored;
+  return false;
 }
 
 // --- AUTH MIDDLEWARES ---

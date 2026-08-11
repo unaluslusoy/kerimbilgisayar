@@ -1,5 +1,5 @@
 import express from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/index';
 import { settings, themeSettings, layoutTemplates, layoutAssignments, users } from '../db/schema';
 import { requireAdmin } from '../server/middleware';
@@ -288,3 +288,54 @@ settingsRouter.post('/api/admin/settings/smtp-test', requireAdmin, async (req, r
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
+// ─── Veritabanı Yedeği Dışa Aktarma (SQL Dump) ──────────────────────────────
+
+settingsRouter.get('/api/admin/system/backup', requireAdmin, async (_req, res) => {
+  try {
+    const tableNames = [
+      'users', 'customers', 'companies', 'tickets', 'devices', 'stock_items',
+      'inventory_categories', 'sales', 'sale_items', 'payments', 'invoices',
+      'settings', 'dealer_ledger', 'customer_ledger', 'odeal_payments',
+      'odeal_refunds', 'exchange_rates', 'period_locks', 'shipments', 'expenses'
+    ];
+
+    let sqlDump = `-- ========================================================\n`;
+    sqlDump += `-- Kerim Bilgisayar Database Backup\n`;
+    sqlDump += `-- Date: ${new Date().toISOString()}\n`;
+    sqlDump += `-- ========================================================\n\n`;
+
+    for (const table of tableNames) {
+      try {
+        const rows = await db.execute(sql.raw(`SELECT * FROM \`${table}\``)) as any;
+        const dataRows = Array.isArray(rows) ? (Array.isArray(rows[0]) ? rows[0] : rows) : [];
+        if (dataRows.length > 0) {
+          sqlDump += `-- Table: ${table}\n`;
+          for (const row of dataRows) {
+            const keys = Object.keys(row).map(k => `\`${k}\``).join(', ');
+            const values = Object.values(row).map(v => {
+              if (v === null || v === undefined) return 'NULL';
+              if (typeof v === 'number') return v;
+              if (typeof v === 'boolean') return v ? 1 : 0;
+              if (v instanceof Date) return `'${v.toISOString().slice(0, 19).replace('T', ' ')}'`;
+              if (typeof v === 'object') return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
+              return `'${String(v).replace(/'/g, "''")}'`;
+            }).join(', ');
+            sqlDump += `INSERT INTO \`${table}\` (${keys}) VALUES (${values});\n`;
+          }
+          sqlDump += `\n`;
+        }
+      } catch (err) {
+        // Table error fallback
+      }
+    }
+
+    const filename = `kerimbilgisayar_backup_${new Date().toISOString().slice(0, 10)}.sql`;
+    res.setHeader('Content-Type', 'application/sql');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(sqlDump);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
