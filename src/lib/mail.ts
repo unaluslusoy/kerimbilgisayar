@@ -12,23 +12,47 @@ async function getSmtpSettings() {
   return map;
 }
 
-export async function sendTicketEmail(to: string, subject: string, html: string) {
+export interface SendMailResult {
+  success: boolean;
+  error?: string;
+  messageId?: string;
+}
+
+export async function sendTicketEmail(to: string, subject: string, html: string, overrideConfig?: Record<string, string>): Promise<boolean> {
+  const res = await sendEmailDetails(to, subject, html, overrideConfig);
+  return res.success;
+}
+
+export async function sendEmailDetails(to: string, subject: string, html: string, overrideConfig?: Record<string, string>): Promise<SendMailResult> {
   try {
-    const config = await getSmtpSettings();
+    const config = overrideConfig || (await getSmtpSettings());
     
     if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
-      console.warn('SMTP settings are incomplete. Skipping email to:', to);
-      return false;
+      const missing = [];
+      if (!config.smtp_host) missing.push('SMTP Sunucu (Host)');
+      if (!config.smtp_user) missing.push('SMTP Kullanıcı Adı');
+      if (!config.smtp_pass) missing.push('SMTP Şifre');
+      console.warn('SMTP settings are incomplete:', missing.join(', '));
+      return { success: false, error: `Eksik SMTP ayarları: ${missing.join(', ')}` };
     }
 
+    const port = parseInt(config.smtp_port || '587', 10);
+    const isSecure = port === 465 || config.smtp_secure === 'ssl' || config.smtp_secure === 'true';
+
     const transporter = nodemailer.createTransport({
-      host: config.smtp_host,
-      port: parseInt(config.smtp_port || '587'),
-      secure: config.smtp_port === '465', 
+      host: config.smtp_host.trim(),
+      port,
+      secure: isSecure,
       auth: {
-        user: config.smtp_user,
+        user: config.smtp_user.trim(),
         pass: config.smtp_pass,
       },
+      tls: {
+        rejectUnauthorized: false, // Ensures compatibility with self-signed hosting certs
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
 
     const fromName = config.smtp_from_name || 'Kerim Bilgisayar';
@@ -41,11 +65,12 @@ export async function sendTicketEmail(to: string, subject: string, html: string)
       html,
     });
 
-    console.log('Email sent: %s', info.messageId);
-    return true;
-  } catch (error) {
-    console.error('Error sending email:', error);
-    return false;
+    console.log('Email sent successfully: %s', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    const errMsg = error?.message || String(error);
+    console.error('Error sending email:', errMsg);
+    return { success: false, error: errMsg };
   }
 }
 

@@ -3,7 +3,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/index';
 import { settings, themeSettings, layoutTemplates, layoutAssignments, users } from '../db/schema';
 import { requireAdmin } from '../server/middleware';
-import { sendTicketEmail } from '../lib/mail';
+import { sendTicketEmail, sendEmailDetails } from '../lib/mail';
 import { invalidateDbBlockedIpsCache } from '../server/helpers';
 
 export const settingsRouter = express.Router();
@@ -274,15 +274,21 @@ settingsRouter.post('/api/admin/settings/smtp-test', requireAdmin, async (req, r
     const profile = await db.select({ email: users.email }).from(users).where(eq(users.id, adminUser.userId)).limit(1);
     const testEmail = profile[0]?.email;
     if (!testEmail) return res.status(400).json({ error: 'Admin e-postası bulunamadı' });
-    const success = await sendTicketEmail(
+
+    const result = await sendEmailDetails(
       testEmail,
       'SMTP Test — Kerim Bilgisayar',
-      `<p style="font-family:sans-serif;">Bu bir SMTP test e-postasıdır. Ayarlarınız doğru yapılandırılmış!</p>`
+      `<div style="font-family:sans-serif; max-width:600px; margin:0 auto; border:1px solid #e5e7eb; border-radius:8px; padding:20px;">
+        <h2 style="color:#16a34a;">SMTP Test E-postası</h2>
+        <p>Bu bir SMTP test e-postasıdır. Sunucu e-posta ayarlarınız başarıyla yapılandırılmıştır!</p>
+        <p style="font-size:12px; color:#6b7280;">Tarih: ${new Date().toLocaleString('tr-TR')}</p>
+      </div>`
     );
-    if (success) {
-      res.json({ success: true, message: `Test e-postası ${testEmail} adresine gönderildi.` });
+
+    if (result.success) {
+      res.json({ success: true, message: `Test e-postası ${testEmail} adresine başarıyla gönderildi.` });
     } else {
-      res.status(500).json({ success: false, error: 'E-posta gönderilemedi. SMTP ayarlarını kontrol edin.' });
+      res.status(400).json({ success: false, error: result.error || 'E-posta gönderilemedi. SMTP ayarlarını kontrol edin.' });
     }
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
