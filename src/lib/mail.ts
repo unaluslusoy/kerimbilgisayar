@@ -37,21 +37,25 @@ export async function sendEmailDetails(to: string, subject: string, html: string
     }
 
     const port = parseInt(config.smtp_port || '587', 10);
-    const isSecure = port === 465 || config.smtp_secure === 'ssl' || config.smtp_secure === 'true';
+    const secureMode = config.smtp_secure || (port === 465 ? 'ssl' : 'tls');
+    const isSecure = secureMode === 'ssl' || port === 465;
+    const requireTLS = secureMode === 'tls' || port === 587;
+    const rejectUnauthorized = config.smtp_reject_unauthorized === 'true';
 
     const transporter = nodemailer.createTransport({
       host: config.smtp_host.trim(),
       port,
       secure: isSecure,
+      requireTLS,
       auth: {
         user: config.smtp_user.trim(),
         pass: config.smtp_pass,
       },
       tls: {
-        rejectUnauthorized: false, // Ensures compatibility with self-signed hosting certs
+        rejectUnauthorized,
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
+      connectionTimeout: 12000,
+      greetingTimeout: 12000,
       socketTimeout: 15000,
     });
 

@@ -21,6 +21,8 @@ export default function AdminSettings() {
     socialLinkedin: '',
     smtp_host: '',
     smtp_port: '587',
+    smtp_secure: 'tls',
+    smtp_reject_unauthorized: 'false',
     smtp_user: '',
     smtp_pass: '',
     smtp_from_name: '',
@@ -430,40 +432,62 @@ export default function AdminSettings() {
           {activeTab === 'smtp' && (
             <div className="space-y-5 max-w-2xl">
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-theme text-sm text-blue-800">
-                Bu ayarlar, servis durumu değişikliklerinde müşterilere gönderilen otomatik e-postalar için kullanılır.
+                Bu ayarlar, servis durumu değişikliklerinde müşterilere gönderilen otomatik e-postalar için kullanılır. (Örn: Sunucu: <code>vm10.vulut.com</code>)
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>SMTP Sunucu (Host)</label>
-                  <input type="text" value={settings.smtp_host || ''} onChange={e => handleChange('smtp_host', e.target.value)} className={inputCls} placeholder="smtp.gmail.com" />
+                  <input type="text" value={settings.smtp_host || ''} onChange={e => handleChange('smtp_host', e.target.value)} className={inputCls} placeholder="vm10.vulut.com" />
                 </div>
                 <div>
                   <label className={labelCls}>Port</label>
-                  <input type="text" value={settings.smtp_port || '587'} onChange={e => handleChange('smtp_port', e.target.value)} className={inputCls} placeholder="587" />
+                  <input type="text" value={settings.smtp_port || '587'} onChange={e => handleChange('smtp_port', e.target.value)} className={inputCls} placeholder="587 veya 465" />
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Güvenlik Protokoü (SSL / TLS)</label>
+                  <select value={settings.smtp_secure || (settings.smtp_port === '465' ? 'ssl' : 'tls')} onChange={e => handleChange('smtp_secure', e.target.value)} className={inputCls}>
+                    <option value="tls">STARTTLS / TLS (Port 587 - Önerilen)</option>
+                    <option value="ssl">SSL / TLS (Port 465)</option>
+                    <option value="none">Güvenliksiz / Düz Metin (Port 25 / 587)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>SSL Sertifika Doğrulaması</label>
+                  <select value={settings.smtp_reject_unauthorized || 'false'} onChange={e => handleChange('smtp_reject_unauthorized', e.target.value)} className={inputCls}>
+                    <option value="false">Self-Signed / Hosting Uyumlu (Önerilen)</option>
+                    <option value="true">Katı Sertifika Doğrulaması (Strict)</option>
+                  </select>
+                  <p className="text-[11px] text-gray-500 mt-1">Paylaşımlı hosting (cPanel/DirectAdmin) sunucularında bağlantı hatalarını önlemek için 'Self-Signed Uyumlu' mod önerilir.</p>
+                </div>
+              </div>
+
               <div>
                 <label className={labelCls}>SMTP Kullanıcı Adı (E-posta)</label>
-                <input type="email" value={settings.smtp_user || ''} onChange={e => handleChange('smtp_user', e.target.value)} className={inputCls} placeholder="gonderici@ornek.com" />
+                <input type="email" value={settings.smtp_user || ''} onChange={e => handleChange('smtp_user', e.target.value)} className={inputCls} placeholder="info@kerimbilgisayar.com" />
               </div>
               <div>
-                <label className={labelCls}>SMTP Şifre / Uygulama Şifresi</label>
-                <input type="password" value={settings.smtp_pass || ''} onChange={e => handleChange('smtp_pass', e.target.value)} className={inputCls} placeholder="••••••••" />
+                <label className={labelCls}>SMTP Şifre</label>
+                <input type="password" value={settings.smtp_pass || ''} onChange={e => handleChange('smtp_pass', e.target.value)} className={inputCls} placeholder="••••••••" autoComplete="new-password" />
               </div>
               <div>
                 <label className={labelCls}>Gönderen Adı</label>
                 <input type="text" value={settings.smtp_from_name || ''} onChange={e => handleChange('smtp_from_name', e.target.value)} className={inputCls} placeholder="Kerim Bilgisayar Servis" />
               </div>
-              <div className="pt-2 border-t border-gray-200 flex items-center gap-3">
-                <button
-                  onClick={handleSmtpTest}
-                  disabled={smtpTesting || !settings.smtp_host || !settings.smtp_user}
-                  className="inline-flex items-center px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-theme transition-colors disabled:opacity-50"
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  {smtpTesting ? 'Test gönderiliyor...' : 'Test E-postası Gönder'}
-                </button>
-                {smtpTestMsg && <span className="text-sm font-medium">{smtpTestMsg}</span>}
+              <div className="pt-2 border-t border-gray-200 flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSmtpTest}
+                    disabled={smtpTesting || !settings.smtp_host || !settings.smtp_user}
+                    className="inline-flex items-center px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-theme transition-colors disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    {smtpTesting ? 'Test gönderiliyor...' : 'Test E-postası Gönder'}
+                  </button>
+                  {smtpTestMsg && <span className={`text-sm font-semibold ${smtpTestMsg.includes('✅') ? 'text-emerald-700' : 'text-red-700'}`}>{smtpTestMsg}</span>}
+                </div>
               </div>
             </div>
           )}
