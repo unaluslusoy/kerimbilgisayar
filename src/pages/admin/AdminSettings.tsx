@@ -9,6 +9,8 @@ export default function AdminSettings() {
   const [settings, setSettings] = useState<Record<string, string>>({
     siteTitle: '',
     siteTagline: '',
+    logoUrl: '',
+    footerText: '',
     contactEmail: '',
     contactPhone: '',
     contactAddress: '',
@@ -146,6 +148,7 @@ export default function AdminSettings() {
 
   const tabs = [
     { id: 'genel', label: 'Genel Ayarlar', icon: Monitor },
+    { id: 'gorunum', label: 'Görünüm & Logo', icon: Image },
     { id: 'iletisim', label: 'İletişim', icon: Mail },
     { id: 'sosyal', label: 'Sosyal Medya', icon: Share2 },
     { id: 'smtp', label: 'E-Posta (SMTP)', icon: Send },
@@ -215,6 +218,18 @@ export default function AdminSettings() {
               <div>
                 <label className={labelCls}>Slogan (Tagline)</label>
                 <input type="text" value={settings.siteTagline} onChange={e => handleChange('siteTagline', e.target.value)} className={inputCls} placeholder="Bireysel ve kurumsal IT çözümleri..." />
+              </div>
+
+              <div className="pt-6 border-t border-gray-200">
+                <h3 className="text-sm font-bold text-gray-900 mb-2">Veritabanı Yedeği İndirme</h3>
+                <p className="text-xs text-gray-500 mb-3">Tüm veritabanı tablolarının anlık `.sql` dökümünü bilgisayarınıza indirin.</p>
+                <a
+                  href="/api/admin/system/backup"
+                  download
+                  className="inline-flex items-center px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-theme shadow-sm transition-colors"
+                >
+                  📥 Anlık Veritabanı Yedeği İndir (.sql)
+                </a>
               </div>
             </div>
           )}
