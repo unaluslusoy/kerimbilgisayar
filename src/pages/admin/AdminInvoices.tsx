@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { FileText, Plus, Search, X, Printer, Eye, Edit2, Trash2, ChevronDown, CheckCircle, AlertCircle, Clock, CreditCard } from 'lucide-react';
+import { FileText, Plus, Search, X, Printer, Eye, Edit2, Trash2, ChevronDown, CheckCircle, AlertCircle, Clock, CreditCard, Send, CheckSquare } from 'lucide-react';
 import { fetchAdminInvoices, createAdminInvoice, updateAdminInvoice, deleteAdminInvoice, createOdealPaymentLink, fetchAdminCustomers } from '../../lib/api';
 import { usePageTitle } from '../../lib/usePageTitle';
+import { openWhatsApp } from '../../lib/utils';
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
   taslak: { label: 'Taslak', color: 'bg-gray-100 text-gray-600', icon: FileText },
@@ -291,7 +292,19 @@ export default function AdminInvoices() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => setShowDetail(inv)} className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors" title="Detay">
+                          <button
+                            onClick={() => {
+                              const phone = inv.customerPhone || inv.phone || '';
+                              const name = inv.customerName || inv.companyName || 'Müşterimiz';
+                              const msg = `Sayın ${name},\n${inv.invoiceNumber} numaralı e-Fatura / e-Arşiv belgeniz hazırlanmıştır.\nToplam Tutar: ${formatMoney(inv.totalAmount)}\nDüzenlenme Tarihi: ${formatDate(inv.issueDate)}\nBizi tercih ettiğiniz için teşekkür ederiz.\n\nKerim Bilgisayar & Teknik Servis`;
+                              openWhatsApp(phone, msg);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-emerald-600 transition-colors"
+                            title="WhatsApp İle Fatura Detayı Yolla"
+                          >
+                            <Send className="w-4 h-4 text-emerald-600" />
+                          </button>
+                          <button onClick={() => setShowDetail(inv)} className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors" title="Detay / Yazdır">
                             <Eye className="w-4 h-4" />
                           </button>
                           <button onClick={() => openEdit(inv)} className="p-1.5 text-gray-400 hover:text-amber-600 transition-colors" title="Düzenle">

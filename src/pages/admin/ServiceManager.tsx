@@ -1756,12 +1756,24 @@ export default function ServiceManager() {
                           {/* İşlemler */}
                           <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  const phone = ticket.customerPhone || '';
+                                  const name = ticket.customerName || 'Müşterimiz';
+                                  const msg = `Sayın ${name},\n${ticket.ticketNumber} numaralı servis kaydınızın durumu: ${STATUS_LABELS[ticket.status] || 'Güncellendi'}.\nCihaz: ${ticket.deviceBrand || ''} ${ticket.deviceModel || ''}\nTakip Linki: ${window.location.origin}/takip?no=${ticket.ticketNumber}\n\nKerim Bilgisayar Teknik Servis`;
+                                  openWhatsApp(phone, msg);
+                                }}
+                                className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-lg transition-colors flex items-center justify-center shadow-2xs cursor-pointer"
+                                title="WhatsApp İle Durum Bildirimi Gönder"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                              </button>
                               <Link
                                 to={`/print/ticket/${ticket.ticketNumber}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-700 rounded-lg transition-colors flex items-center justify-center shadow-2xs"
-                                title="Fis Yazdir"
+                                title="Fiş Yazdır"
                               >
                                 <Printer className="w-3.5 h-3.5" />
                               </Link>

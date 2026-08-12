@@ -83,6 +83,16 @@ customersRouter.get('/api/admin/customers', requireAdmin, async (req, res) => {
       balance: customers.balance,
       creditLimit: customers.creditLimit,
       notes: customers.notes,
+      categoryType: customers.categoryType,
+      authorizedPerson: customers.authorizedPerson,
+      city: customers.city,
+      district: customers.district,
+      iban: customers.iban,
+      bankName: customers.bankName,
+      isEInvoiceUser: customers.isEInvoiceUser,
+      riskLimit: customers.riskLimit,
+      defaultDueDays: customers.defaultDueDays,
+      discountRate: customers.discountRate,
       companyId: companies.id,
       companyName: companies.name,
       taxId: companies.taxId,
@@ -112,7 +122,7 @@ customersRouter.get('/api/admin/customers', requireAdmin, async (req, res) => {
 
 customersRouter.post('/api/admin/customers', requireAdmin, async (req, res) => {
   try {
-    const { firstName, lastName, email, phone, password, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes } = req.body;
+    const { firstName, lastName, email, phone, password, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes, categoryType, authorizedPerson, city, district, iban, bankName, isEInvoiceUser, riskLimit, defaultDueDays, discountRate } = req.body;
     
     if (email) {
       const existingByEmail = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -177,6 +187,16 @@ customersRouter.post('/api/admin/customers', requireAdmin, async (req, res) => {
         balance: balance?.toString() || '0.00',
         creditLimit: creditLimit?.toString() || '0.00',
         notes: notes || null,
+        categoryType: categoryType || 'musteri',
+        authorizedPerson: authorizedPerson || null,
+        city: city || null,
+        district: district || null,
+        iban: iban || null,
+        bankName: bankName || null,
+        isEInvoiceUser: isEInvoiceUser === true || isEInvoiceUser === 'true',
+        riskLimit: riskLimit ? riskLimit.toString() : null,
+        defaultDueDays: parseInt(defaultDueDays) || 0,
+        discountRate: discountRate ? discountRate.toString() : '0.00',
         isActive: true,
       });
     });
@@ -190,7 +210,7 @@ customersRouter.post('/api/admin/customers', requireAdmin, async (req, res) => {
 customersRouter.patch('/api/admin/customers/:id', requireAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { firstName, lastName, email, phone, isActive, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes } = req.body;
+    const { firstName, lastName, email, phone, isActive, companyName, taxId, taxOffice, address, sector, accountCode, balance, creditLimit, notes, categoryType, authorizedPerson, city, district, iban, bankName, isEInvoiceUser, riskLimit, defaultDueDays, discountRate } = req.body;
     const existing = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (existing.length === 0) return res.status(404).json({ error: 'Müşteri bulunamadı' });
 
@@ -208,6 +228,17 @@ customersRouter.patch('/api/admin/customers/:id', requireAdmin, async (req, res)
     if (creditLimit !== undefined) customerUpdates.creditLimit = creditLimit?.toString() || '0.00';
     if (notes !== undefined) customerUpdates.notes = notes;
     if (isActive !== undefined) customerUpdates.isActive = isActive;
+    if (categoryType !== undefined) customerUpdates.categoryType = categoryType;
+    if (authorizedPerson !== undefined) customerUpdates.authorizedPerson = authorizedPerson;
+    if (city !== undefined) customerUpdates.city = city;
+    if (district !== undefined) customerUpdates.district = district;
+    if (iban !== undefined) customerUpdates.iban = iban;
+    if (bankName !== undefined) customerUpdates.bankName = bankName;
+    if (isEInvoiceUser !== undefined) customerUpdates.isEInvoiceUser = isEInvoiceUser === true || isEInvoiceUser === 'true';
+    if (riskLimit !== undefined) customerUpdates.riskLimit = riskLimit ? riskLimit.toString() : null;
+    if (defaultDueDays !== undefined) customerUpdates.defaultDueDays = parseInt(defaultDueDays);
+    if (discountRate !== undefined) customerUpdates.discountRate = discountRate ? discountRate.toString() : '0.00';
+
     if (Object.keys(customerUpdates).length > 0) {
       const existingCustomer = await db.select().from(customers).where(eq(customers.userId, id)).limit(1);
       if (existingCustomer.length > 0) {

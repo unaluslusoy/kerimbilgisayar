@@ -52,6 +52,7 @@ const inputCls = 'w-full border border-gray-300 rounded-theme px-3 py-2 text-sm 
 
 const emptyCustomer = {
   customerType: 'bireysel',
+  categoryType: 'musteri',
   firstName: '',
   lastName: '',
   email: '',
@@ -60,11 +61,20 @@ const emptyCustomer = {
   companyName: '',
   taxId: '',
   taxOffice: '',
+  authorizedPerson: '',
+  city: '',
+  district: '',
   address: '',
+  iban: '',
+  bankName: '',
+  isEInvoiceUser: false,
   sector: '',
   accountCode: '',
   balance: '0.00',
   creditLimit: '0.00',
+  riskLimit: '0.00',
+  defaultDueDays: 0,
+  discountRate: '0.00',
   notes: '',
   isActive: true,
 };
@@ -89,7 +99,7 @@ export default function AdminCustomers() {
   const [saving, setSaving] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [search, setSearch] = useState('');
-  const [filterTab, setFilterTab] = useState<'all' | 'contracted' | 'debtors' | 'cleared' | 'corporate' | 'individual'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'suppliers' | 'corporate' | 'retail' | 'dealers' | 'debtors' | 'contracted'>('all');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
 
@@ -258,16 +268,17 @@ export default function AdminCustomers() {
   const contractedCount = customers.filter(c => !!c.planName).length;
 
   const filtered = customers.filter(customer => {
-    const text = `${customer.firstName} ${customer.lastName} ${customer.email} ${customer.phone} ${customer.companyName} ${customer.accountCode}`.toLowerCase();
+    const text = `${customer.firstName} ${customer.lastName} ${customer.email} ${customer.phone} ${customer.companyName} ${customer.accountCode} ${customer.authorizedPerson} ${customer.city} ${customer.district}`.toLowerCase();
     const matchSearch = !search || text.includes(search.toLowerCase());
 
     if (!matchSearch) return false;
 
+    if (filterTab === 'suppliers') return customer.categoryType === 'tedarikci';
+    if (filterTab === 'corporate') return customer.categoryType === 'kurumsal' || !!customer.companyName;
+    if (filterTab === 'retail') return customer.categoryType === 'son_kullanici' || (!customer.companyName && customer.categoryType !== 'tedarikci');
+    if (filterTab === 'dealers') return customer.categoryType === 'bayi';
     if (filterTab === 'contracted') return !!customer.planName;
     if (filterTab === 'debtors') return Number(customer.balance || 0) > 0;
-    if (filterTab === 'cleared') return Number(customer.balance || 0) <= 0;
-    if (filterTab === 'corporate') return !!customer.companyName;
-    if (filterTab === 'individual') return !customer.companyName;
 
     return true;
   });
@@ -282,6 +293,7 @@ export default function AdminCustomers() {
     setEditing(customer);
     setForm({
       customerType: customer.companyName ? 'kurumsal' : 'bireysel',
+      categoryType: customer.categoryType || (customer.companyName ? 'kurumsal' : 'musteri'),
       firstName: customer.firstName || '',
       lastName: customer.lastName || '',
       email: customer.email || '',
@@ -290,11 +302,20 @@ export default function AdminCustomers() {
       companyName: customer.companyName || '',
       taxId: customer.taxId || '',
       taxOffice: customer.taxOffice || '',
+      authorizedPerson: customer.authorizedPerson || '',
+      city: customer.city || '',
+      district: customer.district || '',
       address: customer.address || '',
+      iban: customer.iban || '',
+      bankName: customer.bankName || '',
+      isEInvoiceUser: customer.isEInvoiceUser === true || customer.isEInvoiceUser === 1,
       sector: customer.sector || '',
       accountCode: customer.accountCode || '',
       balance: customer.balance || '0.00',
       creditLimit: customer.creditLimit || '0.00',
+      riskLimit: customer.riskLimit || '0.00',
+      defaultDueDays: customer.defaultDueDays || 0,
+      discountRate: customer.discountRate || '0.00',
       notes: customer.notes || '',
       isActive: customer.isActive !== false,
     });
@@ -466,12 +487,36 @@ export default function AdminCustomers() {
               Tümü ({customers.length})
             </button>
             <button
-              onClick={() => setFilterTab('contracted')}
+              onClick={() => setFilterTab('suppliers')}
               className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'contracted' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                filterTab === 'suppliers' ? 'bg-purple-50 text-purple-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Bakım Anlaşmalı ({contractedCount})
+              Tedarikçiler ({customers.filter(c => c.categoryType === 'tedarikci').length})
+            </button>
+            <button
+              onClick={() => setFilterTab('corporate')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'corporate' ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Kurumsal B2B ({customers.filter(c => c.categoryType === 'kurumsal' || !!c.companyName).length})
+            </button>
+            <button
+              onClick={() => setFilterTab('retail')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'retail' ? 'bg-slate-200 text-slate-800 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Son Kullanıcı ({customers.filter(c => c.categoryType === 'son_kullanici' || (!c.companyName && c.categoryType !== 'tedarikci')).length})
+            </button>
+            <button
+              onClick={() => setFilterTab('dealers')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                filterTab === 'dealers' ? 'bg-amber-50 text-amber-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Bayiler ({customers.filter(c => c.categoryType === 'bayi').length})
             </button>
             <button
               onClick={() => setFilterTab('debtors')}
@@ -482,28 +527,12 @@ export default function AdminCustomers() {
               Borçlular ({debtorCount})
             </button>
             <button
-              onClick={() => setFilterTab('cleared')}
+              onClick={() => setFilterTab('contracted')}
               className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'cleared' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                filterTab === 'contracted' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Sıfır / Alacaklı
-            </button>
-            <button
-              onClick={() => setFilterTab('corporate')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'corporate' ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Kurumsal ({corporateCount})
-            </button>
-            <button
-              onClick={() => setFilterTab('individual')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'individual' ? 'bg-gray-200 text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Bireysel
+              Bakım Anlaşmalı ({contractedCount})
             </button>
           </div>
         </div>
@@ -541,6 +570,11 @@ export default function AdminCustomers() {
                         <td className="px-5 py-4">
                           <div className="font-semibold text-sm text-gray-900 flex items-center gap-1.5">
                             {customer.firstName} {customer.lastName}
+                            {customer.isEInvoiceUser && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded-md" title="e-Fatura Mükellefi">
+                                ⚡ e-Fatura
+                              </span>
+                            )}
                             {customer.address && (
                               <a
                                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.address)}`}
@@ -553,6 +587,9 @@ export default function AdminCustomers() {
                               </a>
                             )}
                           </div>
+                          {customer.authorizedPerson && (
+                            <div className="text-xs font-semibold text-gray-700">Yetkili: {customer.authorizedPerson}</div>
+                          )}
                           <div className="text-xs text-gray-500">{customer.email}</div>
                           {customer.phone && <div className="text-xs text-gray-400">{customer.phone}</div>}
                           {customer.planName ? (
@@ -568,14 +605,33 @@ export default function AdminCustomers() {
                           )}
                         </td>
                         <td className="px-5 py-4 text-sm text-gray-600">
+                          {/* Cari Türü Çipi */}
+                          <div className="flex items-center gap-1.5 mb-1">
+                            {customer.categoryType === 'tedarikci' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-purple-800 bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-md">
+                                📦 Tedarikçi
+                              </span>
+                            ) : customer.categoryType === 'kurumsal' || customer.companyName ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-blue-800 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded-md">
+                                🏢 Kurumsal B2B
+                              </span>
+                            ) : customer.categoryType === 'bayi' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md">
+                                🤝 Bayi
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-gray-700 bg-gray-100 border border-gray-300 px-2 py-0.5 rounded-md">
+                                👤 Son Kullanıcı
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 font-medium text-gray-800">
-                            <Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel'}
+                            <Building2 className="w-4 h-4 text-gray-400" /> {customer.companyName || 'Bireysel Hesap'}
                           </div>
                           <div className="text-xs text-gray-400 mt-1">
-                            {customer.accountCode || 'Cari kod yok'} •{' '}
-                            {customer.taxId || customer.taxOffice
-                              ? `${customer.taxOffice || ''} ${customer.taxId || ''}`
-                              : customer.sector || 'Bireysel Hesap'}
+                            {customer.accountCode || 'Cari kod yok'}
+                            {(customer.city || customer.district) && ` • ${customer.city || ''} ${customer.district || ''}`}
+                            {(customer.taxId || customer.taxOffice) && ` • ${customer.taxOffice || ''} ${customer.taxId || ''}`}
                           </div>
                         </td>
                         <td className="px-5 py-4 text-sm text-gray-600">
@@ -748,31 +804,56 @@ export default function AdminCustomers() {
               </button>
             </div>
 
-            {/* Customer Type Selector */}
-            <div className="px-6 pt-4">
-              <label className="block text-xs font-semibold text-gray-500 mb-2">Müşteri Türü</label>
+            {/* Customer Category & Type Selector */}
+            <div className="px-6 pt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Cari Kart Kategorisi / Türü *</label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                  {[
+                    { id: 'musteri', label: 'Müşteri', color: 'bg-emerald-50 text-emerald-800 border-emerald-300' },
+                    { id: 'tedarikci', label: 'Tedarikçi', color: 'bg-purple-50 text-purple-800 border-purple-300' },
+                    { id: 'kurumsal', label: 'Kurumsal B2B', color: 'bg-blue-50 text-blue-800 border-blue-300' },
+                    { id: 'son_kullanici', label: 'Son Kullanıcı', color: 'bg-gray-100 text-gray-800 border-gray-300' },
+                    { id: 'bayi', label: 'Bayi', color: 'bg-amber-50 text-amber-800 border-amber-300' },
+                  ].map(cat => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setForm({ ...form, categoryType: cat.id, customerType: cat.id === 'kurumsal' ? 'kurumsal' : form.customerType })}
+                      className={`py-2 text-xs font-bold rounded-xl border text-center transition cursor-pointer ${
+                        form.categoryType === cat.id
+                          ? 'bg-gray-900 text-white border-gray-900 shadow-sm ring-2 ring-gray-900/20'
+                          : `${cat.color} hover:opacity-80`
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, customerType: 'bireysel' })}
-                  className={`flex-1 py-2.5 text-sm font-semibold rounded-theme border transition-all ${
+                  className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-all ${
                     form.customerType === 'bireysel'
                       ? 'bg-primary text-white border-primary shadow-sm'
                       : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                   }`}
                 >
-                  Bireysel Müşteri
+                  Bireysel Cari Hesap
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, customerType: 'kurumsal' })}
-                  className={`flex-1 py-2.5 text-sm font-semibold rounded-theme border transition-all ${
+                  className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-all ${
                     form.customerType === 'kurumsal'
                       ? 'bg-primary text-white border-primary shadow-sm'
                       : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                   }`}
                 >
-                  Kurumsal Müşteri
+                  Şirket / Kurumsal Ünvanlı Cari
                 </button>
               </div>
             </div>
@@ -780,12 +861,12 @@ export default function AdminCustomers() {
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               {form.customerType === 'kurumsal' && (
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ünvanı *</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ticari Ünvanı *</label>
                   <input
                     value={form.companyName}
                     onChange={e => setForm({ ...form, companyName: e.target.value })}
                     className={inputCls}
-                    placeholder="Firma Ticari Ünvanı"
+                    placeholder="Örn: Özgür Teknoloji San. ve Tic. Ltd. Şti."
                     required
                   />
                 </div>
@@ -814,6 +895,15 @@ export default function AdminCustomers() {
                 />
               </div>
               <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Yetkili Kişi & Unvanı</label>
+                <input
+                  value={form.authorizedPerson || ''}
+                  onChange={e => setForm({ ...form, authorizedPerson: e.target.value })}
+                  className={inputCls}
+                  placeholder="Örn: Ahmet Yılmaz (Satın Alma Müdürü)"
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">E-posta adresi *</label>
                 <input
                   value={form.email}
@@ -833,7 +923,7 @@ export default function AdminCustomers() {
                 />
               </div>
               {!editing && (
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Giriş Şifresi</label>
                   <input
                     value={form.password}
@@ -844,60 +934,68 @@ export default function AdminCustomers() {
                 </div>
               )}
 
-              {form.customerType === 'kurumsal' && (
-                <>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
-                    <input
-                      value={form.taxOffice}
-                      onChange={e => setForm({ ...form, taxOffice: e.target.value })}
-                      className={inputCls}
-                      placeholder="Vergi Dairesi"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi / TCKN</label>
-                    <input
-                      value={form.taxId}
-                      onChange={e => setForm({ ...form, taxId: e.target.value })}
-                      className={inputCls}
-                      placeholder="Vergi No / TCKN"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Sektör</label>
-                    <input
-                      value={form.sector}
-                      onChange={e => setForm({ ...form, sector: e.target.value })}
-                      className={inputCls}
-                      placeholder="Faaliyet Sektörü"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Kod</label>
-                    <input
-                      value={form.accountCode}
-                      onChange={e => setForm({ ...form, accountCode: e.target.value })}
-                      className={inputCls}
-                      placeholder="Örn: MUS-001"
-                    />
-                  </div>
-                </>
-              )}
-
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Başlangıç Bakiyesi (TL)</label>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={form.balance}
-                  onChange={e => setForm({ ...form, balance: e.target.value })}
+                  value={form.taxOffice}
+                  onChange={e => setForm({ ...form, taxOffice: e.target.value })}
                   className={inputCls}
-                  placeholder="0.00"
+                  placeholder="Vergi Dairesi"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Kredi Limiti (TL)</label>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi No / TCKN</label>
+                <input
+                  value={form.taxId}
+                  onChange={e => setForm({ ...form, taxId: e.target.value })}
+                  className={inputCls}
+                  placeholder="Vergi No veya T.C. Kimlik No"
+                />
+              </div>
+
+              {/* Banka & IBAN Bilgileri */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Banka Adı</label>
+                <input
+                  value={form.bankName || ''}
+                  onChange={e => setForm({ ...form, bankName: e.target.value })}
+                  className={inputCls}
+                  placeholder="Örn: Garanti BBVA"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">IBAN Numarası</label>
+                <input
+                  value={form.iban || ''}
+                  onChange={e => setForm({ ...form, iban: e.target.value })}
+                  className={`${inputCls} font-mono text-xs`}
+                  placeholder="TR00 0000 0000 0000 0000 0000 00"
+                />
+              </div>
+
+              {/* Lokasyon (İl / İlçe) */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">İl</label>
+                <input
+                  value={form.city || ''}
+                  onChange={e => setForm({ ...form, city: e.target.value })}
+                  className={inputCls}
+                  placeholder="Örn: İstanbul"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">İlçe</label>
+                <input
+                  value={form.district || ''}
+                  onChange={e => setForm({ ...form, district: e.target.value })}
+                  className={inputCls}
+                  placeholder="Örn: Kadıköy"
+                />
+              </div>
+
+              {/* Finansal & Limit Ayarları */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Kredi Limiti (TL)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -906,6 +1004,51 @@ export default function AdminCustomers() {
                   className={inputCls}
                   placeholder="0.00"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Risk Limiti (TL)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.riskLimit || ''}
+                  onChange={e => setForm({ ...form, riskLimit: e.target.value })}
+                  className={inputCls}
+                  placeholder="Örn: 50000.00"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Varsayılan Vade (Gün)</label>
+                <input
+                  type="number"
+                  value={form.defaultDueDays || ''}
+                  onChange={e => setForm({ ...form, defaultDueDays: e.target.value })}
+                  className={inputCls}
+                  placeholder="Örn: 30 gün"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Özel İskonto (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.discountRate || ''}
+                  onChange={e => setForm({ ...form, discountRate: e.target.value })}
+                  className={inputCls}
+                  placeholder="Örn: 5.0"
+                />
+              </div>
+
+              <div className="md:col-span-2 flex items-center gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  id="isEInvoiceUserCheck"
+                  checked={form.isEInvoiceUser}
+                  onChange={e => setForm({ ...form, isEInvoiceUser: e.target.checked })}
+                  className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                />
+                <label htmlFor="isEInvoiceUserCheck" className="text-xs font-bold text-gray-800 cursor-pointer">
+                  ⚡ e-Fatura Mükellefi (GİB e-Fatura Sistemine Kayıtlı Firma)
+                </label>
               </div>
 
               <div className="md:col-span-2">

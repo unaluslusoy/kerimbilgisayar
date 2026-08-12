@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search, Barcode, ShoppingCart, User, Plus, X, Trash2,
   CreditCard, Banknote, Landmark, FileText, CheckCircle, Printer, RefreshCw, ChevronRight, Layers, Eye,
-  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon, Clock, AlertTriangle, Maximize2, Minimize2, Menu, Star
+  LayoutDashboard, Wrench, Users, LogOut, Image as ImageIcon, Clock, AlertTriangle, Maximize2, Minimize2, Menu, Star,
+  GripVertical, Settings, Package, Edit3, ChevronDown, ChevronUp, Zap
 } from 'lucide-react';
 import { useFullscreen } from '../../hooks/useFullscreen';
 import { Link } from 'react-router-dom';
@@ -11,7 +12,8 @@ import { mediaUrl } from '../../lib/media';
 import { 
   fetchAdminStock, fetchAdminCustomers, createAdminCustomer,
   createAdminSale, fetchAdminSales, fetchAdminSaleDetails,
-  fetchSettings, createOdealPaymentLink, updateStockItem
+  fetchSettings, createOdealPaymentLink, updateStockItem,
+  fetchQuickSaleGroups, createQuickSaleGroup, updateQuickSaleGroup, deleteQuickSaleGroup, updateQuickSaleSort
 } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
 import { playAddSound, playErrorSound } from '../../lib/sound';
@@ -70,13 +72,37 @@ export default function AdminPos() {
   const [settings, setSettings] = useState<any | null>(null);
   const [now, setNow] = useState(new Date());
 
+  // Hızlı Satış Panel Modu
+  const [productViewMode, setProductViewMode] = useState<'all' | 'quick'>('all');
+  const [qsGroups, setQsGroups] = useState<any[]>([]);
+  const [showGroupManager, setShowGroupManager] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupColor, setNewGroupColor] = useState('#f59e0b');
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [editingGroupName, setEditingGroupName] = useState('');
+  const [editingGroupColor, setEditingGroupColor] = useState('');
+  const [activeQsGroupFilter, setActiveQsGroupFilter] = useState<number | 'all' | 'ungrouped'>('all');
+
+  // Serbest Kalem (Freeform Item)
+  const [showFreeformModal, setShowFreeformModal] = useState(false);
+  const [freeformItem, setFreeformItem] = useState({ name: '', price: '', vatRate: '20', quantity: '1' });
+
+  // Fiyat Override (sepette)
+  const [editingPriceId, setEditingPriceId] = useState<number | string | null>(null);
+  const [editingPriceValue, setEditingPriceValue] = useState('');
+
+  // Drag & Drop
+  const [dragItemId, setDragItemId] = useState<number | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<number | null>(null);
+
   const loadData = async () => {
     try {
-      const [stockData, custData, salesData, settingsData] = await Promise.all([
+      const [stockData, custData, salesData, settingsData, groupsData] = await Promise.all([
         fetchAdminStock(),
         fetchAdminCustomers(),
         fetchAdminSales(),
-        fetchSettings().catch(() => null)
+        fetchSettings().catch(() => null),
+        fetchQuickSaleGroups().catch(() => [])
       ]);
       setStock(stockData.filter((i: any) => i.isActive && i.currentStock > 0));
       setCustomersList(custData);
@@ -84,6 +110,7 @@ export default function AdminPos() {
       if (settingsData) {
         setSettings(settingsData);
       }
+      setQsGroups(groupsData || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -320,7 +347,8 @@ export default function AdminPos() {
         discountAmount: discount.toFixed(2),
         notes: notes || null,
         items: cart.map(c => ({
-          stockItemId: c.id,
+          stockItemId: c.isFreeform ? null : c.id,
+          productName: c.isFreeform ? c.name : (c.priceOverridden ? c.name : undefined),
           quantity: c.quantity,
           unitPrice: (parseFloat(c.sellingPrice) || 0).toFixed(2),
           vatRate: c.vatRate
@@ -510,7 +538,161 @@ export default function AdminPos() {
     return matchSearch && matchCategory;
   });
 
-  const quickSaleItems = stock.filter(item => item.isQuickSale);
+  const quickSaleItems = stock
+    .filter(item => item.isQuickSale)
+    .sort((a, b) => (a.quickSaleSortOrder || 0) - (b.quickSaleSortOrder || 0));
+
+  const filteredQuickSaleItems = activeQsGroupFilter === 'all'
+    ? quickSaleItems
+    : activeQsGroupFilter === 'ungrouped'
+      ? quickSaleItems.filter(i => !i.quickSaleGroupId)
+      : quickSaleItems.filter(i => i.quickSaleGroupId === activeQsGroupFilter);
+
+  // ─── Serbest Kalem (Freeform Item) ───
+  const addFreeformToCart = () => {
+    if (!freeformItem.name.trim() || !freeformItem.price) return;
+    const price = parseFloat(freeformItem.price);
+    if (isNaN(price) || price <= 0) {
+      toast.warning('Geçerli bir fiyat girin.');
+      return;
+    }
+    const qty = parseInt(freeformItem.quantity) || 1;
+    const freeId = `free_${Date.now()}`;
+    setCart(prev => [...prev, {
+      id: freeId,
+      name: freeformItem.name.trim(),
+      sellingPrice: price.toFixed(2),
+      originalPrice: price.toFixed(2),
+      vatRate: freeformItem.vatRate || '20',
+      unit: 'adet',
+      quantity: qty,
+      currentStock: 9999,
+      isFreeform: true,
+    }]);
+    playAddSound();
+    setFreeformItem({ name: '', price: '', vatRate: '20', quantity: '1' });
+    setShowFreeformModal(false);
+    toast.success('Serbest kalem sepete eklendi.');
+  };
+
+  // ─── Fiyat Override ───
+  const startPriceEdit = (itemId: number | string, currentPrice: string) => {
+    setEditingPriceId(itemId);
+    setEditingPriceValue(currentPrice);
+  };
+
+  const applyPriceOverride = (itemId: number | string) => {
+    const newPrice = parseFloat(editingPriceValue);
+    if (isNaN(newPrice) || newPrice < 0) {
+      toast.warning('Geçerli bir fiyat girin.');
+      return;
+    }
+    setCart(prev => prev.map(c => c.id === itemId ? {
+      ...c,
+      sellingPrice: newPrice.toFixed(2),
+      originalPrice: c.originalPrice || c.sellingPrice,
+      priceOverridden: true,
+    } : c));
+    setEditingPriceId(null);
+    setEditingPriceValue('');
+  };
+
+  // ─── Drag & Drop (Hızlı satış sıralama) ───
+  const handleDragStart = (e: React.DragEvent, itemId: number) => {
+    setDragItemId(itemId);
+    e.dataTransfer.effectAllowed = 'move';
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.4';
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+    if (dragItemId !== null && dragOverItemId !== null && dragItemId !== dragOverItemId) {
+      const items = [...quickSaleItems];
+      const dragIdx = items.findIndex(i => i.id === dragItemId);
+      const overIdx = items.findIndex(i => i.id === dragOverItemId);
+      if (dragIdx >= 0 && overIdx >= 0) {
+        const [moved] = items.splice(dragIdx, 1);
+        items.splice(overIdx, 0, moved);
+        const sortUpdates = items.map((item, idx) => ({
+          id: item.id,
+          quickSaleSortOrder: idx,
+          quickSaleGroupId: item.quickSaleGroupId,
+        }));
+        // Optimistic UI update
+        setStock(prev => {
+          const updated = [...prev];
+          for (const u of sortUpdates) {
+            const idx = updated.findIndex(s => s.id === u.id);
+            if (idx >= 0) updated[idx] = { ...updated[idx], quickSaleSortOrder: u.quickSaleSortOrder };
+          }
+          return updated;
+        });
+        updateQuickSaleSort(sortUpdates).catch(() => toast.error('Sıralama kaydedilemedi'));
+      }
+    }
+    setDragItemId(null);
+    setDragOverItemId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, itemId: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverItemId(itemId);
+  };
+
+  // ─── Grup Yönetimi ───
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) return;
+    try {
+      await createQuickSaleGroup({ name: newGroupName.trim(), color: newGroupColor });
+      const groups = await fetchQuickSaleGroups();
+      setQsGroups(groups);
+      setNewGroupName('');
+      setNewGroupColor('#f59e0b');
+      toast.success('Grup oluşturuldu.');
+    } catch (e: any) {
+      toast.error('Grup oluşturulamadı: ' + e.message);
+    }
+  };
+
+  const handleUpdateGroup = async (id: number) => {
+    try {
+      await updateQuickSaleGroup(id, { name: editingGroupName, color: editingGroupColor });
+      const groups = await fetchQuickSaleGroups();
+      setQsGroups(groups);
+      setEditingGroupId(null);
+      toast.success('Grup güncellendi.');
+    } catch (e: any) {
+      toast.error('Grup güncellenemedi: ' + e.message);
+    }
+  };
+
+  const handleDeleteGroup = async (id: number) => {
+    try {
+      await deleteQuickSaleGroup(id);
+      const groups = await fetchQuickSaleGroups();
+      setQsGroups(groups);
+      if (activeQsGroupFilter === id) setActiveQsGroupFilter('all');
+      await loadData();
+      toast.success('Grup silindi.');
+    } catch (e: any) {
+      toast.error('Grup silinemedi: ' + e.message);
+    }
+  };
+
+  const assignToGroup = async (item: any, groupId: number | null) => {
+    setStock(prev => prev.map(i => i.id === item.id ? { ...i, quickSaleGroupId: groupId } : i));
+    try {
+      await updateStockItem(item.id, { quickSaleGroupId: groupId });
+    } catch (e: any) {
+      setStock(prev => prev.map(i => i.id === item.id ? { ...i, quickSaleGroupId: item.quickSaleGroupId } : i));
+      toast.error('Grup ataması yapılamadı: ' + e.message);
+    }
+  };
 
   const filteredCustomers = customersList.filter(cust => {
     const fullName = `${cust.firstName || ''} ${cust.lastName || ''}`.toLowerCase();
@@ -723,14 +905,75 @@ export default function AdminPos() {
                 <div className="flex flex-col items-center justify-center h-full py-16 text-center text-gray-400 gap-3">
                   <ShoppingCart className="w-10 h-10 text-gray-300" />
                   <p className="text-xs font-semibold">Sepete henüz ürün eklemediniz.</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowFreeformModal(true)}
+                    className="text-xxs text-primary font-bold flex items-center gap-1 hover:text-secondary cursor-pointer mt-1"
+                  >
+                    <Package className="w-3.5 h-3.5" /> Serbest Kalem Ekle
+                  </button>
                 </div>
-              ) : cart.map(c => {
+              ) : (<>
+                {/* Serbest Kalem Ekle Butonu */}
+                <div className="pb-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowFreeformModal(true)}
+                    className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 border border-dashed border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Package className="w-3.5 h-3.5" /> Serbest Kalem Ekle
+                  </button>
+                </div>
+                {cart.map(c => {
                 const rowTotal = parseFloat(c.sellingPrice || '0') * c.quantity;
                 return (
-                  <div key={c.id} className="py-3 flex justify-between gap-3">
+                  <div key={c.id} className={`py-3 flex justify-between gap-3 ${c.isFreeform ? 'bg-violet-50/40' : ''}`}>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-xs text-gray-800 truncate" title={c.name}>{c.name}</h4>
-                      <p className="text-xxs text-gray-400 mt-0.5">₺{parseFloat(c.sellingPrice).toLocaleString('tr-TR')} / {c.unit || 'adet'}</p>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-bold text-xs text-gray-800 truncate" title={c.name}>{c.name}</h4>
+                        {c.isFreeform && (
+                          <span className="shrink-0 text-[8px] bg-violet-500 text-white px-1.5 py-0.5 rounded font-bold uppercase">Serbest</span>
+                        )}
+                        {c.priceOverridden && !c.isFreeform && (
+                          <span className="shrink-0 text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-bold uppercase">Özel Fiyat</span>
+                        )}
+                      </div>
+                      {/* Fiyat — tıklayınca override edilebilir */}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {editingPriceId === c.id ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xxs text-gray-400">₺</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              autoFocus
+                              value={editingPriceValue}
+                              onChange={e => setEditingPriceValue(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') applyPriceOverride(c.id);
+                                if (e.key === 'Escape') setEditingPriceId(null);
+                              }}
+                              onBlur={() => applyPriceOverride(c.id)}
+                              className="w-20 border border-blue-400 rounded px-1.5 py-0.5 text-xxs font-bold bg-blue-50 outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startPriceEdit(c.id, c.sellingPrice)}
+                            className="text-xxs text-gray-400 hover:text-blue-600 cursor-pointer flex items-center gap-0.5 group"
+                            title="Fiyatı değiştirmek için tıklayın"
+                          >
+                            {c.priceOverridden && c.originalPrice !== c.sellingPrice && (
+                              <span className="line-through text-gray-300 mr-1">₺{parseFloat(c.originalPrice).toLocaleString('tr-TR')}</span>
+                            )}
+                            <span className={c.priceOverridden ? 'text-blue-600 font-bold' : ''}>₺{parseFloat(c.sellingPrice).toLocaleString('tr-TR')}</span>
+                            <span className="text-gray-300"> / {c.unit || 'adet'}</span>
+                            <Edit3 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 text-blue-500 transition-opacity" />
+                          </button>
+                        )}
+                      </div>
 
                       {/* Quantity adjuster */}
                       <div className="flex items-center gap-1 mt-2 bg-gray-50 border border-gray-200 rounded-full p-0.5 w-fit">
@@ -763,6 +1006,7 @@ export default function AdminPos() {
                   </div>
                 );
               })}
+              </>)}
             </div>
 
             {/* Customer select / Quick Customer Add */}
@@ -978,122 +1222,262 @@ export default function AdminPos() {
             </div>
           </div>
 
-          {/* RIGHT: PRODUCTS LIST & BARCODE SCANNER */}
+          {/* RIGHT: PRODUCTS LIST & QUICK SALE PANEL */}
           <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-0">
-            {/* Hızlı Satış Butonları */}
-            {quickSaleItems.length > 0 && (
-              <div className="flex gap-2 mb-3 shrink-0 overflow-x-auto pb-1">
-                {quickSaleItems.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => addToCart(item)}
-                    disabled={item.currentStock <= 0}
-                    className="shrink-0 flex flex-col items-start gap-0.5 min-w-[120px] px-3.5 py-3 bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-200 rounded-xl text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    <span className="flex items-center gap-1 text-[9px] font-extrabold text-amber-600 uppercase">
-                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" /> Hızlı Satış
-                    </span>
-                    <span className="text-xs font-bold text-gray-900 line-clamp-1">{item.name}</span>
-                    <span className="text-[11px] font-extrabold text-primary">₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Product search box */}
-            <div className="relative mb-2.5 shrink-0">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Ürün adı, SKU veya marka ile ara..."
-                value={productSearch}
-                onChange={e => setProductSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary outline-none"
-              />
-            </div>
-
-            {/* Category filter chips */}
-            {productCategories.length > 0 && (
-              <div className="flex gap-1.5 mb-3 shrink-0 overflow-x-auto pb-1">
+            {/* View Mode Toggle */}
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              <div className="flex bg-gray-100 p-1 rounded-xl">
                 <button
                   type="button"
-                  onClick={() => setCategoryFilter('')}
-                  className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${!categoryFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  onClick={() => setProductViewMode('all')}
+                  className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${productViewMode === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  Tümü
+                  <Layers className="w-3.5 h-3.5" /> Tüm Ürünler
                 </button>
-                {productCategories.map(cat => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setCategoryFilter(String(cat.id))}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${categoryFilter === String(cat.id) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                  >
-                    {cat.name}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setProductViewMode('quick')}
+                  className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${productViewMode === 'quick' ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Zap className="w-3.5 h-3.5" /> Hızlı Satış
+                  {quickSaleItems.length > 0 && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-extrabold ${productViewMode === 'quick' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                      {quickSaleItems.length}
+                    </span>
+                  )}
+                </button>
               </div>
-            )}
-
-            {/* Grid of stock items */}
-            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center h-48 gap-2">
-                  <RefreshCw className="w-8 h-8 text-primary animate-spin" />
-                  <span className="text-xs text-gray-500 font-medium">Stoklar yükleniyor...</span>
-                </div>
-              ) : filteredStock.length === 0 ? (
-                <div className="text-center py-20 text-gray-400 text-xs font-semibold">
-                  Satışa uygun ürün bulunamadı.
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2">
-                  {filteredStock.map(item => {
-                    const isLowStock = item.currentStock <= (item.minStockLevel || 0);
-                    return (
-                    <div
-                      key={item.id}
-                      onClick={() => addToCart(item)}
-                      className={`border rounded-lg p-1.5 bg-white flex flex-col justify-between gap-1 cursor-pointer hover:shadow-md active:scale-95 transition-all duration-100 text-left hover:scale-[1.02] ${isLowStock ? 'border-amber-300 hover:border-amber-500' : 'border-gray-200 hover:border-primary'}`}
-                    >
-                      <div className="space-y-1">
-                        <div className="relative aspect-square w-full rounded-md overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
-                          {item.imageUrl ? (
-                            <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <ImageIcon className="w-5 h-5 text-gray-300" />
-                          )}
-                          {isLowStock && (
-                            <span className="absolute top-0.5 right-0.5 bg-amber-500 text-white rounded-full p-0.5" title="Kritik stok">
-                              <AlertTriangle className="w-2.5 h-2.5" />
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => toggleQuickSale(item, e)}
-                            title={item.isQuickSale ? 'Hızlı satıştan kaldır' : 'Hızlı satışa ekle'}
-                            className={`absolute top-0.5 left-0.5 rounded-full p-1 transition-colors cursor-pointer ${item.isQuickSale ? 'bg-amber-500 text-white' : 'bg-white/80 text-gray-400 hover:text-amber-500'}`}
-                          >
-                            <Star className={`w-3 h-3 ${item.isQuickSale ? 'fill-white' : ''}`} />
-                          </button>
-                        </div>
-                        <h3 className="font-bold text-gray-900 text-[10px] line-clamp-2 min-h-[24px] leading-tight">{item.name}</h3>
-                      </div>
-                      <div className="flex justify-between items-center border-t border-gray-100 pt-1">
-                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isLowStock ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {item.currentStock}
-                        </span>
-                        <span className="text-[11px] font-extrabold text-primary">
-                          ₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}
-                        </span>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
+              {productViewMode === 'quick' && (
+                <button
+                  type="button"
+                  onClick={() => setShowGroupManager(v => !v)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Settings className="w-3.5 h-3.5" /> Grupları Yönet
+                </button>
               )}
             </div>
+
+            {productViewMode === 'all' ? (
+              <>
+                {/* Product search box */}
+                <div className="relative mb-2.5 shrink-0">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Ürün adı, SKU veya marka ile ara..."
+                    value={productSearch}
+                    onChange={e => setProductSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+
+                {/* Category filter chips */}
+                {productCategories.length > 0 && (
+                  <div className="flex gap-1.5 mb-3 shrink-0 overflow-x-auto pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryFilter('')}
+                      className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${!categoryFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Tümü
+                    </button>
+                    {productCategories.map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setCategoryFilter(String(cat.id))}
+                        className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${categoryFilter === String(cat.id) ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Grid of stock items */}
+                <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+                  {loading ? (
+                    <div className="flex flex-col items-center justify-center h-48 gap-2">
+                      <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                      <span className="text-xs text-gray-500 font-medium">Stoklar yükleniyor...</span>
+                    </div>
+                  ) : filteredStock.length === 0 ? (
+                    <div className="text-center py-20 text-gray-400 text-xs font-semibold">
+                      Satışa uygun ürün bulunamadı.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2">
+                      {filteredStock.map(item => {
+                        const isLowStock = item.currentStock <= (item.minStockLevel || 0);
+                        return (
+                        <div
+                          key={item.id}
+                          onClick={() => addToCart(item)}
+                          className={`border rounded-lg p-1.5 bg-white flex flex-col justify-between gap-1 cursor-pointer hover:shadow-md active:scale-95 transition-all duration-100 text-left hover:scale-[1.02] ${isLowStock ? 'border-amber-300 hover:border-amber-500' : 'border-gray-200 hover:border-primary'}`}
+                        >
+                          <div className="space-y-1">
+                            <div className="relative aspect-square w-full rounded-md overflow-hidden bg-slate-50 border border-gray-100 flex items-center justify-center shrink-0">
+                              {item.imageUrl ? (
+                                <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <ImageIcon className="w-5 h-5 text-gray-300" />
+                              )}
+                              {isLowStock && (
+                                <span className="absolute top-0.5 right-0.5 bg-amber-500 text-white rounded-full p-0.5" title="Kritik stok">
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => toggleQuickSale(item, e)}
+                                title={item.isQuickSale ? 'Hızlı satıştan kaldır' : 'Hızlı satışa ekle'}
+                                className={`absolute top-0.5 left-0.5 rounded-full p-1 transition-colors cursor-pointer ${item.isQuickSale ? 'bg-amber-500 text-white' : 'bg-white/80 text-gray-400 hover:text-amber-500'}`}
+                              >
+                                <Star className={`w-3 h-3 ${item.isQuickSale ? 'fill-white' : ''}`} />
+                              </button>
+                            </div>
+                            <h3 className="font-bold text-gray-900 text-[10px] line-clamp-2 min-h-[24px] leading-tight">{item.name}</h3>
+                          </div>
+                          <div className="flex justify-between items-center border-t border-gray-100 pt-1">
+                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isLowStock ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {item.currentStock}
+                            </span>
+                            <span className="text-[11px] font-extrabold text-primary">
+                              ₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}
+                            </span>
+                          </div>
+                        </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* ─── HIZLI SATIŞ PANELİ ─── */
+              <>
+                {/* Grup Filtreleri */}
+                <div className="flex gap-1.5 mb-3 shrink-0 overflow-x-auto pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveQsGroupFilter('all')}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${activeQsGroupFilter === 'all' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    Tümü ({quickSaleItems.length})
+                  </button>
+                  {qsGroups.map(g => {
+                    const count = quickSaleItems.filter(i => i.quickSaleGroupId === g.id).length;
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => setActiveQsGroupFilter(g.id)}
+                        className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${activeQsGroupFilter === g.id ? 'text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                        style={activeQsGroupFilter === g.id ? { backgroundColor: g.color || '#f59e0b' } : {}}
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color || '#f59e0b' }} />
+                        {g.name} ({count})
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => setActiveQsGroupFilter('ungrouped')}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${activeQsGroupFilter === 'ungrouped' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    Grupsuz ({quickSaleItems.filter(i => !i.quickSaleGroupId).length})
+                  </button>
+                </div>
+
+                {/* Hızlı Satış Grid */}
+                <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+                  {filteredQuickSaleItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-center text-gray-400 gap-3">
+                      <Star className="w-10 h-10 text-gray-300" />
+                      <p className="text-xs font-semibold">Henüz hızlı satış ürünü eklemediniz.</p>
+                      <p className="text-xxs text-gray-400">
+                        "Tüm Ürünler" sekmesinden ürünlerin üstündeki ⭐ ikonuna tıklayarak ekleyebilirsiniz.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                      {filteredQuickSaleItems.map(item => {
+                        const isLowStock = item.currentStock <= (item.minStockLevel || 0);
+                        const groupInfo = qsGroups.find(g => g.id === item.quickSaleGroupId);
+                        return (
+                          <div
+                            key={item.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, item.id)}
+                            onDragEnd={handleDragEnd}
+                            onDragOver={(e) => handleDragOver(e, item.id)}
+                            onClick={() => addToCart(item)}
+                            className={`relative border-2 rounded-xl bg-white flex flex-col cursor-pointer hover:shadow-lg active:scale-95 transition-all duration-150 text-left overflow-hidden group ${
+                              dragOverItemId === item.id ? 'border-amber-400 ring-2 ring-amber-200' :
+                              isLowStock ? 'border-amber-300 hover:border-amber-500' : 'border-gray-200 hover:border-amber-400'
+                            }`}
+                          >
+                            {/* Drag Handle */}
+                            <div className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <GripVertical className="w-4 h-4 text-gray-400" />
+                            </div>
+                            {/* Grup Badge */}
+                            {groupInfo && (
+                              <div
+                                className="absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded text-[8px] font-bold text-white shadow"
+                                style={{ backgroundColor: groupInfo.color || '#f59e0b' }}
+                              >
+                                {groupInfo.name}
+                              </div>
+                            )}
+                            {/* Ürün Görseli */}
+                            <div className="relative aspect-[4/3] w-full bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center overflow-hidden">
+                              {item.imageUrl ? (
+                                <img src={mediaUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <ImageIcon className="w-8 h-8 text-gray-300" />
+                              )}
+                              {isLowStock && (
+                                <span className="absolute bottom-1 right-1 bg-amber-500 text-white rounded-full p-1" title="Kritik stok">
+                                  <AlertTriangle className="w-3 h-3" />
+                                </span>
+                              )}
+                            </div>
+                            {/* İçerik */}
+                            <div className="p-2.5 flex flex-col gap-1 flex-1">
+                              <h3 className="font-bold text-gray-900 text-xs line-clamp-2 min-h-[32px] leading-snug">{item.name}</h3>
+                              <div className="flex justify-between items-center mt-auto">
+                                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${isLowStock ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {item.currentStock} adet
+                                </span>
+                                <span className="text-sm font-extrabold text-primary">
+                                  ₺{parseFloat(item.sellingPrice || '0').toLocaleString('tr-TR')}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Grup Atama Dropdown */}
+                            {qsGroups.length > 0 && (
+                              <div className="border-t border-gray-100 px-2 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <select
+                                  value={item.quickSaleGroupId || ''}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => { e.stopPropagation(); assignToGroup(item, e.target.value ? parseInt(e.target.value) : null); }}
+                                  className="w-full text-[9px] font-bold text-gray-500 bg-transparent border-0 outline-none cursor-pointer p-0"
+                                >
+                                  <option value="">Grupsuz</option>
+                                  {qsGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : (
@@ -1375,6 +1759,221 @@ export default function AdminPos() {
                 className="flex-1 bg-primary hover:bg-secondary text-white py-2.5 rounded-xl font-semibold flex items-center justify-center transition-all cursor-pointer"
               >
                 <Printer className="w-4 h-4 mr-2" /> Fiş Yazdır
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* SERBEST KALEM / HİZMET EKLE MODAL */}
+      {showFreeformModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <Package className="w-5 h-5 text-violet-600" /> Serbest Kalem / Hizmet Ekle
+              </h2>
+              <button onClick={() => setShowFreeformModal(false)} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Açıklama / Kalem Adı *</label>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Örn: Özel İşçilik Bedeli, Aksesuar Montajı"
+                  value={freeformItem.name}
+                  onChange={e => setFreeformItem({ ...freeformItem, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Satış Fiyatı (₺) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={freeformItem.price}
+                    onChange={e => setFreeformItem({ ...freeformItem, price: e.target.value })}
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-violet-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Miktar</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={freeformItem.quantity}
+                    onChange={e => setFreeformItem({ ...freeformItem, quantity: e.target.value })}
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-violet-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">KDV Oranı (%)</label>
+                <select
+                  value={freeformItem.vatRate}
+                  onChange={e => setFreeformItem({ ...freeformItem, vatRate: e.target.value })}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none bg-white"
+                >
+                  <option value="0">%0 (KDV'siz)</option>
+                  <option value="1">%1</option>
+                  <option value="10">%10</option>
+                  <option value="20">%20 (Genel)</option>
+                </select>
+              </div>
+              <p className="text-[10px] text-gray-400">
+                * Serbest kalemler için stok takibi yapılmaz. Yalnızca bu satışa özel olarak eklenir.
+              </p>
+            </div>
+            <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setShowFreeformModal(false)}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                onClick={addFreeformToCart}
+                disabled={!freeformItem.name.trim() || !freeformItem.price}
+                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white py-2.5 rounded-xl font-semibold disabled:opacity-50 transition-all cursor-pointer shadow-md shadow-violet-200"
+              >
+                Sepete Ekle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HIZLI SATIŞ GRUP YÖNETİMİ MODAL */}
+      {showGroupManager && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-amber-500" /> Hızlı Satış Gruplarını Yönet
+              </h2>
+              <button onClick={() => setShowGroupManager(false)} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-5 space-y-5 text-left max-h-[70vh] overflow-y-auto">
+              {/* Yeni Grup Ekle Formu */}
+              <div className="bg-amber-50/60 border border-amber-200 p-3.5 rounded-xl space-y-3">
+                <span className="text-xs font-bold text-amber-900 uppercase block">Yeni Grup Oluştur</span>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Grup adı (ör: Aksesuarlar, Yazılımlar)..."
+                    value={newGroupName}
+                    onChange={e => setNewGroupName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleCreateGroup()}
+                    className="flex-1 border border-amber-300 rounded-xl px-3 py-1.5 text-xs font-semibold bg-white outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <input
+                    type="color"
+                    value={newGroupColor}
+                    onChange={e => setNewGroupColor(e.target.value)}
+                    title="Grup Rengi"
+                    className="w-9 h-8 border border-amber-300 rounded-xl cursor-pointer p-0.5 bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateGroup}
+                    disabled={!newGroupName.trim()}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+                  >
+                    Ekle
+                  </button>
+                </div>
+              </div>
+
+              {/* Mevcut Gruplar Listesi */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-gray-500 uppercase block">Mevcut Gruplar ({qsGroups.length})</span>
+                {qsGroups.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4">Henüz kayıtlı grup yok.</p>
+                ) : (
+                  <div className="divide-y border rounded-xl overflow-hidden">
+                    {qsGroups.map(g => (
+                      <div key={g.id} className="p-3 bg-white flex items-center justify-between gap-3">
+                        {editingGroupId === g.id ? (
+                          <div className="flex items-center gap-2 flex-1">
+                            <input
+                              type="text"
+                              value={editingGroupName}
+                              onChange={e => setEditingGroupName(e.target.value)}
+                              className="border rounded-lg px-2 py-1 text-xs font-bold flex-1 outline-none"
+                            />
+                            <input
+                              type="color"
+                              value={editingGroupColor}
+                              onChange={e => setEditingGroupColor(e.target.value)}
+                              className="w-7 h-7 rounded border cursor-pointer p-0"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateGroup(g.id)}
+                              className="px-2 py-1 bg-primary text-white rounded text-xs font-bold"
+                            >
+                              Kaydet
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingGroupId(null)}
+                              className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs"
+                            >
+                              İptal
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: g.color || '#f59e0b' }} />
+                              <span className="text-xs font-bold text-gray-800 truncate">{g.name}</span>
+                              <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full font-mono">
+                                {quickSaleItems.filter(i => i.quickSaleGroupId === g.id).length} ürün
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingGroupId(g.id);
+                                  setEditingGroupName(g.name);
+                                  setEditingGroupColor(g.color || '#f59e0b');
+                                }}
+                                className="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
+                                title="Düzenle"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteGroup(g.id)}
+                                className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                title="Sil"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end p-5 border-t border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setShowGroupManager(false)}
+                className="px-5 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors cursor-pointer"
+              >
+                Tamam
               </button>
             </div>
           </div>

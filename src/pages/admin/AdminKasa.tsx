@@ -195,6 +195,13 @@ export default function AdminKasa() {
           >
             <Plus className="w-4 h-4" /> Masraf Ekle
           </button>
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-xl transition-all shadow-md cursor-pointer"
+            title="Kasa Gün Sonu Z-Raporu Yazdır"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" /> Z-Raporu Yazdır
+          </button>
         </div>
       </div>
 

@@ -134,7 +134,14 @@ export const customers = mysqlTable('customers', {
   creditLimit: decimal('credit_limit', { precision: 10, scale: 2 }).default('0.00'),
   notes: text('notes'),
   isActive: boolean('is_active').default(true),
-  // --- FAZ 1A: Cari Finansal Alanlar ---
+  // --- FAZ 1A: Cari Finansal Alanlar & Detaylı Cari Kart ---
+  categoryType: mysqlEnum('category_type', ['musteri', 'tedarikci', 'son_kullanici', 'kurumsal', 'bayi']).default('musteri'),
+  authorizedPerson: varchar('authorized_person', { length: 150 }),
+  city: varchar('city', { length: 100 }),
+  district: varchar('district', { length: 100 }),
+  iban: varchar('iban', { length: 50 }),
+  bankName: varchar('bank_name', { length: 100 }),
+  isEInvoiceUser: boolean('is_einvoice_user').default(false),
   riskLimit: decimal('risk_limit', { precision: 15, scale: 2 }),
   defaultDueDays: int('default_due_days').default(0),
   discountRate: decimal('discount_rate', { precision: 5, scale: 2 }).default('0.00'),
@@ -426,6 +433,16 @@ export const inventoryCategories = mysqlTable('inventory_categories', {
   description: text('description'),
 });
 
+export const quickSaleGroups = mysqlTable('quick_sale_groups', {
+  id: int('id').autoincrement().primaryKey(),
+  tenantId: int('tenant_id').references(() => tenants.id),
+  name: varchar('name', { length: 100 }).notNull(),
+  color: varchar('color', { length: 20 }),
+  icon: varchar('icon', { length: 50 }),
+  sortOrder: int('sort_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 export const stockItems = mysqlTable('stock_items', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
@@ -448,6 +465,14 @@ export const stockItems = mysqlTable('stock_items', {
   supplier: varchar('supplier', { length: 150 }),
   isActive: boolean('is_active').default(true),
   isQuickSale: boolean('is_quick_sale').default(false),
+  quickSaleGroupId: int('quick_sale_group_id'),
+  quickSaleSortOrder: int('quick_sale_sort_order').default(0),
+  costPriceExclVat: decimal('cost_price_excl_vat', { precision: 10, scale: 2 }),
+  wholesalePrice: decimal('wholesale_price', { precision: 10, scale: 2 }),
+  currency: varchar('currency', { length: 10 }).default('TRY'),
+  gtipCode: varchar('gtip_code', { length: 50 }),
+  accountingCode: varchar('accounting_code', { length: 50 }),
+  landedCost: decimal('landed_cost', { precision: 10, scale: 2 }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 }, (t) => ({
@@ -995,6 +1020,7 @@ export const saleItems = mysqlTable('sale_items', {
   saleId: int('sale_id').references(() => sales.id),
   stockItemId: int('stock_item_id').references(() => stockItems.id),
   serializedItemId: int('serialized_item_id').references(() => serializedItems.id),
+  productName: varchar('product_name', { length: 255 }),
   quantity: int('quantity').notNull().default(1),
   unitPrice: decimal('unit_price', { precision: 12, scale: 2 }).notNull(),
   vatRate: int('vat_rate').default(20),
@@ -1029,6 +1055,8 @@ export const shipments = mysqlTable('shipments', {
 export const expenses = mysqlTable('expenses', {
   id: int('id').autoincrement().primaryKey(),
   tenantId: int('tenant_id').references(() => tenants.id),
+  supplierId: int('supplier_id').references(() => customers.id),
+  invoiceNumber: varchar('invoice_number', { length: 100 }),
   title: varchar('title', { length: 255 }).notNull(),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   category: varchar('category', { length: 100 }), // e.g. 'yol', 'yemek', 'kargo', 'donanim'

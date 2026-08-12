@@ -248,6 +248,31 @@ export async function updateStockItem(id: number, data: any) {
   return adminRequest(`/api/admin/stock/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
+export async function fetchStockMovements() {
+  return adminRequest('/api/admin/stock/movements');
+}
+
+// Quick Sale Groups
+export async function fetchQuickSaleGroups() {
+  return adminRequest('/api/admin/quick-sale-groups');
+}
+
+export async function createQuickSaleGroup(data: { name: string; color?: string; icon?: string }) {
+  return adminRequest('/api/admin/quick-sale-groups', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateQuickSaleGroup(id: number, data: any) {
+  return adminRequest(`/api/admin/quick-sale-groups/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function deleteQuickSaleGroup(id: number) {
+  return adminRequest(`/api/admin/quick-sale-groups/${id}`, { method: 'DELETE' });
+}
+
+export async function updateQuickSaleSort(items: { id: number; quickSaleSortOrder: number; quickSaleGroupId?: number | null }[]) {
+  return adminRequest('/api/admin/quick-sale-sort', { method: 'PATCH', body: JSON.stringify({ items }) });
+}
+
 // Settings
 export async function fetchAdminSettings() {
   return adminRequest('/api/admin/settings');

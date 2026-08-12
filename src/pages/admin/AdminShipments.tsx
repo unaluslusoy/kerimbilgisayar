@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Truck, Search, Plus, Printer, RefreshCw, X, Check, Eye, Trash2, ArrowUpDown } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Truck, Search, Plus, Printer, RefreshCw, X, Check, Eye, Trash2, ArrowUpDown, Send } from 'lucide-react';
 import { fetchAdminShipments, createAdminShipment, updateAdminShipment, deleteAdminShipment, fetchAdminTickets, fetchAdminSettings, adminRequest } from '../../lib/api';
 import { mediaUrl } from '../../lib/media';
+import { openWhatsApp } from '../../lib/utils';
 
 const CARRIERS: Record<string, { label: string; color: string; logo: string }> = {
   yurtici: { label: 'Yurtiçi Kargo', color: 'bg-blue-600 text-white', logo: 'YK' },
@@ -325,6 +326,18 @@ export default function AdminShipments() {
                       </td>
                       <td className="p-4 text-right">
                         <div className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              const receiver = s.receiverDetails || 'Müşterimiz';
+                              const carrierName = (CARRIERS[s.carrier] || CARRIERS.diger).label;
+                              const msg = `Sayın ${receiver},\nKerim Bilgisayar Teknik Servis sipariş/cihazınız ${carrierName} ile tarafınıza gönderilmiştir.\nKargo Takip No: ${s.trackingNumber}\nİlişkili Servis: ${s.ticketNumber || 'Genel Gönderi'}\n\nİyi günler dileriz!`;
+                              openWhatsApp('', msg);
+                            }}
+                            className="p-1.5 hover:bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-600 transition-colors"
+                            title="WhatsApp İle Kargo Bilgisi Gönder"
+                          >
+                            <Send className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => printLabel(s)}
                             className="p-1.5 hover:bg-slate-100 border border-slate-200 rounded-lg text-gray-600 transition-colors"

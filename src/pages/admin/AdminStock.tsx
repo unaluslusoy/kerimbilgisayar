@@ -1,9 +1,9 @@
-// Stok & Envanter yönetim ekranı — ürün CRUD, kategori, barkod, CSV, stok hareketi
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Search, AlertTriangle, X, TrendingUp, TrendingDown,
   Trash2, Barcode, Printer, Upload, Download, Layers, Eye, RefreshCw, FileText,
-  Image as ImageIcon, ShoppingCart, Send
+  Image as ImageIcon, ShoppingCart, Send, Zap, CheckSquare, Square, Percent,
+  History, Sparkles, Filter, ArrowUpDown
 } from 'lucide-react';
 import {
   fetchAdminStock, createStockItem, updateStockItem, deleteStockItem,
@@ -13,8 +13,9 @@ import {
 } from '../../lib/api';
 import { mediaUrl } from '../../lib/media';
 import MediaPicker from '../../components/ui/MediaPicker';
-import { validateGTIN } from '../../lib/barcode';
+import { validateGTIN, generateEAN13 } from '../../lib/barcode';
 import StockCountTab from './stock/StockCountTab';
+import StockMovementsTab from './stock/StockMovementsTab';
 
 export default function AdminStock() {
   const [items, setItems] = useState<any[]>([]);
@@ -29,12 +30,35 @@ export default function AdminStock() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'items' | 'categories' | 'sayim'>('items');
+  const [activeTab, setActiveTab] = useState<'items' | 'categories' | 'movements' | 'sayim'>('items');
   const [categories, setCategories] = useState<any[]>([]);
   const [newCategory, setNewCategory] = useState({ name: '', description: '', parentId: '' });
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'critical' | 'ok'>('all');
+  const [sortBy, setSortBy] = useState<'name_asc' | 'stock_asc' | 'stock_desc' | 'price_asc' | 'price_desc'>('name_asc');
+
+  // Hızlı Stok Girişi (Mal Kabul) State
+  const [showRapidModal, setShowRapidModal] = useState(false);
+  const [rapidScanCode, setRapidScanCode] = useState('');
+  const [rapidQty, setRapidQty] = useState('1');
+  const [rapidSupplierNote, setRapidSupplierNote] = useState('');
+  const [rapidLogs, setRapidLogs] = useState<any[]>([]);
+  const rapidInputRef = useRef<HTMLInputElement>(null);
+
+  // Bulk Selection State
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [showBulkCategoryModal, setShowBulkCategoryModal] = useState(false);
+  const [showBulkVatModal, setShowBulkVatModal] = useState(false);
+  const [showBulkPriceModal, setShowBulkPriceModal] = useState(false);
+  const [bulkPriceTarget, setBulkPriceTarget] = useState<'sellingPrice' | 'costPrice' | 'wholesalePrice'>('sellingPrice');
+  const [bulkPriceMode, setBulkPriceMode] = useState<'percent' | 'fixed' | 'margin'>('percent');
+  const [bulkPriceVal, setBulkPriceVal] = useState('10');
+  const [bulkCategoryVal, setBulkCategoryVal] = useState('');
+  const [bulkVatVal, setBulkVatVal] = useState('20');
+  const [bulkActionSaving, setBulkActionSaving] = useState(false);
 
   // Barcode Printer State
   const [printItem, setPrintItem] = useState<any | null>(null);
@@ -55,7 +79,8 @@ export default function AdminStock() {
     sku: '', barcode: '', name: '', brand: '', model: '',
     unit: 'adet', vatRate: '20', imageUrl: '', description: '',
     currentStock: '', minStockLevel: '5', costPrice: '', sellingPrice: '',
-    categoryId: '', hasSerialTracking: false, warrantyMonths: 0, supplier: ''
+    categoryId: '', hasSerialTracking: false, warrantyMonths: 0, supplier: '',
+    wholesalePrice: '', currency: 'TRY', gtipCode: '', accountingCode: '', landedCost: ''
   });
 
   // E-ticaret Kanal Eşleme (yalnızca düzenleme modunda)
@@ -170,6 +195,9 @@ export default function AdminStock() {
     return cat.name;
   };
 
+  const availableBrands = Array.from(new Set(items.map(i => i.brand).filter(Boolean))).sort();
+  const availableSuppliers = Array.from(new Set(items.map(i => i.supplier).filter(Boolean))).sort();
+
   const filtered = items.filter(i => {
     const matchSearch = !search ||
       i.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -178,15 +206,169 @@ export default function AdminStock() {
       i.brand?.toLowerCase().includes(search.toLowerCase()) ||
       i.model?.toLowerCase().includes(search.toLowerCase());
     const matchCategory = !categoryFilter || i.categoryId === parseInt(categoryFilter);
+    const matchBrand = !brandFilter || i.brand === brandFilter;
+    const matchSupplier = !supplierFilter || i.supplier === supplierFilter;
     const matchStatus = statusFilter === 'all' ||
       (statusFilter === 'critical' && (i.currentStock || 0) <= (i.minStockLevel || 0)) ||
       (statusFilter === 'ok' && (i.currentStock || 0) > (i.minStockLevel || 0));
-    return matchSearch && matchCategory && matchStatus;
+    return matchSearch && matchCategory && matchBrand && matchSupplier && matchStatus;
+  }).sort((a, b) => {
+    if (sortBy === 'stock_asc') return (a.currentStock || 0) - (b.currentStock || 0);
+    if (sortBy === 'stock_desc') return (b.currentStock || 0) - (a.currentStock || 0);
+    if (sortBy === 'price_asc') return (parseFloat(a.sellingPrice) || 0) - (parseFloat(b.sellingPrice) || 0);
+    if (sortBy === 'price_desc') return (parseFloat(b.sellingPrice) || 0) - (parseFloat(a.sellingPrice) || 0);
+    return (a.name || '').localeCompare(b.name || '', 'tr');
   });
 
   const totalItems = items.length;
   const totalQty = items.reduce((s, i) => s + (i.currentStock || 0), 0);
   const criticalCount = items.filter(i => (i.currentStock || 0) <= (i.minStockLevel || 0)).length;
+
+  // Bulk Selection Helpers
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map(i => i.id));
+    }
+  };
+
+  const toggleSelectOne = (id: number) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const handleBulkCategory = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkActionSaving(true);
+    try {
+      const catId = bulkCategoryVal ? parseInt(bulkCategoryVal) : null;
+      await Promise.all(selectedIds.map(id => updateStockItem(id, { categoryId: catId })));
+      setShowBulkCategoryModal(false);
+      setSelectedIds([]);
+      await load();
+    } catch (e: any) {
+      alert('Toplu kategori güncelleme hatası: ' + e.message);
+    } finally {
+      setBulkActionSaving(false);
+    }
+  };
+
+  const handleBulkVat = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkActionSaving(true);
+    try {
+      const vatRate = parseInt(bulkVatVal) || 20;
+      await Promise.all(selectedIds.map(id => updateStockItem(id, { vatRate })));
+      setShowBulkVatModal(false);
+      setSelectedIds([]);
+      await load();
+    } catch (e: any) {
+      alert('Toplu KDV güncelleme hatası: ' + e.message);
+    } finally {
+      setBulkActionSaving(false);
+    }
+  };
+
+  const handleBulkPriceUpdate = async () => {
+    if (selectedIds.length === 0) return;
+    const val = parseFloat(bulkPriceVal);
+    if (isNaN(val)) {
+      alert('Lütfen geçerli bir sayısal değer girin.');
+      return;
+    }
+    setBulkActionSaving(true);
+    try {
+      const selectedItems = items.filter(i => selectedIds.includes(i.id));
+      await Promise.all(selectedItems.map(item => {
+        const updateData: any = {};
+        if (bulkPriceMode === 'percent') {
+          const current = parseFloat(item[bulkPriceTarget] || '0') || 0;
+          const updated = Math.max(0, current * (1 + val / 100));
+          updateData[bulkPriceTarget] = updated.toFixed(2);
+        } else if (bulkPriceMode === 'fixed') {
+          const current = parseFloat(item[bulkPriceTarget] || '0') || 0;
+          const updated = Math.max(0, current + val);
+          updateData[bulkPriceTarget] = updated.toFixed(2);
+        } else if (bulkPriceMode === 'margin') {
+          const cost = parseFloat(item.costPrice || '0') || 0;
+          if (cost > 0) {
+            const updated = cost * (1 + val / 100);
+            updateData.sellingPrice = updated.toFixed(2);
+          }
+        }
+        return updateStockItem(item.id, updateData);
+      }));
+      setShowBulkPriceModal(false);
+      setSelectedIds([]);
+      await load();
+    } catch (e: any) {
+      alert('Toplu fiyat güncelleme hatası: ' + e.message);
+    } finally {
+      setBulkActionSaving(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Seçilen ${selectedIds.length} ürünü silmek istediğinize emin misiniz?`)) return;
+    setBulkActionSaving(true);
+    try {
+      await Promise.all(selectedIds.map(id => deleteStockItem(id)));
+      setSelectedIds([]);
+      await load();
+    } catch (e: any) {
+      alert('Toplu silme hatası: ' + e.message);
+    } finally {
+      setBulkActionSaving(false);
+    }
+  };
+
+  const handleFastRestock = async (item: any) => {
+    const target = (item.minStockLevel || 5) > 0 ? (item.minStockLevel || 5) * 2 : 10;
+    const diff = Math.max(1, target - (item.currentStock || 0));
+    if (!confirm(`"${item.name}" stok adedi ${item.currentStock || 0}'den ${item.currentStock + diff}'a yükseltilecek (+${diff} adet ikmal). Onaylıyor musunuz?`)) return;
+    try {
+      await updateStockItem(item.id, { adjustment: diff });
+      await load();
+    } catch (e: any) {
+      alert('İkmal hatası: ' + e.message);
+    }
+  };
+
+  const handleRapidScanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = rapidScanCode.trim();
+    if (!code) return;
+    const qty = Math.max(1, parseInt(rapidQty) || 1);
+    const matched = items.find(i => i.barcode === code || i.sku === code || i.name?.toLowerCase().includes(code.toLowerCase()));
+    if (!matched) {
+      alert(`Ürün bulunamadı: ${code}`);
+      setRapidScanCode('');
+      rapidInputRef.current?.focus();
+      return;
+    }
+
+    try {
+      await updateStockItem(matched.id, { adjustment: qty });
+      const newEntry = {
+        id: Date.now(),
+        time: new Date().toLocaleTimeString('tr-TR'),
+        itemName: matched.name,
+        sku: matched.sku,
+        qty,
+        newTotal: (matched.currentStock || 0) + qty,
+        note: rapidSupplierNote
+      };
+      setRapidLogs(prev => [newEntry, ...prev]);
+      setRapidScanCode('');
+      setRapidQty('1');
+      await load();
+    } catch (err: any) {
+      alert('Stok girişi hatası: ' + err.message);
+    } finally {
+      rapidInputRef.current?.focus();
+    }
+  };
 
   const handleCreate = async () => {
     if (!newItem.name) return;
@@ -366,6 +548,13 @@ export default function AdminStock() {
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
+            onClick={() => setShowRapidModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-sm font-semibold rounded-xl transition-colors shadow-sm bg-emerald-50/50 cursor-pointer"
+            title="Barkod okutarak seri koli / mal kabul stok girişi yapın"
+          >
+            <Zap className="w-4 h-4 mr-2 text-emerald-600 fill-emerald-500" /> Hızlı Stok Girişi
+          </button>
+          <button
             onClick={() => setShowScannerModal(true)}
             className="inline-flex items-center px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-white cursor-pointer"
           >
@@ -379,7 +568,7 @@ export default function AdminStock() {
           </button>
           <button
             onClick={() => setShowPoModal(true)}
-            className="inline-flex items-center px-4 py-2 border border-purple-300 hover:bg-purple-50 text-purple-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-purple-50/50"
+            className="inline-flex items-center px-4 py-2 border border-purple-300 hover:bg-purple-50 text-purple-700 text-sm font-medium rounded-xl transition-colors shadow-sm bg-purple-50/50 cursor-pointer"
             title="Kritik stoktaki ürünler için otomatik sipariş listesi"
           >
             <ShoppingCart className="w-4 h-4 mr-2 text-purple-600" /> Tedarik Sipariş Taslağı (PO)
@@ -414,6 +603,12 @@ export default function AdminStock() {
           Kategori Yönetimi
         </button>
         <button
+          onClick={() => setActiveTab('movements')}
+          className={`pb-3 text-sm font-semibold transition-all border-b-2 px-2 cursor-pointer ${activeTab === 'movements' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+        >
+          Stok Hareketleri
+        </button>
+        <button
           onClick={() => setActiveTab('sayim')}
           className={`pb-3 text-sm font-semibold transition-all border-b-2 px-2 cursor-pointer ${activeTab === 'sayim' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
         >
@@ -423,6 +618,8 @@ export default function AdminStock() {
 
       {activeTab === 'sayim' ? (
         <StockCountTab categories={categories} onFinalized={load} />
+      ) : activeTab === 'movements' ? (
+        <StockMovementsTab />
       ) : activeTab === 'items' ? (
         <>
           {/* Summary Cards — Stok Değerleme & Analitik */}
@@ -463,46 +660,127 @@ export default function AdminStock() {
 
           {/* Filtering and Table */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-                <div className="relative w-full max-w-xs">
-                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Ad, SKU, Barkod, Marka, Model..."
-                    value={search} 
-                    onChange={e => setSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
-                  />
+            <div className="p-5 border-b border-gray-100 flex flex-col gap-4">
+              {/* Row 1: Search & Dropdown Filters */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                  <div className="relative w-full max-w-xs">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Ad, SKU, Barkod, Marka, Model..."
+                      value={search} 
+                      onChange={e => setSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                    />
+                  </div>
+
+                  {categories.length > 0 && (
+                    <select
+                      value={categoryFilter}
+                      onChange={e => setCategoryFilter(e.target.value)}
+                      className="border border-gray-300 rounded-xl px-3 py-2 text-xs text-gray-700 focus:ring-2 focus:ring-primary bg-white outline-none"
+                    >
+                      <option value="">Tüm Kategoriler</option>
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{getCategoryPath(c.id)}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {availableBrands.length > 0 && (
+                    <select
+                      value={brandFilter}
+                      onChange={e => setBrandFilter(e.target.value)}
+                      className="border border-gray-300 rounded-xl px-3 py-2 text-xs text-gray-700 focus:ring-2 focus:ring-primary bg-white outline-none"
+                    >
+                      <option value="">Tüm Markalar</option>
+                      {availableBrands.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                  )}
+
+                  {availableSuppliers.length > 0 && (
+                    <select
+                      value={supplierFilter}
+                      onChange={e => setSupplierFilter(e.target.value)}
+                      className="border border-gray-300 rounded-xl px-3 py-2 text-xs text-gray-700 focus:ring-2 focus:ring-primary bg-white outline-none"
+                    >
+                      <option value="">Tüm Tedarikçiler</option>
+                      {availableSuppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  )}
                 </div>
-                {categories.length > 0 && (
-                  <select
-                    value={categoryFilter}
-                    onChange={e => setCategoryFilter(e.target.value)}
-                    className="border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-primary bg-white outline-none"
-                  >
-                    <option value="">Tüm Kategoriler</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{getCategoryPath(c.id)}</option>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2.5 py-1.5 rounded-xl text-xs">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+                    <select
+                      value={sortBy}
+                      onChange={e => setSortBy(e.target.value as any)}
+                      className="bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer"
+                    >
+                      <option value="name_asc">Ürün Adı (A-Z)</option>
+                      <option value="stock_asc">Stok: Azdan Çoka</option>
+                      <option value="stock_desc">Stok: Çoktan Aza</option>
+                      <option value="price_asc">Fiyat: Düşükten Yükseğe</option>
+                      <option value="price_desc">Fiyat: Yüksekten Düşüğe</option>
+                    </select>
+                  </div>
+
+                  <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+                    {(['all', 'critical', 'ok'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setStatusFilter(s)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          statusFilter === s
+                            ? s === 'critical' ? 'bg-red-600 text-white shadow-sm' : s === 'ok' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-900 text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
+                        }`}
+                      >
+                        {s === 'all' ? `Tümü (${items.length})` : s === 'critical' ? `Kritik (${items.filter(i => (i.currentStock || 0) <= (i.minStockLevel || 0)).length})` : `Yeterli (${items.filter(i => (i.currentStock || 0) > (i.minStockLevel || 0)).length})`}
+                      </button>
                     ))}
-                  </select>
-                )}
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
-                {(['all', 'critical', 'ok'] as const).map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      statusFilter === s
-                        ? s === 'critical' ? 'bg-red-600 text-white shadow-sm' : s === 'ok' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-900 text-white shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50'
-                    }`}
-                  >
-                    {s === 'all' ? `Tümü (${items.length})` : s === 'critical' ? `Kritik (${items.filter(i => (i.currentStock || 0) <= (i.minStockLevel || 0)).length})` : `Yeterli (${items.filter(i => (i.currentStock || 0) > (i.minStockLevel || 0)).length})`}
-                  </button>
-                ))}
-              </div>
+
+              {/* Row 2: Toplu İşlemler Barı (Bulk Actions Bar) */}
+              {selectedIds.length > 0 && (
+                <div className="flex items-center justify-between bg-primary/10 border border-primary/30 p-3 rounded-xl animate-fade-in">
+                  <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                    <CheckSquare className="w-4 h-4" />
+                    <span>{selectedIds.length} ürün seçildi</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowBulkPriceModal(true)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" /> Toplu Fiyat Güncelle
+                    </button>
+                    <button
+                      onClick={() => setShowBulkCategoryModal(true)}
+                      className="px-3 py-1.5 bg-white border border-primary/40 hover:bg-primary/5 text-primary text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Toplu Kategori Ata
+                    </button>
+                    <button
+                      onClick={() => setShowBulkVatModal(true)}
+                      className="px-3 py-1.5 bg-white border border-primary/40 hover:bg-primary/5 text-primary text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Toplu KDV Değiştir
+                    </button>
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={bulkActionSaving}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Seçilenleri Sil
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {loading ? (
@@ -515,29 +793,47 @@ export default function AdminStock() {
                 <table className="w-full text-sm text-left">
                   <thead className="text-xs text-gray-500 uppercase bg-gray-50/70 border-b border-gray-200">
                     <tr>
-                      <th className="px-6 py-4 font-semibold">Görsel / Barkod</th>
-                      <th className="px-6 py-4 font-semibold">SKU / Model</th>
-                      <th className="px-6 py-4 font-semibold">Ürün Adı</th>
-                      <th className="px-6 py-4 font-semibold">Kategori / Marka</th>
-                      <th className="px-6 py-4 font-semibold text-center">Mevcut / Kritik</th>
-                      <th className="px-6 py-4 font-semibold">Durum</th>
-                      <th className="px-6 py-4 font-semibold text-center">Stok Güncelle</th>
-                      <th className="px-6 py-4 font-semibold text-center">İşlemler</th>
+                      <th className="p-4 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                          onChange={toggleSelectAll}
+                          className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
+                        />
+                      </th>
+                      <th className="px-4 py-4 font-semibold">Görsel / Barkod</th>
+                      <th className="px-4 py-4 font-semibold">SKU / Model</th>
+                      <th className="px-4 py-4 font-semibold">Ürün Adı</th>
+                      <th className="px-4 py-4 font-semibold">Kategori / Marka</th>
+                      <th className="px-4 py-4 font-semibold text-center">Mevcut / Kritik</th>
+                      <th className="px-4 py-4 font-semibold">Durum</th>
+                      <th className="px-4 py-4 font-semibold text-center">Stok Güncelle</th>
+                      <th className="px-4 py-4 font-semibold text-center">İşlemler</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filtered.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="text-center py-16 text-gray-400 font-medium bg-gray-50/30">
+                        <td colSpan={9} className="text-center py-16 text-gray-400 font-medium bg-gray-50/30">
                           Stok kalemi bulunamadı.
                         </td>
                       </tr>
                     ) : filtered.map(item => {
                       const st = getStatusLabel(item);
                       const isAdjusting = adjustingId === item.id;
+                      const isSelected = selectedIds.includes(item.id);
+                      const isLow = (item.currentStock || 0) <= (item.minStockLevel || 0);
                       return (
-                        <tr key={item.id} className="hover:bg-gray-50/40 transition-colors">
-                          <td className="px-6 py-4">
+                        <tr key={item.id} className={`hover:bg-gray-50/40 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                          <td className="p-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectOne(item.id)}
+                              className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-4 py-4">
                             <div className="flex items-center gap-3">
                               {item.imageUrl ? (
                                 <button
@@ -578,7 +874,19 @@ export default function AdminStock() {
                             <div className="text-[11px] text-gray-400">min: {item.minStockLevel ?? 0}</div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${st.cls}`}>{st.label}</span>
+                            <div className="flex flex-col items-start gap-1">
+                              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${st.cls}`}>{st.label}</span>
+                              {isLow && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleFastRestock(item)}
+                                  className="text-[10px] font-extrabold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-full flex items-center gap-0.5 cursor-pointer shadow-xs transition-colors"
+                                  title="Min. stok seviyesine hızlı ikmal yap"
+                                >
+                                  <Zap className="w-3 h-3 fill-amber-600 text-amber-600" /> İkmal Et
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-center">
                             {isAdjusting ? (
@@ -789,8 +1097,18 @@ export default function AdminStock() {
                   <input type="text" value={data.sku || ''} onChange={e => setField('sku', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Barkod</label>
-                  <input type="text" value={data.barcode || ''} onChange={e => setField('barcode', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase">Barkod</label>
+                    <button
+                      type="button"
+                      onClick={() => setField('barcode', generateEAN13('869'))}
+                      className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+                      title="Türkiye uyumlu 869 EAN-13 Barkod Üret"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-500" /> ⚡ 869 Barkod Üret
+                    </button>
+                  </div>
+                  <input type="text" value={data.barcode || ''} onChange={e => setField('barcode', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" placeholder="869..." />
                   {data.barcode && (() => {
                     const { valid, reason } = validateGTIN(data.barcode);
                     return (
@@ -827,13 +1145,157 @@ export default function AdminStock() {
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">KDV (%)</label>
                   <input type="number" value={data.vatRate ?? ''} onChange={e => setField('vatRate', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
                 </div>
+
+                {/* Akıllı Kâr Marjı & Ön Muhasebe Fiyatlandırma Alanları */}
+                <div className="sm:col-span-2 bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5 uppercase">
+                      <Percent className="w-4 h-4 text-emerald-600" /> Ön Muhasebe Fiyatlandırma & Kâr Marjı
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xxs font-bold text-gray-400 uppercase">Para Birimi:</span>
+                      <select
+                        value={data.currency || 'TRY'}
+                        onChange={e => setField('currency', e.target.value)}
+                        className="text-xs font-bold bg-white border border-gray-300 rounded-lg px-2 py-0.5 outline-none cursor-pointer"
+                      >
+                        <option value="TRY">₺ (TRY)</option>
+                        <option value="USD">$ (USD)</option>
+                        <option value="EUR">€ (EUR)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-xxs font-semibold text-gray-500 uppercase mb-1">Alış Fiyatı (KDV Dahil)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={data.costPrice ?? ''}
+                        onChange={e => {
+                          const cost = parseFloat(e.target.value) || 0;
+                          setField('costPrice', e.target.value);
+                          if (data.marginPercent && cost > 0) {
+                            const margin = parseFloat(data.marginPercent) || 0;
+                            setField('sellingPrice', (cost * (1 + margin / 100)).toFixed(2));
+                          }
+                        }}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-primary outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xxs font-semibold text-gray-500 uppercase mb-1">Kâr Marjı (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="Örn: 30"
+                        value={data.marginPercent ?? (data.costPrice && data.sellingPrice && parseFloat(data.costPrice) > 0 ? (((parseFloat(data.sellingPrice) - parseFloat(data.costPrice)) / parseFloat(data.costPrice)) * 100).toFixed(1) : '')}
+                        onChange={e => {
+                          const margin = parseFloat(e.target.value);
+                          setField('marginPercent', e.target.value);
+                          const cost = parseFloat(data.costPrice) || 0;
+                          if (!isNaN(margin) && cost > 0) {
+                            setField('sellingPrice', (cost * (1 + margin / 100)).toFixed(2));
+                          }
+                        }}
+                        className="w-full border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-emerald-800 focus:ring-2 focus:ring-emerald-500 outline-none bg-emerald-50/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xxs font-semibold text-gray-500 uppercase mb-1">Perakende Satış (₺)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={data.sellingPrice ?? ''}
+                        onChange={e => {
+                          const selling = parseFloat(e.target.value) || 0;
+                          setField('sellingPrice', e.target.value);
+                          const cost = parseFloat(data.costPrice) || 0;
+                          if (cost > 0 && selling > 0) {
+                            const margin = (((selling - cost) / cost) * 100).toFixed(1);
+                            setField('marginPercent', margin);
+                          }
+                        }}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-bold text-gray-900 focus:ring-2 focus:ring-primary outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xxs font-semibold text-gray-500 uppercase mb-1">Toptan / Bayi Fiyatı (₺)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={data.wholesalePrice ?? ''}
+                        onChange={e => setField('wholesalePrice', e.target.value)}
+                        className="w-full border border-purple-200 rounded-xl px-3 py-2 text-sm font-bold text-purple-900 focus:ring-2 focus:ring-purple-500 outline-none bg-purple-50/40"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Nakliye Maliyet Payı & Gerçek Kapı Maliyeti */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200">
+                    <div>
+                      <label className="block text-xxs font-semibold text-gray-500 uppercase mb-1">Kargo / Nakliye Maliyet Payı (₺)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={data.landedCost ?? ''}
+                        onChange={e => setField('landedCost', e.target.value)}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-primary outline-none bg-white"
+                      />
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase">Net Kapı Birim Maliyeti (Alış + Kargo):</span>
+                      <span className="text-sm font-black text-slate-800">
+                        ₺{((parseFloat(data.costPrice || '0') + parseFloat(data.landedCost || '0'))).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Realtime profit summary */}
+                  {(() => {
+                    const cost = parseFloat(data.costPrice) || 0;
+                    const selling = parseFloat(data.sellingPrice) || 0;
+                    if (cost > 0 && selling > 0) {
+                      const profit = selling - cost;
+                      const marginPct = ((profit / cost) * 100).toFixed(1);
+                      return (
+                        <div className="flex justify-between items-center text-xs font-semibold pt-1 border-t border-slate-200/80">
+                          <span className="text-gray-500">Tahmini Birim Perakende Kârı:</span>
+                          <span className={profit >= 0 ? 'text-emerald-700 font-extrabold' : 'text-red-600 font-extrabold'}>
+                            {profit >= 0 ? '+' : ''}₺{profit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ({marginPct}%)
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
+                {/* Ön Muhasebe & Resmi Belge Kodları (GTİP & Muhasebe Kodu) */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Alış Fiyatı (₺)</label>
-                  <input type="number" step="0.01" value={data.costPrice ?? ''} onChange={e => setField('costPrice', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">GTİP Kodu (e-Fatura / e-Arşiv)</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: 8471.30.00.00.00"
+                    value={data.gtipCode || ''}
+                    onChange={e => setField('gtipCode', e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none font-mono"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Satış Fiyatı (₺)</label>
-                  <input type="number" step="0.01" value={data.sellingPrice ?? ''} onChange={e => setField('sellingPrice', e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Muhasebe Hesap Kodu</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: 153.01.001"
+                    value={data.accountingCode || ''}
+                    onChange={e => setField('accountingCode', e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none font-mono"
+                  />
                 </div>
                 {!isEdit && (
                   <div>
@@ -1192,6 +1654,243 @@ export default function AdminStock() {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+      {/* ===================== HIZLI STOK GİRİŞİ / MAL KABUL MODALI ===================== */}
+      {showRapidModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-emerald-50/60">
+              <h2 className="text-base font-bold text-emerald-900 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-emerald-600 fill-emerald-500" /> Hızlı Stok Girişi / Mal Kabul
+              </h2>
+              <button onClick={() => setShowRapidModal(false)} className="p-2 hover:bg-emerald-100/50 rounded-xl cursor-pointer">
+                <X className="w-5 h-5 text-emerald-700" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <form onSubmit={handleRapidScanSubmit} className="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xxs font-bold text-gray-500 uppercase mb-1">Barkod / SKU Okutun veya Girin *</label>
+                    <input
+                      ref={rapidInputRef}
+                      type="text"
+                      autoFocus
+                      placeholder="Barkod / SKU okutun..."
+                      value={rapidScanCode}
+                      onChange={e => setRapidScanCode(e.target.value)}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xxs font-bold text-gray-500 uppercase mb-1">Giriş Adedi *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={rapidQty}
+                      onChange={e => setRapidQty(e.target.value)}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xxs font-bold text-gray-500 uppercase mb-1">Tedarikçi / Fatura Notu (Opsiyonel)</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: X Tedarikçi Fatura No #12345"
+                    value={rapidSupplierNote}
+                    onChange={e => setRapidSupplierNote(e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl px-3 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!rapidScanCode.trim()}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-colors shadow-md shadow-emerald-200 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" /> Stoğa Ekle & Kaydet (Enter)
+                </button>
+              </form>
+
+              {/* Bu Oturumda Girilenler Logu */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-gray-500 uppercase block">Bu Oturumda Yapılan Stok Girişleri ({rapidLogs.length})</span>
+                {rapidLogs.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4 italic">Henüz giriş yapılmadı. Barkod okutarak seri giriş yapabilirsiniz.</p>
+                ) : (
+                  <div className="border rounded-2xl divide-y max-h-48 overflow-y-auto">
+                    {rapidLogs.map(log => (
+                      <div key={log.id} className="p-3 bg-white flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-gray-800">{log.itemName}</span>
+                          <span className="text-gray-400 font-mono text-[10px] block">SKU: {log.sku} | Saat: {log.time}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-extrabold text-emerald-600 text-sm">+{log.qty} adet</span>
+                          <span className="text-gray-400 text-[10px] block">Yeni Stok: {log.newTotal}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end p-4 border-t border-gray-100 bg-gray-50">
+              <button
+                onClick={() => setShowRapidModal(false)}
+                className="px-5 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== TOPLU KATEGORİ ATA MODALI ===================== */}
+      {showBulkCategoryModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50">
+              <h2 className="text-base font-bold text-gray-900">Toplu Kategori Atama ({selectedIds.length} ürün)</h2>
+              <button onClick={() => setShowBulkCategoryModal(false)} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="block text-xs font-semibold text-gray-500 uppercase">Atanacak Kategori</label>
+              <select
+                value={bulkCategoryVal}
+                onChange={e => setBulkCategoryVal(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary outline-none"
+              >
+                <option value="">Kategorisiz</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{getCategoryPath(c.id)}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50">
+              <button onClick={() => setShowBulkCategoryModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer">İptal</button>
+              <button
+                onClick={handleBulkCategory}
+                disabled={bulkActionSaving}
+                className="flex-1 bg-primary hover:bg-secondary text-white py-2 rounded-xl font-semibold disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1"
+              >
+                {bulkActionSaving && <RefreshCw className="w-4 h-4 animate-spin" />}
+                Uygula
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== TOPLU KDV DEĞİŞTİR MODALI ===================== */}
+      {showBulkVatModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50">
+              <h2 className="text-base font-bold text-gray-900">Toplu KDV Değiştir ({selectedIds.length} ürün)</h2>
+              <button onClick={() => setShowBulkVatModal(false)} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="block text-xs font-semibold text-gray-500 uppercase">Atanacak KDV Oranı (%)</label>
+              <select
+                value={bulkVatVal}
+                onChange={e => setBulkVatVal(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-primary outline-none"
+              >
+                <option value="0">%0 (KDV'siz)</option>
+                <option value="1">%1</option>
+                <option value="10">%10</option>
+                <option value="20">%20 (Genel Standart)</option>
+              </select>
+            </div>
+            <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50">
+              <button onClick={() => setShowBulkVatModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer">İptal</button>
+              <button
+                onClick={handleBulkVat}
+                disabled={bulkActionSaving}
+                className="flex-1 bg-primary hover:bg-secondary text-white py-2 rounded-xl font-semibold disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1"
+              >
+                {bulkActionSaving && <RefreshCw className="w-4 h-4 animate-spin" />}
+                Uygula
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ===================== TOPLU FİYAT GÜNCELLEME MODALI ===================== */}
+      {showBulkPriceModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-emerald-50/60">
+              <h2 className="text-base font-bold text-emerald-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-emerald-600" /> Toplu Fiyat Güncelleme ({selectedIds.length} ürün)
+              </h2>
+              <button onClick={() => setShowBulkPriceModal(false)} className="p-2 hover:bg-emerald-100/50 rounded-xl cursor-pointer">
+                <X className="w-5 h-5 text-emerald-700" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Güncellenecek Fiyat Türü</label>
+                <select
+                  value={bulkPriceTarget}
+                  onChange={e => setBulkPriceTarget(e.target.value as any)}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="sellingPrice">Perakende Satış Fiyatı (₺)</option>
+                  <option value="costPrice">Alış Maliyet Fiyatı (₺)</option>
+                  <option value="wholesalePrice">Toptan / Bayi Satış Fiyatı (₺)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Hesaplama Mantığı / Yöntem</label>
+                <select
+                  value={bulkPriceMode}
+                  onChange={e => setBulkPriceMode(e.target.value as any)}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="percent">Yüzde (%) Oranında Zam / İskonto Uygula</option>
+                  <option value="fixed">Sabit Tutar (₺) Ekle veya Çıkar</option>
+                  <option value="margin">Alış Fiyatı Üzerinden Kâr Marjı % Koyup Satış Fiyatı Hesapla</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                  {bulkPriceMode === 'percent' ? 'Yüzde Oranı (%) — (Örn: +15 zam için 15, -10 indirim için -10)' :
+                   bulkPriceMode === 'fixed' ? 'Tutar (₺) — (Örn: +50 eklemek için 50, -20 düşmek için -20)' :
+                   'Kâr Marjı Oranı (%) — (Örn: Alış üzerine %35 marj)'}
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={bulkPriceVal}
+                  onChange={e => setBulkPriceVal(e.target.value)}
+                  className="w-full border border-emerald-300 rounded-xl px-3 py-2 text-sm font-extrabold focus:ring-2 focus:ring-emerald-500 outline-none bg-emerald-50/30"
+                />
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-gray-600">
+                💡 Seçilen {selectedIds.length} adet ürünün mevcut fiyatları üzerinden otomatik toplu güncelleme yapılacaktır.
+              </div>
+            </div>
+            <div className="flex gap-3 p-5 border-t border-gray-100 bg-gray-50/50">
+              <button onClick={() => setShowBulkPriceModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 cursor-pointer">İptal</button>
+              <button
+                onClick={handleBulkPriceUpdate}
+                disabled={bulkActionSaving || !bulkPriceVal}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-semibold disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-200"
+              >
+                {bulkActionSaving && <RefreshCw className="w-4 h-4 animate-spin" />}
+                Fiyatları Güncelle
+              </button>
+            </div>
           </div>
         </div>
       )}

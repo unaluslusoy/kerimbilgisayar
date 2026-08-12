@@ -110,9 +110,39 @@ export default function AdminOverview() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Gösterge Paneli</h1>
-        <p className="text-sm text-gray-500 mt-1">Sistem ve servis durumuna genel bakış.</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Gösterge Paneli</h1>
+          <p className="text-sm text-gray-500 mt-1">Sistem ve servis durumuna genel bakış.</p>
+        </div>
+
+        {/* Hızlı Eylem Kısayol Barı */}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/admin/servis"
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Wrench className="w-4 h-4" /> ⚡ Yeni Servis Kaydı
+          </Link>
+          <Link
+            to="/admin/satis-pos"
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <TrendingUp className="w-4 h-4" /> ⚡ POS Hızlı Satış
+          </Link>
+          <Link
+            to="/admin/faturalar"
+            className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <CheckCircle2 className="w-4 h-4" /> ⚡ Fatura Kes
+          </Link>
+          <Link
+            to="/admin/stok"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Package className="w-4 h-4 text-emerald-400" /> ⚡ Mal Kabul / Stok
+          </Link>
+        </div>
       </div>
 
       {/* KPI Cards */}

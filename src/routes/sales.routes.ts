@@ -79,37 +79,42 @@ salesRouter.post('/api/admin/sales', requireAdmin, async (req, res) => {
         const price = parseFloat(item.unitPrice) || 0;
         const vatRate = parseInt(item.vatRate) || 20;
         const totalPrice = price * qty;
+        const isFreeform = !item.stockItemId;
 
         await tx.insert(saleItems).values({
           tenantId: 1,
           saleId: newSaleId,
-          stockItemId: parseInt(item.stockItemId),
+          stockItemId: isFreeform ? null : parseInt(item.stockItemId),
           serializedItemId: item.serializedItemId ? parseInt(item.serializedItemId) : null,
+          productName: item.productName || null,
           quantity: qty,
           unitPrice: price.toFixed(2),
           vatRate,
           totalPrice: totalPrice.toFixed(2),
         });
 
-        await tx.update(stockItems)
-          .set({ currentStock: sql`GREATEST(0, ${stockItems.currentStock} - ${qty})` })
-          .where(eq(stockItems.id, parseInt(item.stockItemId)));
+        // Serbest kalemler için stok düşürme ve hareket kaydı yapılmaz
+        if (!isFreeform) {
+          await tx.update(stockItems)
+            .set({ currentStock: sql`GREATEST(0, ${stockItems.currentStock} - ${qty})` })
+            .where(eq(stockItems.id, parseInt(item.stockItemId)));
 
-        await tx.insert(stockMovements).values({
-          tenantId: 1,
-          stockItemId: parseInt(item.stockItemId),
-          serializedItemId: item.serializedItemId ? parseInt(item.serializedItemId) : null,
-          fromWarehouseId: null,
-          toWarehouseId: null,
-          quantity: qty,
-          type: 'cikis',
-          reason: 'POS Satış',
-          referenceId: newSaleId,
-          createdById: salespersonId,
-        });
+          await tx.insert(stockMovements).values({
+            tenantId: 1,
+            stockItemId: parseInt(item.stockItemId),
+            serializedItemId: item.serializedItemId ? parseInt(item.serializedItemId) : null,
+            fromWarehouseId: null,
+            toWarehouseId: null,
+            quantity: qty,
+            type: 'cikis',
+            reason: 'POS Satış',
+            referenceId: newSaleId,
+            createdById: salespersonId,
+          });
 
-        if (item.serializedItemId) {
-          await tx.update(serializedItems).set({ status: 'satildi' }).where(eq(serializedItems.id, parseInt(item.serializedItemId)));
+          if (item.serializedItemId) {
+            await tx.update(serializedItems).set({ status: 'satildi' }).where(eq(serializedItems.id, parseInt(item.serializedItemId)));
+          }
         }
       }
       return newSaleId;
@@ -156,7 +161,7 @@ salesRouter.get('/api/admin/sales/:id', requireAdmin, async (req, res) => {
       unitPrice: saleItems.unitPrice,
       vatRate: saleItems.vatRate,
       totalPrice: saleItems.totalPrice,
-      productName: stockItems.name,
+      productName: sql<string>`COALESCE(${saleItems.productName}, ${stockItems.name}, 'Serbest Kalem')`,
       sku: stockItems.sku,
       barcode: stockItems.barcode,
       serialNumber: serializedItems.serialNumber

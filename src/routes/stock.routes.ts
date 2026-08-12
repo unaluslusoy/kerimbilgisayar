@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import { eq, desc, or, and } from 'drizzle-orm';
 import { db } from '../db/index';
-import { stockItems, inventoryCategories, stockMovements, stockCountSessions, stockCountLines, stockChannelMappings } from '../db/schema';
+import { stockItems, inventoryCategories, stockMovements, stockCountSessions, stockCountLines, stockChannelMappings, quickSaleGroups } from '../db/schema';
 import { requireAdmin } from '../server/middleware';
 import { upload } from '../server/helpers';
 
@@ -37,12 +37,21 @@ stockRouter.get('/api/admin/stock', requireAdmin, async (req, res) => {
       imageUrl: stockItems.imageUrl,
       costPrice: stockItems.costPrice,
       sellingPrice: stockItems.sellingPrice,
+      costPriceExclVat: stockItems.costPriceExclVat,
+      wholesalePrice: stockItems.wholesalePrice,
+      currency: stockItems.currency,
+      gtipCode: stockItems.gtipCode,
+      accountingCode: stockItems.accountingCode,
+      landedCost: stockItems.landedCost,
       currentStock: stockItems.currentStock,
       minStockLevel: stockItems.minStockLevel,
       hasSerialTracking: stockItems.hasSerialTracking,
       warrantyMonths: stockItems.warrantyMonths,
+      supplier: stockItems.supplier,
       isActive: stockItems.isActive,
       isQuickSale: stockItems.isQuickSale,
+      quickSaleGroupId: stockItems.quickSaleGroupId,
+      quickSaleSortOrder: stockItems.quickSaleSortOrder,
       categoryId: stockItems.categoryId,
       categoryName: inventoryCategories.name,
     }).from(stockItems)
@@ -56,7 +65,7 @@ stockRouter.get('/api/admin/stock', requireAdmin, async (req, res) => {
 
 stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
   try {
-    const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId, hasSerialTracking, warrantyMonths, supplier, isQuickSale } = req.body;
+    const { sku, barcode, name, description, brand, model, unit, vatRate, imageUrl, costPrice, sellingPrice, currentStock, minStockLevel, categoryId, hasSerialTracking, warrantyMonths, supplier, isQuickSale, costPriceExclVat, wholesalePrice, currency, gtipCode, accountingCode, landedCost } = req.body;
     const finalBarcode = barcode && barcode.trim() !== '' ? barcode.trim() : generateEAN13Backend();
 
     await db.insert(stockItems).values({
@@ -72,12 +81,20 @@ stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
       imageUrl: imageUrl || null,
       costPrice: costPrice?.toString() || '0.00',
       sellingPrice: sellingPrice?.toString() || '0.00',
+      costPriceExclVat: costPriceExclVat ? costPriceExclVat.toString() : null,
+      wholesalePrice: wholesalePrice ? wholesalePrice.toString() : null,
+      currency: currency || 'TRY',
+      gtipCode: gtipCode || null,
+      accountingCode: accountingCode || null,
+      landedCost: landedCost ? landedCost.toString() : null,
       currentStock: parseInt(currentStock) || 0,
       minStockLevel: parseInt(minStockLevel) || 5,
       hasSerialTracking: hasSerialTracking === true || hasSerialTracking === 'true',
       warrantyMonths: parseInt(warrantyMonths) || 0,
       supplier: supplier || null,
       isQuickSale: isQuickSale === true || isQuickSale === 'true',
+      quickSaleGroupId: req.body.quickSaleGroupId ? parseInt(req.body.quickSaleGroupId) : null,
+      quickSaleSortOrder: parseInt(req.body.quickSaleSortOrder) || 0,
       categoryId: categoryId ? parseInt(categoryId) : null,
     });
     res.json({ success: true });
@@ -88,7 +105,7 @@ stockRouter.post('/api/admin/stock', requireAdmin, async (req, res) => {
 
 stockRouter.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
   try {
-    const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive, hasSerialTracking, warrantyMonths, supplier, isQuickSale } = req.body;
+    const { adjustment, name, description, brand, model, unit, vatRate, imageUrl, categoryId, minStockLevel, sellingPrice, costPrice, barcode, isActive, hasSerialTracking, warrantyMonths, supplier, isQuickSale, costPriceExclVat, wholesalePrice, currency, gtipCode, accountingCode, landedCost } = req.body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
@@ -101,12 +118,20 @@ stockRouter.patch('/api/admin/stock/:id', requireAdmin, async (req, res) => {
     if (minStockLevel !== undefined) updateData.minStockLevel = parseInt(minStockLevel);
     if (sellingPrice !== undefined) updateData.sellingPrice = sellingPrice.toString();
     if (costPrice !== undefined) updateData.costPrice = costPrice.toString();
+    if (costPriceExclVat !== undefined) updateData.costPriceExclVat = costPriceExclVat ? costPriceExclVat.toString() : null;
+    if (wholesalePrice !== undefined) updateData.wholesalePrice = wholesalePrice ? wholesalePrice.toString() : null;
+    if (currency !== undefined) updateData.currency = currency;
+    if (gtipCode !== undefined) updateData.gtipCode = gtipCode;
+    if (accountingCode !== undefined) updateData.accountingCode = accountingCode;
+    if (landedCost !== undefined) updateData.landedCost = landedCost ? landedCost.toString() : null;
     if (barcode !== undefined) updateData.barcode = barcode;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (hasSerialTracking !== undefined) updateData.hasSerialTracking = hasSerialTracking === true || hasSerialTracking === 'true';
     if (warrantyMonths !== undefined) updateData.warrantyMonths = parseInt(warrantyMonths) || 0;
     if (supplier !== undefined) updateData.supplier = supplier;
     if (isQuickSale !== undefined) updateData.isQuickSale = isQuickSale === true || isQuickSale === 'true';
+    if (req.body.quickSaleGroupId !== undefined) updateData.quickSaleGroupId = req.body.quickSaleGroupId ? parseInt(req.body.quickSaleGroupId) : null;
+    if (req.body.quickSaleSortOrder !== undefined) updateData.quickSaleSortOrder = parseInt(req.body.quickSaleSortOrder) || 0;
 
     if (adjustment !== undefined) {
       const [current] = await db.select({ stock: stockItems.currentStock }).from(stockItems).where(eq(stockItems.id, parseInt(req.params.id)));
@@ -641,3 +666,77 @@ stockRouter.post('/api/admin/stock/transfer', requireAdmin, async (req, res) => 
   }
 });
 
+// ─── Hızlı Satış Grupları (Quick Sale Groups) ────────────────────────────────
+
+stockRouter.get('/api/admin/quick-sale-groups', requireAdmin, async (_req, res) => {
+  try {
+    const groups = await db.select().from(quickSaleGroups).orderBy(quickSaleGroups.sortOrder);
+    res.json(groups);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.post('/api/admin/quick-sale-groups', requireAdmin, async (req, res) => {
+  try {
+    const { name, color, icon } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Grup adı zorunludur' });
+    const maxSort = await db.select({ max: quickSaleGroups.sortOrder }).from(quickSaleGroups).limit(1);
+    const nextSort = ((maxSort[0]?.max as number) || 0) + 1;
+    await db.insert(quickSaleGroups).values({
+      tenantId: 1,
+      name: name.trim(),
+      color: color || '#f59e0b',
+      icon: icon || null,
+      sortOrder: nextSort,
+    });
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.patch('/api/admin/quick-sale-groups/:id', requireAdmin, async (req, res) => {
+  try {
+    const { name, color, icon, sortOrder } = req.body;
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (color !== undefined) updateData.color = color;
+    if (icon !== undefined) updateData.icon = icon;
+    if (sortOrder !== undefined) updateData.sortOrder = parseInt(sortOrder);
+    await db.update(quickSaleGroups).set(updateData).where(eq(quickSaleGroups.id, parseInt(req.params.id)));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+stockRouter.delete('/api/admin/quick-sale-groups/:id', requireAdmin, async (req, res) => {
+  try {
+    const groupId = parseInt(req.params.id);
+    // Gruptaki ürünlerin gruptan çıkar
+    await db.update(stockItems).set({ quickSaleGroupId: null }).where(eq(stockItems.quickSaleGroupId, groupId));
+    await db.delete(quickSaleGroups).where(eq(quickSaleGroups.id, groupId));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Toplu sıralama güncelleme (drag & drop sonrası)
+stockRouter.patch('/api/admin/quick-sale-sort', requireAdmin, async (req, res) => {
+  try {
+    const { items } = req.body; // [{id, quickSaleSortOrder, quickSaleGroupId?}]
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'Geçersiz veri' });
+    for (const item of items) {
+      const updateData: any = { quickSaleSortOrder: parseInt(item.quickSaleSortOrder) || 0 };
+      if (item.quickSaleGroupId !== undefined) {
+        updateData.quickSaleGroupId = item.quickSaleGroupId ? parseInt(item.quickSaleGroupId) : null;
+      }
+      await db.update(stockItems).set(updateData).where(eq(stockItems.id, parseInt(item.id)));
+    }
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
