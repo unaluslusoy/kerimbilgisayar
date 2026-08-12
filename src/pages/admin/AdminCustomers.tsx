@@ -476,65 +476,96 @@ export default function AdminCustomers() {
             />
           </div>
 
-          {/* Quick Filter Tabs */}
-          <div className="flex bg-gray-100 p-1 rounded-xl gap-1 text-xs font-semibold overflow-x-auto">
+        {/* Underline Tabs Navigation Bar */}
+        <div className="border-b border-gray-200 overflow-x-auto px-4 bg-gray-50/50">
+          <nav className="flex space-x-6" aria-label="Tabs">
             <button
               onClick={() => setFilterTab('all')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              className={`py-3 px-1 border-b-2 font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'all'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Tümü ({customers.length})
-            </button>
-            <button
-              onClick={() => setFilterTab('suppliers')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'suppliers' ? 'bg-purple-50 text-purple-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Tedarikçiler ({customers.filter(c => c.categoryType === 'tedarikci').length})
-            </button>
-            <button
-              onClick={() => setFilterTab('corporate')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'corporate' ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Kurumsal B2B ({customers.filter(c => c.categoryType === 'kurumsal' || !!c.companyName).length})
+              <span>Tümü</span>
+              <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full text-[10px] font-mono">{customers.length}</span>
             </button>
             <button
               onClick={() => setFilterTab('retail')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'retail' ? 'bg-slate-200 text-slate-800 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              className={`py-3 px-1 border-b-2 font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'retail'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Son Kullanıcı ({customers.filter(c => c.categoryType === 'son_kullanici' || (!c.companyName && c.categoryType !== 'tedarikci')).length})
+              <span>Müşteri (Bireysel)</span>
+              <span className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full text-[10px] font-mono">
+                {customers.filter(c => c.categoryType === 'musteri' || c.categoryType === 'son_kullanici' || (!c.companyName && c.categoryType !== 'tedarikci' && c.categoryType !== 'bayi')).length}
+              </span>
+            </button>
+            <button
+              onClick={() => setFilterTab('corporate')}
+              className={`py-3 px-1 border-b-2 font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'corporate'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <span>Kurumsal (B2B)</span>
+              <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-[10px] font-mono">
+                {customers.filter(c => c.categoryType === 'kurumsal' || !!c.companyName).length}
+              </span>
             </button>
             <button
               onClick={() => setFilterTab('dealers')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'dealers' ? 'bg-amber-50 text-amber-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              className={`py-3 px-1 border-b-2 font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'dealers'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Bayiler ({customers.filter(c => c.categoryType === 'bayi').length})
+              <span>Bayiler</span>
+              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-mono">
+                {customers.filter(c => c.categoryType === 'bayi').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setFilterTab('suppliers')}
+              className={`py-3 px-1 border-b-2 font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'suppliers'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <span>Tedarikçiler</span>
+              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-mono">
+                {customers.filter(c => c.categoryType === 'tedarikci').length}
+              </span>
             </button>
             <button
               onClick={() => setFilterTab('debtors')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'debtors' ? 'bg-red-50 text-red-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              className={`py-3 px-1 border-b-2 font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'debtors'
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Borçlular ({debtorCount})
+              <span>Borçlu Cariler</span>
+              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[10px] font-mono">{debtorCount}</span>
             </button>
             <button
               onClick={() => setFilterTab('contracted')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                filterTab === 'contracted' ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              className={`py-3 px-1 border-b-2 font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'contracted'
+                  ? 'border-emerald-600 text-emerald-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Bakım Anlaşmalı ({contractedCount})
+              <span>Sözleşmeliler</span>
+              <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-mono">{contractedCount}</span>
             </button>
-          </div>
+          </nav>
+        </div>
         </div>
 
         {loading ? (
@@ -858,218 +889,235 @@ export default function AdminCustomers() {
               </div>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {form.customerType === 'kurumsal' && (
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Firma / Cari Ticari Ünvanı *</label>
-                  <input
-                    value={form.companyName}
-                    onChange={e => setForm({ ...form, companyName: e.target.value })}
-                    className={inputCls}
-                    placeholder="Örn: Özgür Teknoloji San. ve Tic. Ltd. Şti."
-                    required
-                  />
+            <div className="p-6 space-y-6 max-h-[calc(85vh-140px)] overflow-y-auto">
+              {/* GRUP 1: Cari Kimlik & Genel Bilgiler */}
+              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                  <Users className="w-4 h-4 text-primary" /> 1. Cari Kimlik & İletişim Bilgileri
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {form.customerType === 'kurumsal' && (
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Firma / Cari Ticari Ünvanı *</label>
+                      <input
+                        value={form.companyName}
+                        onChange={e => setForm({ ...form, companyName: e.target.value })}
+                        className={inputCls}
+                        placeholder="Örn: Özgür Teknoloji San. ve Tic. Ltd. Şti."
+                        required
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      {form.customerType === 'kurumsal' ? 'Yetkili Adı *' : 'Ad *'}
+                    </label>
+                    <input
+                      value={form.firstName}
+                      onChange={e => setForm({ ...form, firstName: e.target.value })}
+                      className={inputCls}
+                      placeholder="Ad"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      {form.customerType === 'kurumsal' ? 'Yetkili Soyadı' : 'Soyad'}
+                    </label>
+                    <input
+                      value={form.lastName}
+                      onChange={e => setForm({ ...form, lastName: e.target.value })}
+                      className={inputCls}
+                      placeholder="Soyad"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Yetkili Kişi & Pozisyonu</label>
+                    <input
+                      value={form.authorizedPerson || ''}
+                      onChange={e => setForm({ ...form, authorizedPerson: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: Ahmet Yılmaz (Satın Alma Müdürü)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">E-posta Adresi *</label>
+                    <input
+                      value={form.email}
+                      onChange={e => setForm({ ...form, email: e.target.value })}
+                      className={inputCls}
+                      placeholder="E-posta"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Telefon Numarası</label>
+                    <input
+                      value={form.phone}
+                      onChange={e => setForm({ ...form, phone: e.target.value })}
+                      className={inputCls}
+                      placeholder="05XX XXX XX XX"
+                    />
+                  </div>
+                  {!editing && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Müşteri Panel Şifresi</label>
+                      <input
+                        value={form.password}
+                        onChange={e => setForm({ ...form, password: e.target.value })}
+                        className={inputCls}
+                        placeholder="Şifre"
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  {form.customerType === 'kurumsal' ? 'Yetkili Adı *' : 'Ad *'}
-                </label>
-                <input
-                  value={form.firstName}
-                  onChange={e => setForm({ ...form, firstName: e.target.value })}
-                  className={inputCls}
-                  placeholder="Ad"
-                  required
-                />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  {form.customerType === 'kurumsal' ? 'Yetkili Soyadı' : 'Soyad'}
-                </label>
-                <input
-                  value={form.lastName}
-                  onChange={e => setForm({ ...form, lastName: e.target.value })}
-                  className={inputCls}
-                  placeholder="Soyad"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Yetkili Kişi & Unvanı</label>
-                <input
-                  value={form.authorizedPerson || ''}
-                  onChange={e => setForm({ ...form, authorizedPerson: e.target.value })}
-                  className={inputCls}
-                  placeholder="Örn: Ahmet Yılmaz (Satın Alma Müdürü)"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">E-posta adresi *</label>
-                <input
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                  className={inputCls}
-                  placeholder="E-posta"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Telefon Numarası</label>
-                <input
-                  value={form.phone}
-                  onChange={e => setForm({ ...form, phone: e.target.value })}
-                  className={inputCls}
-                  placeholder="Telefon"
-                />
-              </div>
-              {!editing && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Müşteri Giriş Şifresi</label>
-                  <input
-                    value={form.password}
-                    onChange={e => setForm({ ...form, password: e.target.value })}
-                    className={inputCls}
-                    placeholder="Şifre"
-                  />
+
+              {/* GRUP 2: Kurumsal Detaylar & Lokasyon */}
+              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                  <Building2 className="w-4 h-4 text-blue-600" /> 2. Vergi Dairesi, Fatura & Lokasyon Bilgileri
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Vergi Dairesi</label>
+                    <input
+                      value={form.taxOffice}
+                      onChange={e => setForm({ ...form, taxOffice: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: Kadıköy V.D."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Vergi No / TCKN</label>
+                    <input
+                      value={form.taxId}
+                      onChange={e => setForm({ ...form, taxId: e.target.value })}
+                      className={inputCls}
+                      placeholder="Vergi No veya T.C. Kimlik No"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">İl</label>
+                    <input
+                      value={form.city || ''}
+                      onChange={e => setForm({ ...form, city: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: İstanbul"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">İlçe</label>
+                    <input
+                      value={form.district || ''}
+                      onChange={e => setForm({ ...form, district: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: Kadıköy"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Açık Fatura & Teslimat Adresi</label>
+                    <textarea
+                      value={form.address}
+                      onChange={e => setForm({ ...form, address: e.target.value })}
+                      className={`${inputCls} resize-none`}
+                      rows={2}
+                      placeholder="Mahalle, Cadde, Sokak, No, Daire"
+                    />
+                  </div>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi Dairesi</label>
-                <input
-                  value={form.taxOffice}
-                  onChange={e => setForm({ ...form, taxOffice: e.target.value })}
-                  className={inputCls}
-                  placeholder="Vergi Dairesi"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Vergi No / TCKN</label>
-                <input
-                  value={form.taxId}
-                  onChange={e => setForm({ ...form, taxId: e.target.value })}
-                  className={inputCls}
-                  placeholder="Vergi No veya T.C. Kimlik No"
-                />
               </div>
 
-              {/* Banka & IBAN Bilgileri */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Banka Adı</label>
-                <input
-                  value={form.bankName || ''}
-                  onChange={e => setForm({ ...form, bankName: e.target.value })}
-                  className={inputCls}
-                  placeholder="Örn: Garanti BBVA"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">IBAN Numarası</label>
-                <input
-                  value={form.iban || ''}
-                  onChange={e => setForm({ ...form, iban: e.target.value })}
-                  className={`${inputCls} font-mono text-xs`}
-                  placeholder="TR00 0000 0000 0000 0000 0000 00"
-                />
-              </div>
+              {/* GRUP 3: Finansal Ayarlar & IBAN / Risk Limitleri */}
+              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                  <CreditCard className="w-4 h-4 text-emerald-600" /> 3. Finans, IBAN & Risk / Vade Ayarları
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Banka Adı</label>
+                    <input
+                      value={form.bankName || ''}
+                      onChange={e => setForm({ ...form, bankName: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: Garanti BBVA"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">IBAN Numarası</label>
+                    <input
+                      value={form.iban || ''}
+                      onChange={e => setForm({ ...form, iban: e.target.value })}
+                      className={`${inputCls} font-mono text-xs`}
+                      placeholder="TR00 0000 0000 0000 0000 0000 00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Cari Risk Limiti (TL)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={form.riskLimit || ''}
+                      onChange={e => setForm({ ...form, riskLimit: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: 50000.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Varsayılan Ödeme Vadesi (Gün)</label>
+                    <input
+                      type="number"
+                      value={form.defaultDueDays || ''}
+                      onChange={e => setForm({ ...form, defaultDueDays: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: 30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Cari Özel İskonto Oranı (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={form.discountRate || ''}
+                      onChange={e => setForm({ ...form, discountRate: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: 5.0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Özel Muhasebe Kodu</label>
+                    <input
+                      value={form.accountCode || ''}
+                      onChange={e => setForm({ ...form, accountCode: e.target.value })}
+                      className={inputCls}
+                      placeholder="Örn: 120.01.005"
+                    />
+                  </div>
 
-              {/* Lokasyon (İl / İlçe) */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">İl</label>
-                <input
-                  value={form.city || ''}
-                  onChange={e => setForm({ ...form, city: e.target.value })}
-                  className={inputCls}
-                  placeholder="Örn: İstanbul"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">İlçe</label>
-                <input
-                  value={form.district || ''}
-                  onChange={e => setForm({ ...form, district: e.target.value })}
-                  className={inputCls}
-                  placeholder="Örn: Kadıköy"
-                />
-              </div>
+                  <div className="md:col-span-2 flex items-center gap-2 bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
+                    <input
+                      type="checkbox"
+                      id="isEInvoiceUserCheck"
+                      checked={form.isEInvoiceUser}
+                      onChange={e => setForm({ ...form, isEInvoiceUser: e.target.checked })}
+                      className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="isEInvoiceUserCheck" className="text-xs font-bold text-gray-800 cursor-pointer">
+                      ⚡ e-Fatura Mükellefi (GİB e-Fatura Sistemine Kayıtlı Firma)
+                    </label>
+                  </div>
 
-              {/* Finansal & Limit Ayarları */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Kredi Limiti (TL)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.creditLimit}
-                  onChange={e => setForm({ ...form, creditLimit: e.target.value })}
-                  className={inputCls}
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Risk Limiti (TL)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.riskLimit || ''}
-                  onChange={e => setForm({ ...form, riskLimit: e.target.value })}
-                  className={inputCls}
-                  placeholder="Örn: 50000.00"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Varsayılan Vade (Gün)</label>
-                <input
-                  type="number"
-                  value={form.defaultDueDays || ''}
-                  onChange={e => setForm({ ...form, defaultDueDays: e.target.value })}
-                  className={inputCls}
-                  placeholder="Örn: 30 gün"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Özel İskonto (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.discountRate || ''}
-                  onChange={e => setForm({ ...form, discountRate: e.target.value })}
-                  className={inputCls}
-                  placeholder="Örn: 5.0"
-                />
-              </div>
-
-              <div className="md:col-span-2 flex items-center gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <input
-                  type="checkbox"
-                  id="isEInvoiceUserCheck"
-                  checked={form.isEInvoiceUser}
-                  onChange={e => setForm({ ...form, isEInvoiceUser: e.target.checked })}
-                  className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-                />
-                <label htmlFor="isEInvoiceUserCheck" className="text-xs font-bold text-gray-800 cursor-pointer">
-                  ⚡ e-Fatura Mükellefi (GİB e-Fatura Sistemine Kayıtlı Firma)
-                </label>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Adres</label>
-                <textarea
-                  value={form.address}
-                  onChange={e => setForm({ ...form, address: e.target.value })}
-                  className={`${inputCls} resize-none`}
-                  rows={2}
-                  placeholder="Açık Adres"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Cari Notlar & Anlaşma Detayları</label>
-                <textarea
-                  value={form.notes}
-                  onChange={e => setForm({ ...form, notes: e.target.value })}
-                  className={`${inputCls} resize-none`}
-                  rows={2}
-                  placeholder="Özel anlaşma koşulları, iskonto veya cari notlar"
-                />
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Cari Özel Notlar & Anlaşma Koşulları</label>
+                    <textarea
+                      value={form.notes}
+                      onChange={e => setForm({ ...form, notes: e.target.value })}
+                      className={`${inputCls} resize-none`}
+                      rows={2}
+                      placeholder="Özel anlaşma koşulları, iskonto notları veya hatırlatmalar"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">
