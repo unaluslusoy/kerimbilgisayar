@@ -890,82 +890,107 @@ export default function AdminCustomers() {
             </div>
 
             <div className="p-6 space-y-6 max-h-[calc(85vh-140px)] overflow-y-auto">
-              {/* GRUP 1: Cari Kimlik & Genel Bilgiler */}
-              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                  <Users className="w-4 h-4 text-primary" /> 1. Cari Kimlik & İletişim Bilgileri
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* GRUP 1: Cari Kimlik & Genel İletişim Bilgileri */}
+              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-2xs space-y-5">
+                {/* Card Heading */}
+                <div className="border-b border-gray-100 pb-3 flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">1. Cari Kimlik & İletişim Bilgileri</h3>
+                    <p className="text-[11px] text-gray-500">Müşteri/Cari hesap yetkili ve iletişim detayları</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
                   {form.customerType === 'kurumsal' && (
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Firma / Cari Ticari Ünvanı *</label>
+                    <div className="md:col-span-2 relative">
+                      <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                        Firma / Cari Ticari Ünvanı *
+                      </label>
                       <input
                         value={form.companyName}
                         onChange={e => setForm({ ...form, companyName: e.target.value })}
-                        className={inputCls}
+                        className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                         placeholder="Örn: Özgür Teknoloji San. ve Tic. Ltd. Şti."
                         required
                       />
                     </div>
                   )}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+
+                  {/* Overlapping Label Input */}
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
                       {form.customerType === 'kurumsal' ? 'Yetkili Adı *' : 'Ad *'}
                     </label>
                     <input
                       value={form.firstName}
                       onChange={e => setForm({ ...form, firstName: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Ad"
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
                       {form.customerType === 'kurumsal' ? 'Yetkili Soyadı' : 'Soyad'}
                     </label>
                     <input
                       value={form.lastName}
                       onChange={e => setForm({ ...form, lastName: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Soyad"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Yetkili Kişi & Pozisyonu</label>
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Yetkili Kişi & Pozisyonu
+                    </label>
                     <input
                       value={form.authorizedPerson || ''}
                       onChange={e => setForm({ ...form, authorizedPerson: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Örn: Ahmet Yılmaz (Satın Alma Müdürü)"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">E-posta Adresi *</label>
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      E-posta Adresi *
+                    </label>
                     <input
                       value={form.email}
                       onChange={e => setForm({ ...form, email: e.target.value })}
-                      className={inputCls}
-                      placeholder="E-posta"
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
+                      placeholder="ornek@domain.com"
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Telefon Numarası</label>
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Telefon Numarası
+                    </label>
                     <input
                       value={form.phone}
                       onChange={e => setForm({ ...form, phone: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="05XX XXX XX XX"
                     />
                   </div>
+
                   {!editing && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Müşteri Panel Şifresi</label>
+                    <div className="relative">
+                      <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                        Müşteri Giriş Şifresi
+                      </label>
                       <input
                         value={form.password}
                         onChange={e => setForm({ ...form, password: e.target.value })}
-                        className={inputCls}
+                        className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                         placeholder="Şifre"
                       />
                     </div>
@@ -974,53 +999,75 @@ export default function AdminCustomers() {
               </div>
 
               {/* GRUP 2: Kurumsal Detaylar & Lokasyon */}
-              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                  <Building2 className="w-4 h-4 text-blue-600" /> 2. Vergi Dairesi, Fatura & Lokasyon Bilgileri
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-2xs space-y-5">
+                {/* Card Heading */}
+                <div className="border-b border-gray-100 pb-3 flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+                    <Building2 className="w-5 h-5" />
+                  </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Vergi Dairesi</label>
+                    <h3 className="text-sm font-bold text-gray-900">2. Vergi Dairesi, Fatura & Adres Bilgileri</h3>
+                    <p className="text-[11px] text-gray-500">Resmi vergi, fatura ve lokasyon adresi</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Vergi Dairesi
+                    </label>
                     <input
                       value={form.taxOffice}
                       onChange={e => setForm({ ...form, taxOffice: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Örn: Kadıköy V.D."
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Vergi No / TCKN</label>
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Vergi No / TCKN
+                    </label>
                     <input
                       value={form.taxId}
                       onChange={e => setForm({ ...form, taxId: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Vergi No veya T.C. Kimlik No"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">İl</label>
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      İl
+                    </label>
                     <input
                       value={form.city || ''}
                       onChange={e => setForm({ ...form, city: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Örn: İstanbul"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">İlçe</label>
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      İlçe
+                    </label>
                     <input
                       value={form.district || ''}
                       onChange={e => setForm({ ...form, district: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Örn: Kadıköy"
                     />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Açık Fatura & Teslimat Adresi</label>
+
+                  <div className="md:col-span-2 relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Açık Fatura & Teslimat Adresi
+                    </label>
                     <textarea
                       value={form.address}
                       onChange={e => setForm({ ...form, address: e.target.value })}
-                      className={`${inputCls} resize-none`}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs resize-none"
                       rows={2}
                       placeholder="Mahalle, Cadde, Sokak, No, Daire"
                     />
@@ -1029,92 +1076,148 @@ export default function AdminCustomers() {
               </div>
 
               {/* GRUP 3: Finansal Ayarlar & IBAN / Risk Limitleri */}
-              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                  <CreditCard className="w-4 h-4 text-emerald-600" /> 3. Finans, IBAN & Risk / Vade Ayarları
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-2xs space-y-5">
+                {/* Card Heading */}
+                <div className="border-b border-gray-100 pb-3 flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <CreditCard className="w-5 h-5" />
+                  </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Banka Adı</label>
+                    <h3 className="text-sm font-bold text-gray-900">3. Finans, IBAN & Risk / Vade Ayarları</h3>
+                    <p className="text-[11px] text-gray-500">Cari limitler, ödeme vadeleri ve banka hesapları</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Banka Adı
+                    </label>
                     <input
                       value={form.bankName || ''}
                       onChange={e => setForm({ ...form, bankName: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Örn: Garanti BBVA"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">IBAN Numarası</label>
+
+                  {/* Input with Add-on (IBAN) */}
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      IBAN Numarası
+                    </label>
                     <input
                       value={form.iban || ''}
                       onChange={e => setForm({ ...form, iban: e.target.value })}
-                      className={`${inputCls} font-mono text-xs`}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="TR00 0000 0000 0000 0000 0000 00"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Cari Risk Limiti (TL)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={form.riskLimit || ''}
-                      onChange={e => setForm({ ...form, riskLimit: e.target.value })}
-                      className={inputCls}
-                      placeholder="Örn: 50000.00"
-                    />
+
+                  {/* Input with Add-on (TL Currency) */}
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Cari Risk Limiti
+                    </label>
+                    <div className="flex rounded-xl shadow-2xs">
+                      <span className="inline-flex items-center px-3.5 rounded-l-xl border border-r-0 border-gray-300 bg-gray-50 text-gray-500 font-bold text-xs">
+                        ₺
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={form.riskLimit || ''}
+                        onChange={e => setForm({ ...form, riskLimit: e.target.value })}
+                        className="w-full border border-gray-300 rounded-r-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
+                        placeholder="50000.00"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Varsayılan Ödeme Vadesi (Gün)</label>
-                    <input
-                      type="number"
-                      value={form.defaultDueDays || ''}
-                      onChange={e => setForm({ ...form, defaultDueDays: e.target.value })}
-                      className={inputCls}
-                      placeholder="Örn: 30"
-                    />
+
+                  {/* Input with Add-on (Due Days Suffix) */}
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Varsayılan Ödeme Vadesi
+                    </label>
+                    <div className="flex rounded-xl shadow-2xs">
+                      <input
+                        type="number"
+                        value={form.defaultDueDays || ''}
+                        onChange={e => setForm({ ...form, defaultDueDays: e.target.value })}
+                        className="w-full border border-gray-300 rounded-l-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
+                        placeholder="30"
+                      />
+                      <span className="inline-flex items-center px-3.5 rounded-r-xl border border-l-0 border-gray-300 bg-gray-50 text-gray-500 font-bold text-xs">
+                        gün
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Cari Özel İskonto Oranı (%)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={form.discountRate || ''}
-                      onChange={e => setForm({ ...form, discountRate: e.target.value })}
-                      className={inputCls}
-                      placeholder="Örn: 5.0"
-                    />
+
+                  {/* Input with Add-on (Discount % Suffix) */}
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Cari Özel İskonto Oranı
+                    </label>
+                    <div className="flex rounded-xl shadow-2xs">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={form.discountRate || ''}
+                        onChange={e => setForm({ ...form, discountRate: e.target.value })}
+                        className="w-full border border-gray-300 rounded-l-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
+                        placeholder="5.0"
+                      />
+                      <span className="inline-flex items-center px-3.5 rounded-r-xl border border-l-0 border-gray-300 bg-gray-50 text-gray-500 font-bold text-xs">
+                        %
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Özel Muhasebe Kodu</label>
+
+                  <div className="relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Özel Muhasebe Kodu
+                    </label>
                     <input
                       value={form.accountCode || ''}
                       onChange={e => setForm({ ...form, accountCode: e.target.value })}
-                      className={inputCls}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs"
                       placeholder="Örn: 120.01.005"
                     />
                   </div>
 
-                  <div className="md:col-span-2 flex items-center gap-2 bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
-                    <input
-                      type="checkbox"
-                      id="isEInvoiceUserCheck"
-                      checked={form.isEInvoiceUser}
-                      onChange={e => setForm({ ...form, isEInvoiceUser: e.target.checked })}
-                      className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-                    />
-                    <label htmlFor="isEInvoiceUserCheck" className="text-xs font-bold text-gray-800 cursor-pointer">
-                      ⚡ e-Fatura Mükellefi (GİB e-Fatura Sistemine Kayıtlı Firma)
-                    </label>
+                  {/* Simple Toggle Switch (e-Fatura Mükellefi) */}
+                  <div className="md:col-span-2 flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl shadow-2xs">
+                    <div>
+                      <p className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                        ⚡ e-Fatura Mükellefi
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">Firma GİB e-Fatura sistemine kayıtlı mükellef durumunda</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, isEInvoiceUser: !form.isEInvoiceUser })}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        form.isEInvoiceUser ? 'bg-emerald-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          form.isEInvoiceUser ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
 
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Cari Özel Notlar & Anlaşma Koşulları</label>
+                  <div className="md:col-span-2 relative">
+                    <label className="absolute -top-2 left-3 bg-white px-1 text-[11px] font-bold text-gray-600 z-10">
+                      Cari Notlar & Anlaşma Koşulları
+                    </label>
                     <textarea
                       value={form.notes}
                       onChange={e => setForm({ ...form, notes: e.target.value })}
-                      className={`${inputCls} resize-none`}
+                      className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white shadow-2xs resize-none"
                       rows={2}
-                      placeholder="Özel anlaşma koşulları, iskonto notları veya hatırlatmalar"
+                      placeholder="Özel anlaşma koşulları, iskonto notları veya özel notlar"
                     />
                   </div>
                 </div>
