@@ -1081,12 +1081,26 @@ export default function AdminStock() {
         const close = () => isEdit ? setEditingItem(null) : setShowModal(false);
         return (
           <>
-            <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50 sticky top-0">
-                <h2 className="text-base font-bold text-gray-900">{isEdit ? 'Ürünü Düzenle' : 'Yeni Ürün Ekle'}</h2>
-                <button onClick={close} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
-              </div>
+            <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white sticky top-0 z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-primary/10 text-primary rounded-2xl">
+                      <Layers className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Ürünü Düzenle' : 'Yeni Ürün Ekle'}</h2>
+                      <p className="text-xs text-gray-500">Stok kartı, fiyatlandırma, KDV ve depo lokasyonu</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={close}
+                    className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    title="Kapat"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Ürün Adı *</label>

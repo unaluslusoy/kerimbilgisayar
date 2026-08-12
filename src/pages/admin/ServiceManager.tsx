@@ -1908,7 +1908,8 @@ export default function ServiceManager() {
                   </div>
                   <button
                     onClick={() => setDetailTicket(null)}
-                    className="p-2 hover:bg-gray-200 rounded-xl text-gray-400 hover:text-gray-900 transition-colors"
+                    className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    title="Kapat"
                   >
                     <X className="w-5 h-5" />
                   </button>

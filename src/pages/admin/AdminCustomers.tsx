@@ -824,14 +824,28 @@ export default function AdminCustomers() {
 
       {/* Customer Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editing ? 'Müşteri Bilgilerini Düzenle' : 'Yeni Müşteri Oluştur'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-theme">
-                <X className="w-5 h-5 text-gray-500" />
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+            {/* Header: Simple with dismiss button */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-primary/10 text-primary rounded-2xl">
+                  <UserPlus className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    {editing ? 'Müşteri Bilgilerini Düzenle' : 'Yeni Müşteri Oluştur'}
+                  </h2>
+                  <p className="text-xs text-gray-500">Cari kimlik, vergi dairesi ve finansal vadelerin yönetimi</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200"
+                title="Kapat"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1251,18 +1265,18 @@ export default function AdminCustomers() {
       {/* Customer Full Detail / Statement / Repairs / Warranty Modal */}
       {statementCustomer && (
         <div
-          className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4"
           onClick={() => setStatementCustomer(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto flex flex-col"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+            {/* Header: Simple with dismiss button */}
+            <div className="p-6 border-b border-gray-100 bg-white">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+                  <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-2xl">
                     <FileText className="w-6 h-6" />
                   </div>
                   <div>
@@ -1277,13 +1291,14 @@ export default function AdminCustomers() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => window.open(`/print/customer-statement/${statementCustomer.id}`, '_blank')}
-                    className="px-3 py-1.5 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition"
+                    className="px-3.5 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition"
                   >
                     <Printer className="w-3.5 h-3.5" /> Cari Ekstre PDF / Yazdır
                   </button>
                   <button
                     onClick={() => setStatementCustomer(null)}
-                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                    className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    title="Kapat"
                   >
                     <X className="w-5 h-5" />
                   </button>
